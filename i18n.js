@@ -79,7 +79,7 @@ const T = {
  "CLINIC AI RECEPTIONIST": {hi:"क्लिनिक AI रिसेप्शनिस्ट", es:"RECEPCIÓN CON IA", fr:"ACCUEIL IA POUR CLINIQUES", ar:"استقبال ذكي للعيادات", pt:"RECEPÇÃO COM IA", de:"KI-PRAXISREZEPTION", zh:"诊所 AI 前台", ru:"ИИ-РЕГИСТРАТУРА"},
 
  /* ---- home ---- */
- "// AI RECEPTIONIST FOR CLINICS WORLDWIDE": {hi:"// दुनिया भर के क्लिनिकों के लिए AI रिसेप्शनिस्ट", es:"// RECEPCIÓN CON IA PARA CLÍNICAS DE TODO EL MUNDO", fr:"// ACCUEIL IA POUR LES CLINIQUES DU MONDE ENTIER", ar:"// استقبال بالذكاء الاصطناعي للعيادات حول العالم", pt:"// RECEPÇÃO COM IA PARA CLÍNICAS NO MUNDO TODO", de:"// KI-REZEPTION FÜR PRAXEN WELTWEIT", zh:"// 面向全球诊所的 AI 前台", ru:"// ИИ-РЕГИСТРАТУРА ДЛЯ КЛИНИК ПО ВСЕМУ МИРУ"},
+ "AI RECEPTIONIST FOR CLINICS WORLDWIDE": {hi:"दुनिया भर के क्लिनिकों के लिए AI रिसेप्शनिस्ट", es:"RECEPCIÓN CON IA PARA CLÍNICAS DE TODO EL MUNDO", fr:"ACCUEIL IA POUR LES CLINIQUES DU MONDE ENTIER", ar:"استقبال بالذكاء الاصطناعي للعيادات حول العالم", pt:"RECEPÇÃO COM IA PARA CLÍNICAS NO MUNDO TODO", de:"KI-REZEPTION FÜR PRAXEN WELTWEIT", zh:"面向全球诊所的 AI 前台", ru:"ИИ-РЕГИСТРАТУРА ДЛЯ КЛИНИК ПО ВСЕМУ МИРУ"},
  "💬 Talk to the live AI": {hi:"💬 AI से बात करें", es:"💬 Hablar con la IA", fr:"💬 Parler à l'IA", ar:"💬 تحدث مع الذكاء الاصطناعي", pt:"💬 Falar com a IA", de:"💬 Mit der KI sprechen", zh:"💬 与 AI 对话", ru:"💬 Поговорить с ИИ"},
  "📍 Nearby open doctors": {hi:"📍 पास के खुले डॉक्टर", es:"📍 Médicos abiertos cerca", fr:"📍 Médecins ouverts à proximité", ar:"📍 أطباء مفتوحون بالقرب منك", pt:"📍 Médicos abertos por perto", de:"📍 Geöffnete Ärzte in der Nähe", zh:"📍 附近营业中的医生", ru:"📍 Открытые врачи рядом"},
  "online · replies instantly": {hi:"ऑनलाइन · तुरंत जवाब", es:"en línea · responde al instante", fr:"en ligne · répond instantanément", ar:"متصل · يرد فوراً", pt:"online · responde na hora", de:"online · antwortet sofort", zh:"在线 · 即时回复", ru:"онлайн · отвечает сразу"},
@@ -136,7 +136,7 @@ const T = {
  "Clinora AI: demo build. The name and all data are placeholders.": {hi:"Clinora AI: डेमो संस्करण। नाम और सारा डेटा उदाहरण के लिए है।", es:"Clinora AI: versión de demostración. El nombre y los datos son de ejemplo.", fr:"Clinora AI : version de démonstration. Le nom et les données sont fictifs.", ar:"Clinora AI: نسخة تجريبية. الاسم وجميع البيانات للتوضيح فقط.", pt:"Clinora AI: versão de demonstração. O nome e os dados são exemplos.", de:"Clinora AI: Demoversion. Name und alle Daten sind Platzhalter.", zh:"Clinora AI：演示版本。名称和所有数据均为示例。", ru:"Clinora AI: демо-версия. Название и все данные условные."},
 
  /* ---- nearby ---- */
- "// 03. NEARBY DOCTORS": {hi:"// 03. पास के डॉक्टर", es:"// 03. MÉDICOS CERCANOS", fr:"// 03. MÉDECINS À PROXIMITÉ", ar:"// 03. أطباء قريبون", pt:"// 03. MÉDICOS PRÓXIMOS", de:"// 03. ÄRZTE IN DER NÄHE", zh:"// 03. 附近医生", ru:"// 03. ВРАЧИ РЯДОМ"},
+ "NEARBY DOCTORS": {hi:"पास के डॉक्टर", es:"MÉDICOS CERCANOS", fr:"MÉDECINS À PROXIMITÉ", ar:"أطباء قريبون", pt:"MÉDICOS PRÓXIMOS", de:"ÄRZTE IN DER NÄHE", zh:"附近医生", ru:"ВРАЧИ РЯДОМ"},
  "Who's open nearby?": {hi:"पास में अभी कौन खुला है?", es:"¿Quién está abierto cerca?", fr:"Qui est ouvert près de vous ?", ar:"من المفتوح بالقرب منك؟", pt:"Quem está aberto por perto?", de:"Wer hat in der Nähe geöffnet?", zh:"附近谁在营业？", ru:"Кто открыт рядом?"},
  "🚨 Emergency": {hi:"🚨 आपातकाल", es:"🚨 Emergencias", fr:"🚨 Urgences", ar:"🚨 الطوارئ", pt:"🚨 Emergência", de:"🚨 Notfall", zh:"🚨 紧急求助", ru:"🚨 Экстренная помощь"},
  "All emergencies": {hi:"सभी आपात स्थिति", es:"Todas las emergencias", fr:"Toutes urgences", ar:"جميع حالات الطوارئ", pt:"Todas as emergências", de:"Alle Notfälle", zh:"所有紧急情况", ru:"Все экстренные службы"},
@@ -164,7 +164,7 @@ const T = {
  "📅 Book with AI": {hi:"📅 AI से बुक करें", es:"📅 Reservar con la IA", fr:"📅 Réserver avec l'IA", ar:"📅 احجز عبر الذكاء الاصطناعي", pt:"📅 Agendar com a IA", de:"📅 Mit KI buchen", zh:"📅 用 AI 预约", ru:"📅 Записаться через ИИ"},
 
  /* ---- world directory ---- */
- "// 05. WORLD DIRECTORY": {hi:"// 05. विश्व निर्देशिका", es:"// 05. DIRECTORIO MUNDIAL", fr:"// 05. ANNUAIRE MONDIAL", ar:"// 05. الدليل العالمي", pt:"// 05. DIRETÓRIO MUNDIAL", de:"// 05. WELTVERZEICHNIS", zh:"// 05. 全球名录", ru:"// 05. МИРОВОЙ КАТАЛОГ"},
+ "WORLD DIRECTORY": {hi:"विश्व निर्देशिका", es:"DIRECTORIO MUNDIAL", fr:"ANNUAIRE MONDIAL", ar:"الدليل العالمي", pt:"DIRETÓRIO MUNDIAL", de:"WELTVERZEICHNIS", zh:"全球名录", ru:"МИРОВОЙ КАТАЛОГ"},
  "Hospitals, clinics and doctors worldwide": {hi:"दुनिया भर के अस्पताल, क्लिनिक और डॉक्टर", es:"Hospitales, clínicas y médicos de todo el mundo", fr:"Hôpitaux, cliniques et médecins du monde entier", ar:"مستشفيات وعيادات وأطباء حول العالم", pt:"Hospitais, clínicas e médicos no mundo todo", de:"Krankenhäuser, Praxen und Ärzte weltweit", zh:"全球医院、诊所和医生", ru:"Больницы, клиники и врачи по всему миру"},
  "🏥 Hospitals": {hi:"🏥 अस्पताल", es:"🏥 Hospitales", fr:"🏥 Hôpitaux", ar:"🏥 مستشفيات", pt:"🏥 Hospitais", de:"🏥 Krankenhäuser", zh:"🏥 医院", ru:"🏥 Больницы"},
  "Clinics": {hi:"क्लिनिक", es:"Clínicas", fr:"Cliniques", ar:"عيادات", pt:"Clínicas", de:"Praxen", zh:"诊所", ru:"Клиники"},
@@ -204,7 +204,7 @@ const T = {
  "Send ➤": {hi:"भेजें ➤", es:"Enviar ➤", fr:"Envoyer ➤", ar:"إرسال ➤", pt:"Enviar ➤", de:"Senden ➤", zh:"发送 ➤", ru:"Отправить ➤"},
 
  /* ---- video call ---- */
- "// VIDEO CONSULTATION": {hi:"// वीडियो कंसल्टेशन", es:"// VIDEOCONSULTA", fr:"// TÉLÉCONSULTATION", ar:"// استشارة بالفيديو", pt:"// TELECONSULTA", de:"// VIDEOSPRECHSTUNDE", zh:"// 视频问诊", ru:"// ВИДЕОКОНСУЛЬТАЦИЯ"},
+ "VIDEO CONSULTATION": {hi:"वीडियो कंसल्टेशन", es:"VIDEOCONSULTA", fr:"TÉLÉCONSULTATION", ar:"استشارة بالفيديو", pt:"TELECONSULTA", de:"VIDEOSPRECHSTUNDE", zh:"视频问诊", ru:"ВИДЕОКОНСУЛЬТАЦИЯ"},
  "Ready to join?": {hi:"जुड़ने के लिए तैयार?", es:"¿Listo para entrar?", fr:"Prêt à rejoindre ?", ar:"جاهز للانضمام؟", pt:"Pronto para entrar?", de:"Bereit beizutreten?", zh:"准备好加入了吗？", ru:"Готовы подключиться?"},
  "📹 Join video call": {hi:"📹 वीडियो कॉल से जुड़ें", es:"📹 Entrar a la videollamada", fr:"📹 Rejoindre l'appel vidéo", ar:"📹 انضم إلى مكالمة الفيديو", pt:"📹 Entrar na videochamada", de:"📹 Videoanruf beitreten", zh:"📹 加入视频通话", ru:"📹 Присоединиться к видеозвонку"},
  "Your camera and microphone are only used during the call. The video goes directly between you and the doctor.": {hi:"आपका कैमरा और माइक सिर्फ़ कॉल के दौरान इस्तेमाल होता है। वीडियो सीधे आपके और डॉक्टर के बीच जाता है।", es:"La cámara y el micrófono solo se usan durante la llamada. El video va directamente entre tú y el médico.", fr:"La caméra et le micro ne servent que pendant l'appel. La vidéo passe directement entre vous et le médecin.", ar:"تُستخدم الكاميرا والميكروفون أثناء المكالمة فقط. ينتقل الفيديو مباشرة بينك وبين الطبيب.", pt:"A câmera e o microfone só são usados durante a chamada. O vídeo vai direto entre você e o médico.", de:"Kamera und Mikrofon werden nur während des Anrufs genutzt. Das Video geht direkt zwischen Ihnen und dem Arzt.", zh:"摄像头和麦克风仅在通话期间使用。视频直接在您和医生之间传输。", ru:"Камера и микрофон используются только во время звонка. Видео идёт напрямую между вами и врачом."},
