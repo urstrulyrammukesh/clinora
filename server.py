@@ -312,7 +312,8 @@ TOOLS = [
 ]
 
 # ---------------------------------------------------------------- database
-DB_PATH = ROOT / "data" / "sehatdesk.db"
+DATA_DIR = Path(os.environ.get("DATA_DIR") or (ROOT / "data"))  # on a host, point this at a persistent disk
+DB_PATH = DATA_DIR / "sehatdesk.db"
 DB_LOCK = threading.Lock()
 DOCTOR_IDS = {"d1", "d2", "d3", "d4"}
 STATUSES = {"Confirmed", "Arrived", "Done", "No-show", "Cancelled"}
@@ -414,7 +415,7 @@ def backfill_tokens(conn):
 
 
 def init_db():
-    DB_PATH.parent.mkdir(exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with DB_LOCK, connect() as conn:
         conn.executescript(SCHEMA)
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(appointments)")}
@@ -941,7 +942,7 @@ def m_thread(conn, d, me):
     return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online, "photo_ts": o["photo_ts"]}, "messages": msgs}
 
 
-AVATAR_DIR = ROOT / "data" / "avatars"
+AVATAR_DIR = DATA_DIR / "avatars"
 MAX_PHOTO_BYTES = 300_000
 
 
@@ -974,7 +975,7 @@ def m_photo(conn, d, me):
 
 # ---------------------------------------------------------------- reviews (stars, text, emoji, safe GIF stickers) and work photos
 GIF_IDS = {"thumbs", "heart", "clap", "stars", "thanks", "doctor", "getwell", "sad"}  # our own stickers in assets/gif/
-GALLERY_DIR = ROOT / "data" / "gallery"
+GALLERY_DIR = DATA_DIR / "gallery"
 MAX_GALLERY = 12
 LINK_RE = re.compile(r"(https?://|www\.|\.com\b|\.in\b|\.net\b)", re.I)
 
@@ -1095,6 +1096,34 @@ def m_gallery_delete(conn, d, me):
 
 def m_reviews(conn, d, me):
     return listing_reviews(conn, int(d.get("listing_id") or 0), me)
+
+def m_delete_account(conn, d, me, ip):
+    """Permanently removes the account and everything it created: profile, photos, work photos, reviews,
+    messages, follows and sessions. Needs the password again, so nobody can do it from an unlocked phone by accident."""
+    need_member(me)
+    if too_many_failures(ip):
+        raise AuthError("Too many failed attempts. Try again in 15 minutes.", 429)
+    row = conn.execute("SELECT pw FROM members WHERE id=?", (me["id"],)).fetchone()
+    if not row or not check_password(str(d.get("password") or ""), row["pw"]):
+        FAILED_LOGINS.setdefault(ip, []).append(time.time())
+        raise AuthError("That password is not right.", 401)
+    mid = me["id"]
+    for (lid,) in conn.execute("SELECT id FROM listings WHERE owner=?", (mid,)).fetchall():
+        for (gid,) in conn.execute("SELECT id FROM gallery WHERE listing_id=?", (lid,)).fetchall():
+            (GALLERY_DIR / f"{gid}.jpg").unlink(missing_ok=True)
+        conn.execute("DELETE FROM gallery WHERE listing_id=?", (lid,))
+        conn.execute("DELETE FROM reviews WHERE listing_id=?", (lid,))
+        conn.execute("DELETE FROM favs WHERE listing_id=?", (lid,))
+        conn.execute("DELETE FROM listings WHERE id=?", (lid,))
+    conn.execute("DELETE FROM reviews WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM favs WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM messages WHERE from_id=? OR to_id=?", (mid, mid))
+    conn.execute("DELETE FROM member_sessions WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM call_signals WHERE room LIKE ? OR room LIKE ?", (f"M{mid}-%", f"M%-{mid}"))
+    conn.execute("DELETE FROM members WHERE id=?", (mid,))
+    (AVATAR_DIR / f"{mid}.jpg").unlink(missing_ok=True)
+    RINGS.pop(mid, None)
+
 
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
@@ -1832,7 +1861,12 @@ def chat_turn(messages, context):
     }
 
 
-PUBLIC_FILES = {"index.html", "i18n.js", "favicon.ico", "robots.txt", "manifest.json", "sitemap.xml"}
+PUBLIC_FILES = {"index.html", "i18n.js", "manifest.json", "sw.js"}
+LEGAL_PAGES = {"/privacy": "privacy.html", "/terms": "terms.html", "/delete-account": "delete-account.html"}
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "").strip()
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "").lower() in ("1", "true", "yes")  # behind Render / a load balancer
+TWA_PACKAGE = os.environ.get("TWA_PACKAGE", "").strip()          # Android app id, e.g. com.clinora.app
+TWA_SHA256 = os.environ.get("TWA_SHA256", "").strip()            # signing key fingerprint from Play Console
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -1897,6 +1931,25 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/status"):
             return self.send_json(200, {"ai": client is not None, "reason": AI_REASON, "model": MODEL,
                                         "pay_mode": PAY_MODE, "currency": CURRENCY, "video_needs_payment": REQUIRE_VIDEO_PAYMENT})
+        if path_only.removesuffix(".html") in LEGAL_PAGES:
+            name = LEGAL_PAGES[path_only.removesuffix(".html")]
+            page = (ROOT / "legal" / name).read_text(encoding="utf-8")
+            site = PUBLIC_URL
+            page = page.replace("{{SUPPORT_EMAIL}}", SUPPORT_EMAIL or "the email address shown in the Clinora app")
+            page = page.replace("{{SITE_URL}}", site).replace("{{UPDATED}}", "25 November 2026")
+            return self.send_text(200, page, "text/html; charset=utf-8")
+        if path_only == "/robots.txt":
+            return self.send_text(200, f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {PUBLIC_URL}/sitemap.xml\n", "text/plain")
+        if path_only == "/sitemap.xml":
+            urls = "".join(f"<url><loc>{PUBLIC_URL}{u}</loc></url>" for u in ("/", "/privacy", "/terms", "/delete-account"))
+            return self.send_text(200, '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                                  + urls + "</urlset>", "application/xml")
+        if path_only == "/.well-known/assetlinks.json":
+            links = [] if not (TWA_PACKAGE and TWA_SHA256) else [{
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {"namespace": "android_app", "package_name": TWA_PACKAGE,
+                           "sha256_cert_fingerprints": [x.strip() for x in TWA_SHA256.split(",") if x.strip()]}}]
+            return self.send_json(200, links)
         if path_only.startswith("/api/m/avatar/"):
             return self.send_avatar(path_only.rsplit("/", 1)[1])
         if path_only.startswith("/api/m/gallery/"):
@@ -2023,7 +2076,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data = self.read_json(4_200_000)
                 if not isinstance(data, dict):
                     raise InputError("Bad request")
-                return self.send_json(200, food_scan(data, self.client_address[0]))
+                return self.send_json(200, food_scan(data, self.client_ip()))
             except InputError as e:
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
@@ -2036,7 +2089,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data = self.read_json(2_000)
                 if not isinstance(data, dict):
                     raise InputError("Bad request")
-                return self.send_json(200, uni_doctors(None, data, self.client_address[0]))
+                return self.send_json(200, uni_doctors(None, data, self.client_ip()))
             except InputError as e:
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
@@ -2055,7 +2108,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
                 return self.send_json(e.status, {"error": str(e)})
-        if path == "/api/pay/checkout" and too_many("pay", self.client_address[0], 20, 600):
+        if path == "/api/pay/checkout" and too_many("pay", self.client_ip(), 20, 600):
             return self.send_json(429, {"error": "Too many payment attempts. Please wait a few minutes."})
         if path in ROUTES:
             try:
@@ -2100,6 +2153,21 @@ class Handler(SimpleHTTPRequestHandler):
         except anthropic.APIConnectionError:
             return self.send_json(502, {"error": "Could not reach the AI service. Check the internet connection."})
 
+    def client_ip(self):
+        if TRUST_PROXY:
+            fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            if fwd:
+                return fwd
+        return self.client_address[0]
+
+    def send_text(self, status, body, ctype):
+        data = body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def member_token(self):
         for part in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = part.strip().partition("=")
@@ -2112,7 +2180,7 @@ class Handler(SimpleHTTPRequestHandler):
         return f"cl_member={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age}{secure}"
 
     def member(self, path):
-        ip = self.client_address[0]
+        ip = self.client_ip()
         try:
             data = self.read_json(1_300_000 if path == "/api/m/gallery/add" else 450_000 if path == "/api/m/photo" else 10_000)
             if not isinstance(data, dict):
@@ -2121,6 +2189,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if path == "/api/m/logout":
                     conn.execute("DELETE FROM member_sessions WHERE token=?", (token_hash(self.member_token()),))
                     return self.send_json(200, {"me": None}, cookie=self.member_cookie("", 0))
+                if path == "/api/m/delete":
+                    me = member_for_token(conn, self.member_token())
+                    m_delete_account(conn, data, me, ip)
+                    return self.send_json(200, {"me": None, "deleted": True}, cookie=self.member_cookie("", 0))
                 if path in ("/api/m/signup", "/api/m/login"):
                     mid = (m_signup if path.endswith("signup") else m_login)(conn, data, None, ip)
                     token = new_member_session(conn, mid)
@@ -2148,7 +2220,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if path == "/api/auth/logout":
                     conn.execute("DELETE FROM sessions WHERE token=?", (token_hash(self.session_token()),))
                     return self.send_json(200, {"ok": True, "data": snapshot(conn)}, self.cookie("", 0))
-                uid = setup_admin(conn, data) if path == "/api/auth/setup" else login(conn, data, self.client_address[0])
+                uid = setup_admin(conn, data) if path == "/api/auth/setup" else login(conn, data, self.client_ip())
                 token = new_session(conn, uid)
                 user = user_for_token(conn, token)
                 return self.send_json(200, {"ok": True, "data": snapshot(conn, user)},
@@ -2184,4 +2256,4 @@ if __name__ == "__main__":
           else "DEMO mode (no money moves). Add provider keys to .env for real payments."))
     if PRODUCTION and not PUBLIC_URL.startswith("https://"):
         print("WARNING: APP_ENV=production but PUBLIC_URL is not https://. Real payments must only run over HTTPS.")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((os.environ.get("HOST", "127.0.0.1"), PORT), Handler).serve_forever()

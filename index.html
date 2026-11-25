@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clinora — find doctors, book visits &amp; video consultations</title>
+<meta name="description" content="Find doctors, hospitals and clinics near you, see who is open now, book in-clinic visits or video consultations, chat with an AI health assistant, scan your food and read free medical books. In 139 languages.">
+<meta name="keywords" content="doctor near me, hospital near me, book doctor appointment, video consultation, online doctor, AI health assistant, food safety scanner, clinic receptionist">
+<meta name="theme-color" content="#06080b">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="48x48" href="/assets/icons/favicon-48.png">
+<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Clinora">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clinora">
+<meta property="og:title" content="Clinora — doctors near you, video consultations and an AI health assistant">
+<meta property="og:description" content="Find open doctors and hospitals worldwide, book visits or video calls, scan your food and chat with an AI health assistant.">
+<meta property="og:image" content="/assets/hero-doctor-brain.jpg?v=2">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clinora","applicationCategory":"HealthApplication","operatingSystem":"Web, Android","description":"Find doctors and hospitals near you, book visits and video consultations, AI health assistant, food scan and free medical books.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
@@ -975,7 +990,7 @@ html{overflow-x:clip}
   </section>
 
   <footer>
-    <span>Clinora AI: demo build. The name and all data are placeholders.</span>
+    <span>© Clinora · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/delete-account">Delete account</a></span>
     <span data-i18n="foot2">⚠️ The AI does not give medical advice. In an emergency, call your <b class="red">local emergency number</b> immediately.</span>
   </footer>
 </div>
@@ -2682,6 +2697,18 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
   if(doc&&MEM.listing)renderGallery();
+  const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
+  dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
+    <div id="delStep"><button class="btn ghost sm" type="button" id="delStart" style="border-color:rgba(255,61,85,.5);color:#ff6b7d">Delete my account…</button></div>`;
+  box.appendChild(dz);
+  $('#delStart').onclick=()=>{$('#delStep').innerHTML=`<form id="delForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="fs-note" id="delPw" type="password" autocomplete="current-password" required placeholder="Type your password to confirm" style="margin:0;flex:1;min-width:220px">
+      <button class="btn sm" type="submit" style="background:#e5394f;color:#fff">Delete forever</button><button class="btn ghost sm" type="button" id="delCancel">Cancel</button></form><div id="delMsg" style="font-size:13px;margin-top:8px"></div>`;
+    $('#delCancel').onclick=()=>renderAccount();
+    $('#delForm').onsubmit=async e=>{e.preventDefault();if(!confirm('Delete your Clinora account and all its data permanently?'))return;
+      try{const r=await fetch('/api/m/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('#delPw').value})});const j=await r.json();
+        if(!r.ok||j.error)throw new Error(j.error||'Could not delete the account');
+        MEM={me:null,favs:[],threads:[],listing:null};openThread=null;updateAcctBtn();loadDB();renderAccount();acctNotice('Your account and its data were deleted. Take care! 💙')}
+      catch(err){$('#delMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}};
 }
 async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
   const c=$('#conv');if(!c)return;let th;
@@ -2911,6 +2938,13 @@ async function renderGallery(){const box=$('#galBox');if(!box||!MEM.listing)retu
       await mpost('gallery/add',{image:data,caption:$('#galCap').value.trim()});renderGallery()}catch(err){$('#galMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   $$('#galBox [data-galdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this photo?'))return;try{await mpost('gallery/delete',{id:+b.dataset.galdel});renderGallery()}catch(err){alert(err.message)}});
 }
+
+
+/* ================= INSTALLABLE APP (service worker) ================= */
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
+  addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}
+(()=>{const dr=$('#navDrawer');if(!dr)return;const f=document.createElement('div');f.style.cssText='margin-top:22px;font-size:13px;color:var(--mute);display:flex;gap:14px;flex-wrap:wrap;padding:0 4px';
+  f.innerHTML='<a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete account</a>';dr.appendChild(f)})();
 
 /* ================= BOOKWORM: free books ================= */
 const SHELF=[['🫀','Anatomy & Physiology','OpenStax · free textbook','https://openstax.org/details/books/anatomy-and-physiology-2e'],

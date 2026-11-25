@@ -50,3 +50,6 @@ Without keys, the site runs with simple built-in chat replies and demo payments.
 | `server.py` | Web server, AI, database (SQLite), logins, payments, video-call signalling |
 | `data/` | Database and saved AI translations (the database is not uploaded) |
 | `assets/` | Images |
+
+## Going live (website, Google, Play Store)
+Step-by-step guide: **`docs/play-store/README.md`**. Hosting is set up for Render in `render.yaml`. Privacy, Terms and Delete-account pages are in `legal/` and appear at `/privacy`, `/terms` and `/delete-account`.

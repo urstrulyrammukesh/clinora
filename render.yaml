@@ -1,0 +1,52 @@
+# One-click hosting on Render (https://render.com): New → Blueprint → pick this GitHub repo.
+# Secrets marked "sync: false" are typed into Render's dashboard, never into this file.
+services:
+  - type: web
+    name: clinora
+    runtime: python
+    plan: starter            # paid plan: stays awake 24x7 and can use a disk
+    region: singapore        # closest to India; change if most users are elsewhere
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: "1"
+      - key: APP_ENV
+        value: production
+      - key: DATA_DIR            # database, profile photos and work photos live on the disk below
+        value: /var/data
+      - key: PUBLIC_URL          # e.g. https://clinora.in (your domain, with https)
+        sync: false
+      - key: SUPPORT_EMAIL       # shown on the Privacy, Terms and Delete-account pages
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: TWA_PACKAGE         # Android app id after you make the Play Store app, e.g. com.clinora.app
+        sync: false
+      - key: TWA_SHA256          # "App signing key certificate" SHA-256 from Play Console
+        sync: false
+    disk:
+      name: clinora-data
+      mountPath: /var/data
+      sizeGB: 1
