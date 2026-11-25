@@ -1557,7 +1557,7 @@ async function openPay(route){
       <div class="amt" id="payAmt">…</div>${payRows(p)}
       ${p.mode==='video'?'<p style="font-size:13px;color:var(--amber);margin-top:12px">📹 Please pay before joining your video consultation.</p>':'<p style="font-size:13px;color:var(--mute);margin-top:12px">You can also pay at the clinic.</p>'}
       <div class="methods" id="methods"></div>
-      <p class="secure">${p.pay_mode==='demo'?'<span class="demo-flag">DEMO MODE · NO REAL MONEY</span>':'🔒 You pay on the provider\'s own secure page. We never see or store your card or UPI details.'}</p>`;
+      <p class="secure">${p.pay_mode==='demo'?(p.demo_allowed?'<span class="demo-flag">DEMO MODE · NO REAL MONEY</span>':'Online payment is not available yet. Please pay at the clinic.'):'🔒 You pay on the provider\'s own secure page. We never see or store your card or UPI details.'}</p>`;
     const showQuote=async c=>{PAYCUR=c;try{localStorage.setItem('sd_cur',c)}catch{}
       $('#payAmt').textContent='…';$('#methods').innerHTML='';
       const j=(await payApi('quote',id,token,{currency:c})).created;

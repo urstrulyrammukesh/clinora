@@ -72,6 +72,13 @@ STRIPE_ON = bool(STRIPE_KEY and stripe)
 RAZORPAY_ON = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 PAYPAL_ON = bool(PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET)
 PAY_MODE = "live" if (STRIPE_ON or RAZORPAY_ON or PAYPAL_ON) else "demo"
+# APP_ENV=production on the real website: demo payments are refused and only fixed prices are charged.
+PRODUCTION = os.environ.get("APP_ENV", "").lower() == "production"
+ALLOW_DEMO_PAYMENTS = PAY_MODE == "demo" and not PRODUCTION
+# Converted prices use approximate rates; in production they are only offered when explicitly allowed.
+ALLOW_FX_PRICES = os.environ.get("ALLOW_FX_PRICES", "0" if PRODUCTION else "1") == "1"
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()
+PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID", "").strip()
 if STRIPE_ON:
     stripe.api_key = STRIPE_KEY
 
@@ -121,15 +128,23 @@ def quote(doc, currency):
         major, converted = LOCAL_PRICES[cur][doc], False
     elif cur == CURRENCY:
         major, converted = DOCTOR_FEES[doc], False
+    elif not ALLOW_FX_PRICES:
+        raise InputError("Please pay in " + CURRENCY.upper() + " or the clinic's local currency.")
     else:
         major, converted = nice_round(DOCTOR_FEES[doc] / FX_PER_USD[CURRENCY] * FX_PER_USD[cur]), True
     minor = int(major) if cur in ZERO_DECIMAL else int(round(major * 100))
     return {"currency": cur, "amount": minor, "converted": converted}
 
 
+def offered_currencies():
+    if ALLOW_FX_PRICES:
+        return sorted(FX_PER_USD)
+    return sorted({CURRENCY} | set(LOCAL_PRICES))
+
+
 def methods_for(currency):
     cur = currency.lower()
-    demo = PAY_MODE == "demo"
+    demo = ALLOW_DEMO_PAYMENTS
     out = []
     if cur in RAZORPAY_CURRENCIES and (RAZORPAY_ON or demo):
         out.append({"id": "razorpay", "label": "UPI · Google Pay · PhonePe · Paytm", "sub": "Also cards and net banking (India)"})
@@ -318,6 +333,9 @@ CREATE TABLE IF NOT EXISTS call_signals(
   id INTEGER PRIMARY KEY AUTOINCREMENT, room TEXT NOT NULL, sender TEXT NOT NULL,
   kind TEXT NOT NULL, payload TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS call_room ON call_signals(room, id);
+CREATE TABLE IF NOT EXISTS payment_events(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, appt_id TEXT, event TEXT NOT NULL, provider TEXT, ref TEXT,
+  amount INTEGER, currency TEXT, detail TEXT, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 """
 
@@ -461,6 +479,18 @@ def valid_email(d):
     if not EMAIL_RE.match(email):
         raise InputError("Enter a valid email address")
     return email
+
+
+RATE = {}
+
+
+def too_many(bucket, ip, limit, window):
+    """Simple in-memory rate limit: True when this IP made more than `limit` calls in `window` seconds."""
+    key = (bucket, ip)
+    recent = [t for t in RATE.get(key, []) if t > time.time() - window]
+    recent.append(time.time())
+    RATE[key] = recent
+    return len(recent) > limit
 
 
 def too_many_failures(ip):
@@ -749,12 +779,33 @@ def pay_summary(appt):
             "amount": appt["amount"], "currency": appt["currency"] or CURRENCY, "pay_mode": PAY_MODE,
             "patient": appt["name"].split(" ")[0], "paid_ts": appt["paid_ts"],
             "pay_method": appt["pay_method"], "pay_currency": appt["pay_currency"], "pay_amount": appt["pay_amount"],
-            "currencies": sorted(FX_PER_USD), "base_currency": CURRENCY,
+            "currencies": offered_currencies(), "base_currency": CURRENCY, "demo_allowed": ALLOW_DEMO_PAYMENTS,
             "call": appt["call_token"] if appt["mode"] == "video" else None, "pay_ref": (appt["pay_ref"] or "")[-8:]}
 
 
-def mark_paid(conn, appt_id, ref):
-    conn.execute("UPDATE appointments SET pay_status='paid', pay_ref=?, paid_ts=? WHERE id=?", (ref, now_ms(), appt_id))
+def log_payment(conn, appt_id, event, provider=None, ref=None, amount=None, currency=None, detail=None):
+    """Permanent record of every payment step (for disputes and accounting). Never stores card/UPI details."""
+    conn.execute("INSERT INTO payment_events(appt_id,event,provider,ref,amount,currency,detail,ts) VALUES(?,?,?,?,?,?,?,?)",
+                 (appt_id, event, provider, ref, amount, currency, (detail or "")[:300], now_ms()))
+
+
+def mark_paid(conn, appt_id, ref, provider=None, amount=None, currency=None):
+    """Mark a booking paid exactly once. A payment for a cancelled booking is flagged for refund instead."""
+    appt = conn.execute("SELECT status, pay_status FROM appointments WHERE id=?", (appt_id,)).fetchone()
+    if not appt:
+        log_payment(conn, appt_id, "paid_unknown_booking", provider, ref, amount, currency)
+        return
+    if appt["pay_status"] in ("paid", "refund_due", "refunded"):
+        log_payment(conn, appt_id, "duplicate_ignored", provider, ref, amount, currency)
+        return
+    status = "refund_due" if appt["status"] == "Cancelled" else "paid"
+    conn.execute("UPDATE appointments SET pay_status=?, pay_ref=?, paid_ts=? WHERE id=?", (status, ref, now_ms(), appt_id))
+    log_payment(conn, appt_id, "paid" if status == "paid" else "paid_after_cancel_refund_due", provider, ref, amount, currency)
+
+
+def amount_matches(appt, amount_minor, currency):
+    return appt["pay_amount"] is not None and int(amount_minor) == int(appt["pay_amount"]) \
+        and str(currency).lower() == (appt["pay_currency"] or "").lower()
 
 
 def pay_info(conn, d, user=None):
@@ -779,10 +830,13 @@ def pay_checkout(conn, d, user=None):
         raise InputError("This payment method isn't available for this currency.")
     conn.execute("UPDATE appointments SET pay_method=?, pay_currency=?, pay_amount=? WHERE id=?",
                  (method, q["currency"], q["amount"], appt["id"]))
+    log_payment(conn, appt["id"], "checkout_started", method, None, q["amount"], q["currency"])
+    if PAY_MODE == "demo" and not ALLOW_DEMO_PAYMENTS:
+        raise InputError("Online payment isn't available yet. Please pay at the clinic.")
     token = str(d.get("token"))
     back = f"{PUBLIC_URL}/#pay/{appt['id']}.{token}"
     title = f"{'Video consultation' if appt['mode'] == 'video' else 'Consultation'} with {DOCTOR_NAMES.get(appt['doc'])}"
-    if PAY_MODE == "demo":
+    if ALLOW_DEMO_PAYMENTS:
         return {"url": f"#checkout/{appt['id']}.{token}"}
     if method == "stripe":
         session = stripe.checkout.Session.create(
@@ -790,6 +844,7 @@ def pay_checkout(conn, d, user=None):
             line_items=[{"quantity": 1, "price_data": {"currency": q["currency"], "unit_amount": q["amount"],
                          "product_data": {"name": title, "description": f"Booking #{appt['id']} on {appt['date']} at {appt['time']}"}}}],
             client_reference_id=appt["id"], metadata={"appointment_id": appt["id"]},
+            idempotency_key=f"chk-{appt['id']}-{q['currency']}-{q['amount']}-{int(time.time() // 900)}",
             success_url=f"{PUBLIC_URL}/?paid={appt['id']}.{token}&session_id={{CHECKOUT_SESSION_ID}}", cancel_url=back)
         conn.execute("UPDATE appointments SET pay_ref=? WHERE id=?", (session.id, appt["id"]))
         return {"url": session.url}
@@ -818,11 +873,11 @@ def pay_checkout(conn, d, user=None):
 
 
 def pay_demo_complete(conn, d, user=None):
-    if PAY_MODE != "demo":
-        raise AuthError("Demo payments are switched off because real payments are connected.")
+    if not ALLOW_DEMO_PAYMENTS:
+        raise AuthError("Demo payments are switched off on this website.")
     appt = pay_appt(conn, d)
     if appt["pay_status"] != "paid":
-        mark_paid(conn, appt["id"], "demo_" + secrets.token_hex(6))
+        mark_paid(conn, appt["id"], "demo_" + secrets.token_hex(6), "demo", appt["pay_amount"], appt["pay_currency"])
     return {"payment": pay_summary(reload(conn, appt["id"]))}
 
 
@@ -835,13 +890,22 @@ def pay_verify(conn, d, user=None):
             if session.metadata.get("appointment_id") != appt["id"]:
                 raise AuthError("This payment belongs to another booking.")
             if session.payment_status == "paid":
-                mark_paid(conn, appt["id"], session.payment_intent or session.id)
+                if not amount_matches(appt, session.amount_total, session.currency):
+                    log_payment(conn, appt["id"], "amount_mismatch", "stripe", session.id, session.amount_total, session.currency)
+                    raise AuthError("The amount paid doesn't match this booking. The clinic has been notified.")
+                mark_paid(conn, appt["id"], session.payment_intent or session.id, "stripe", session.amount_total, session.currency)
         elif method == "razorpay" and d.get("razorpay_payment_id"):
             order_id, pay_id = text(d, "razorpay_order_id", 60), text(d, "razorpay_payment_id", 60)
             expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), f"{order_id}|{pay_id}".encode(), hashlib.sha256).hexdigest()
             if order_id != appt["pay_ref"] or not hmac.compare_digest(expected, str(d.get("razorpay_signature") or "")):
+                log_payment(conn, appt["id"], "bad_signature", "razorpay", pay_id)
                 raise AuthError("The payment could not be verified.")
-            mark_paid(conn, appt["id"], pay_id)
+            pay = http_json("GET", f"https://api.razorpay.com/v1/payments/{pay_id}", auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+            if pay.get("order_id") != order_id or pay.get("status") not in ("captured", "authorized") \
+                    or not amount_matches(appt, pay.get("amount", -1), pay.get("currency", "")):
+                log_payment(conn, appt["id"], "amount_mismatch", "razorpay", pay_id, pay.get("amount"), pay.get("currency"), pay.get("status"))
+                raise AuthError("The payment could not be confirmed. The clinic has been notified.")
+            mark_paid(conn, appt["id"], pay_id, "razorpay", pay.get("amount"), pay.get("currency"))
         elif method == "paypal" and d.get("paypal_order"):
             order_id = text(d, "paypal_order", 60)
             if order_id != appt["pay_ref"]:
@@ -854,7 +918,9 @@ def pay_verify(conn, d, user=None):
             cap = next((c for c in caps if c.get("status") == "COMPLETED"), None)
             if cap and cap["amount"]["value"] == major_str(appt["pay_amount"], appt["pay_currency"]) \
                     and cap["amount"]["currency_code"].lower() == appt["pay_currency"]:
-                mark_paid(conn, appt["id"], "paypal:" + cap["id"])
+                mark_paid(conn, appt["id"], "paypal:" + cap["id"], "paypal", appt["pay_amount"], appt["pay_currency"])
+            elif cap:
+                log_payment(conn, appt["id"], "amount_mismatch", "paypal", cap.get("id"), None, cap["amount"].get("currency_code"), cap["amount"].get("value"))
     return {"payment": pay_summary(reload(conn, appt["id"]))}
 
 
@@ -866,7 +932,8 @@ def pay_mark_cash(conn, d, user=None):
     if user["role"] == "doctor" and appt["doc"] != user["doctor_id"]:
         raise AuthError("You can only change your own appointments.")
     conn.execute("UPDATE appointments SET pay_method='cash' WHERE id=?", (appt["id"],))
-    mark_paid(conn, appt["id"], "cash")
+    mark_paid(conn, appt["id"], "cash", "cash", appt["amount"], appt["currency"])
+    log_payment(conn, appt["id"], "cash_marked_by", None, None, None, None, user["email"])
 
 
 def pay_refund(conn, d, user=None):
@@ -877,7 +944,7 @@ def pay_refund(conn, d, user=None):
     ref = appt["pay_ref"] or ""
     note = "Marked refunded. Return cash/demo payments yourself."
     if STRIPE_ON and ref.startswith("pi_"):
-        stripe.Refund.create(payment_intent=ref)
+        stripe.Refund.create(payment_intent=ref, idempotency_key=f"refund-{appt['id']}-{ref}")
         note = "Refunded through Stripe"
     elif RAZORPAY_ON and ref.startswith("pay_"):
         http_json("POST", f"https://api.razorpay.com/v1/payments/{ref}/refund", {}, auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
@@ -886,6 +953,7 @@ def pay_refund(conn, d, user=None):
         http_json("POST", f"{PAYPAL_API}/v2/payments/captures/{ref[7:]}/refund", {}, bearer=paypal_token())
         note = "Refunded through PayPal"
     conn.execute("UPDATE appointments SET pay_status='refunded' WHERE id=?", (appt["id"],))
+    log_payment(conn, appt["id"], "refunded", None, ref, appt["pay_amount"], appt["pay_currency"], f"{note} by {user['email']}")
     return {"note": note}
 
 
@@ -894,8 +962,54 @@ def stripe_webhook(conn, payload, signature):
     if event["type"] == "checkout.session.completed":
         sess = event["data"]["object"]
         appt_id = (sess.get("metadata") or {}).get("appointment_id")
-        if appt_id and sess.get("payment_status") == "paid":
-            mark_paid(conn, appt_id, sess.get("payment_intent") or sess.get("id"))
+        appt = reload(conn, appt_id) if appt_id else None
+        if appt and sess.get("payment_status") == "paid":
+            if amount_matches(appt, sess.get("amount_total", -1), sess.get("currency", "")):
+                mark_paid(conn, appt_id, sess.get("payment_intent") or sess.get("id"), "stripe", sess.get("amount_total"), sess.get("currency"))
+            else:
+                log_payment(conn, appt_id, "amount_mismatch", "stripe", sess.get("id"), sess.get("amount_total"), sess.get("currency"))
+
+
+def razorpay_webhook(conn, payload, signature):
+    """Razorpay calls this when a payment is captured (even if the patient closed the page)."""
+    expected = hmac.new(RAZORPAY_WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature or ""):
+        raise AuthError("bad signature")
+    event = json.loads(payload)
+    if event.get("event") not in ("payment.captured", "order.paid"):
+        return
+    pay = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
+    row = conn.execute("SELECT * FROM appointments WHERE pay_ref=? OR pay_ref=?", (pay.get("order_id"), pay.get("id"))).fetchone()
+    if not row:
+        return
+    if pay.get("status") == "captured" and amount_matches(row, pay.get("amount", -1), pay.get("currency", "")):
+        mark_paid(conn, row["id"], pay.get("id"), "razorpay", pay.get("amount"), pay.get("currency"))
+    else:
+        log_payment(conn, row["id"], "amount_mismatch", "razorpay", pay.get("id"), pay.get("amount"), pay.get("currency"), pay.get("status"))
+
+
+def paypal_webhook(conn, payload, headers):
+    """PayPal calls this when a capture completes. The message is verified with PayPal before it is trusted."""
+    event = json.loads(payload)
+    check = http_json("POST", PAYPAL_API + "/v1/notifications/verify-webhook-signature", {
+        "auth_algo": headers.get("PAYPAL-AUTH-ALGO"), "cert_url": headers.get("PAYPAL-CERT-URL"),
+        "transmission_id": headers.get("PAYPAL-TRANSMISSION-ID"), "transmission_sig": headers.get("PAYPAL-TRANSMISSION-SIG"),
+        "transmission_time": headers.get("PAYPAL-TRANSMISSION-TIME"), "webhook_id": PAYPAL_WEBHOOK_ID, "webhook_event": event},
+        bearer=paypal_token())
+    if check.get("verification_status") != "SUCCESS":
+        raise AuthError("bad signature")
+    if event.get("event_type") != "PAYMENT.CAPTURE.COMPLETED":
+        return
+    cap = event.get("resource") or {}
+    order_id = ((cap.get("supplementary_data") or {}).get("related_ids") or {}).get("order_id")
+    row = conn.execute("SELECT * FROM appointments WHERE pay_ref=?", (order_id,)).fetchone()
+    if not row:
+        return
+    amt = cap.get("amount") or {}
+    if amt.get("value") == major_str(row["pay_amount"] or 0, row["pay_currency"] or "") and (amt.get("currency_code") or "").lower() == row["pay_currency"]:
+        mark_paid(conn, row["id"], "paypal:" + cap.get("id", ""), "paypal", row["pay_amount"], row["pay_currency"])
+    else:
+        log_payment(conn, row["id"], "amount_mismatch", "paypal", cap.get("id"), None, amt.get("currency_code"), amt.get("value"))
 
 
 def find_appointments(conn, d, user=None):
@@ -1086,6 +1200,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(self), payment=(self)")
+        if PUBLIC_URL.startswith("https://"):
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         super().end_headers()
 
     def session_token(self):
@@ -1096,7 +1216,7 @@ class Handler(SimpleHTTPRequestHandler):
         return ""
 
     def cookie(self, token, max_age):
-        secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+        secure = "; Secure" if (self.headers.get("X-Forwarded-Proto") == "https" or PUBLIC_URL.startswith("https://")) else ""
         return f"sd_session={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age}{secure}"
 
     def send_json(self, status, payload, cookie=None):
@@ -1153,6 +1273,22 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if path in ("/api/pay/razorpay-webhook", "/api/pay/paypal-webhook"):
+            length = int(self.headers.get("Content-Length") or 0)
+            payload = self.rfile.read(min(length, 1_000_000))
+            try:
+                with DB_LOCK, connect() as conn:
+                    if path.endswith("razorpay-webhook"):
+                        if not (RAZORPAY_ON and RAZORPAY_WEBHOOK_SECRET):
+                            return self.send_json(400, {"error": "Webhook not configured"})
+                        razorpay_webhook(conn, payload, self.headers.get("X-Razorpay-Signature", ""))
+                    else:
+                        if not (PAYPAL_ON and PAYPAL_WEBHOOK_ID):
+                            return self.send_json(400, {"error": "Webhook not configured"})
+                        paypal_webhook(conn, payload, self.headers)
+                return self.send_json(200, {"received": True})
+            except Exception:
+                return self.send_json(400, {"error": "Invalid webhook"})
         if path == "/api/pay/webhook":
             if not STRIPE_ON or not STRIPE_WEBHOOK_SECRET:
                 return self.send_json(400, {"error": "Webhook not configured"})
@@ -1180,6 +1316,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
                 return self.send_json(e.status, {"error": str(e)})
+        if path == "/api/pay/checkout" and too_many("pay", self.client_address[0], 20, 600):
+            return self.send_json(429, {"error": "Too many payment attempts. Please wait a few minutes."})
         if path in ROUTES:
             try:
                 data = self.read_json(20_000)
@@ -1261,5 +1399,8 @@ if __name__ == "__main__":
     print(f"Clinora AI running at http://localhost:{PORT}")
     print("AI:", "ON (" + MODEL + ")" if client else "OFF - " + AI_REASON)
     on = [n for n, ok in (("Stripe", STRIPE_ON), ("Razorpay", RAZORPAY_ON), ("PayPal (" + os.environ.get("PAYPAL_ENV", "sandbox") + ")", PAYPAL_ON)) if ok]
-    print("Payments:", ", ".join(on) if on else "DEMO mode (no money moves). Add provider keys to .env for real payments.")
+    print("Payments:", ", ".join(on) if on else ("OFF (production: no provider keys, online payment disabled)" if PRODUCTION
+          else "DEMO mode (no money moves). Add provider keys to .env for real payments."))
+    if PRODUCTION and not PUBLIC_URL.startswith("https://"):
+        print("WARNING: APP_ENV=production but PUBLIC_URL is not https://. Real payments must only run over HTTPS.")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
