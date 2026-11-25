@@ -565,6 +565,7 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 .acct-btn.in{background:hsl(var(--h),70%,42%);color:#fff;border-color:transparent}
 .acct-btn i{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--red);color:#fff;font-size:10px;font-style:normal;display:none;place-items:center}
 .acct-btn i.on{display:grid}
+.acct-btn img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}.acct-btn i{z-index:1}
 
 /* ===== HELP SHEET (112 button) ===== */
 .sheet{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center}
@@ -673,6 +674,34 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 .lc-acts a,.lc-acts button{translate:calc(var(--vel,0) * 6px) 0}
 html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate:none;translate:none}
 @media (prefers-reduced-motion: reduce){.tab,.logo-mark,.lc,.book,.step,.fcol,.price,.shelf a,.uni-doc{rotate:none!important;translate:none!important;scale:none!important}}
+
+/* ===== PROFILE PHOTOS ===== */
+.lc-av img{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.lc-av .dot{z-index:1}
+.ph-edit{position:relative;cursor:pointer;border:0;padding:0}
+.ph-edit .cam{position:absolute;right:-4px;bottom:-4px;width:26px;height:26px;border-radius:50%;background:var(--teal);color:#021512;display:grid;place-items:center;border:3px solid var(--bg);z-index:2}
+.ph-edit:hover img,.ph-edit:hover{filter:brightness(1.08)}
+.acct-head .lc-av{flex-basis:84px;width:84px;height:84px;font-size:28px}
+.ph-menu{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ph-menu button{font-size:13px;padding:6px 12px;border-radius:99px;border:1px solid var(--line)}
+.ph-menu button:hover{border-color:var(--teal)}
+.ph-prompt{display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px dashed hsla(var(--h),78%,50%,.5);border-radius:12px;margin-bottom:18px;font-size:14px}
+
+/* ===== ONLINE HOURS PICKER ===== */
+.hed{margin:6px 0 4px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.hed .seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--bg);padding:4px;border-radius:10px;margin:6px 0 12px}
+.hed .seg3 button{padding:8px;border-radius:7px;color:var(--mute);font-weight:600;font-size:13px}
+.hed .seg3 button.on{background:var(--teal);color:#021512}
+.hed-days{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.hed-days button{width:46px;padding:8px 0;border-radius:99px;border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--mute)}
+.hed-days button.on{background:hsla(var(--h),78%,50%,.18);border-color:var(--teal);color:var(--teal)}
+.hed-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:14px;color:var(--mute)}
+.hed-row input{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:9px 10px;border-radius:9px;font:inherit;color-scheme:dark}
+.hed-x{width:30px;height:30px;border-radius:50%;border:1px solid var(--line)}
+.hed-add{font-size:13px;color:var(--teal);font-weight:600;margin-bottom:8px}
+.hed-prev{font-size:13px;color:var(--mute);border-top:1px dashed var(--line);padding-top:10px;margin-top:4px}
+.hed-prev b{color:var(--text)}
+.hed [hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -727,7 +756,7 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
       </div>
     </div>
     <div class="hero-visual">
-    <div class="hero-art"><img class="base" src="assets/hero-doctor-brain.jpg" alt="" width="1024" height="1024" decoding="async"><div class="brain-layer idle" id="brainLayer"><img src="assets/hero-doctor-brain.jpg" alt="" decoding="async"></div><span class="brain-glow"></span><button class="brain-btn" id="brainBtn" aria-label="Spin the brain"></button><span class="brain-tip notranslate" id="brainTip">✨ Click the brain</span></div>
+    <div class="hero-art"><img class="base" src="assets/hero-doctor-brain.jpg?v=2" alt="A doctor holding a glowing brain" width="1400" height="1400" decoding="async"><div class="brain-layer idle" id="brainLayer"><img src="assets/hero-doctor-brain.jpg?v=2" alt="" decoding="async"></div><span class="brain-glow"></span><button class="brain-btn" id="brainBtn" aria-label="Spin the brain"></button><span class="brain-tip notranslate" id="brainTip">✨ Click the brain</span></div>
     <div class="phone">
       <div class="notch"></div>
       <div class="wa-head"><div class="av">C</div><div><b>Clinora · AI</b><span>online · replies instantly</span></div></div>
@@ -1622,8 +1651,9 @@ async function nominatim(q,extra=''){
   if(!r.ok)throw new Error('nominatim');return r.json();
 }
 const HEALTH=/^(hospital|clinic|doctors|doctor|dentist|pharmacy|laboratory|university|college)$/;
-function regToPlace(r){return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:null,spec:r.spec,video:r.video,
-  id:r.id,owner:r.owner,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
+function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,
+  hours:r.hours,tz:r.tz,live:!!(r.online||(hs&&hs.open)),hoursRaw:r.hours||'',
+  id:r.id,owner:r.owner,photo:r.owner_photo,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
   tags:Object.assign({website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},r.social||{}),cc:r.cc}}
 async function dirSearch(city,name,type){
   $('#dirStatus').textContent=`🔍 Searching ${TYPEWORD[type]} ${name?'named "'+name+'" ':''}in ${city}…`;$('#dirResults').innerHTML='';
@@ -1664,13 +1694,14 @@ function initDirectory(){
   $('#rCountry').value=countryName();
   $('#dirForm').onsubmit=e=>{e.preventDefault();dirSearch($('#dirCity').value.trim(),$('#dirName').value.trim(),$('#dirType').value)};
   $('#regForm').onsubmit=async e=>{e.preventDefault();const v=id=>$(id).value.trim();
+    try{readHours('rHours')}catch(err){$('#regMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>';return}
     const dg=v('#rPhone').replace(/\D/g,'');if(dg.length<7||dg.length>15){$('#regMsg').innerHTML='<span class="red">Please enter a valid phone number with country code.</span>';return}
     const web=v('#rWeb');if(web&&!safeUrl(web)){$('#regMsg').innerHTML='<span class="red">Website must start with https://</span>';return}
     $('#regMsg').textContent='📍 Finding your address on the map…';
     let lat,lon;try{const j=await nominatim(`${v('#rAddr')}, ${v('#rCity')}, ${v('#rCountry')}`);if(!j.length){const k=await nominatim(`${v('#rCity')}, ${v('#rCountry')}`);if(k.length){lat=+k[0].lat;lon=+k[0].lon}}else{lat=+j[0].lat;lon=+j[0].lon}}catch{}
     if(lat==null){$('#regMsg').innerHTML='<span class="red">Could not find that address on the map. Check the city and country.</span>';return}
     try{await api('/api/listings',{name:v('#rName'),type:$('#rType').value,spec:v('#rSpec'),phone:v('#rPhone'),email:v('#rEmail'),web,addr:v('#rAddr'),city:v('#rCity'),country:v('#rCountry'),cc:nameToCC(v('#rCountry')),video:$('#rVideo').checked,consent:$('#rConsent').checked,lat,lon,
-      social:{instagram:v('#rIg'),telegram:v('#rTg'),facebook:v('#rFb')}})}
+      social:{instagram:v('#rIg'),telegram:v('#rTg'),facebook:v('#rFb')},...readHours('rHours')})}
     catch(err){$('#regMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>';return}
     $('#regMsg').innerHTML='<span class="teal">✅ Listing added! It now shows in this directory and on the Nearby map.</span>';
     $('#regForm').reset();$('#rCountry').value=countryName();renderRegList();if(nearInit)renderPlaces();};
@@ -2157,7 +2188,8 @@ const IC={phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.
  video:'<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
  steth:'<path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>',
  globe:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
- clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'};
+ clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+ cam:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'};
 const ico=(n,sz=16)=>`<svg class="ic" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 
 /* ================= LISTING CARD (one look everywhere) ================= */
@@ -2177,15 +2209,16 @@ function lcard(p,i,ctx){
   const phones=String(p.phone||'').split(';').map(x=>x.trim()).filter(Boolean).slice(0,3);
   const fav=p.reg&&MEM.favs&&MEM.favs.includes(p.id);
   const sub=[typeLabel(p),p.spec,near&&p.d!=null?fmtD(p.d)+' away':''].filter(Boolean).map(esc).join(' · ');
-  const pills=[p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.online?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${agoText(p.last_seen)}</span>`):'',
+  const pills=[p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.live?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${p.hours?'Offline':agoText(p.last_seen)}</span>`):'',
     p.sample?'<span class="lc-pill">Sample</span>':'',p.video?'<span class="lc-pill">Video visits</span>':''].join('');
   const prof=near?`data-prof="${i}"`:`data-dprof="${i}"`,ride=near?`data-ride="${i}"`:`data-dride="${i}"`,mapb=near?`data-fly="${i}"`:`data-dmap="${i}"`;
   return `<article class="lc ${near?'place':''} ${p.partner||p.reg?'hl':''}" ${near?`data-i="${i}"`:''}>
-    <div class="lc-av" style="--avh:${hash(p.name||'x')%360}">${edu?ico('cap',20):esc(initials(p.name||'')||'+')}${p.reg?`<span class="dot ${p.online?'on':''}"></span>`:''}</div>
+    <div class="lc-av" style="--avh:${hash(p.name||'x')%360}">${edu?ico('cap',20):esc(initials(p.name||'')||'+')}${p.reg?avImg(p.owner,p.photo):''}${p.reg?`<span class="dot ${p.live?'on':''}"></span>`:''}</div>
     <div class="lc-b">
       <div class="lc-top"><h5>${esc(p.name)}</h5>${pills}</div>
       <div class="lc-sub">${sub}${p.reg&&p.followers?` · ${p.followers} follower${p.followers>1?'s':''}`:''}</div>
       ${edu||p.reg?'':`<div class="lc-st ${sc}"><b>${esc(sw)}</b>${sr?' · '+esc(sr):''}</div>`}
+      ${p.reg&&p.hours?(()=>{const w=p.online&&!(p.st&&p.st.open)?['open','Online','now']:onlineWords(p.st);return `<div class="lc-st ${w[0]}"><b>${w[1]}</b> · ${esc(w[2])}</div><div class="lc-ln">${ico('clock',15)}<span>Online hours: ${esc(fmtHours(p.hours,p.tz))}</span></div>`})():''}
       ${p.addr?`<div class="lc-ln">${ico('pin',15)}<span>${esc(p.addr)}</span></div>`:''}
       ${phones.length?`<div class="lc-ln">${ico('phone',15)}<span>${phones.map(x=>`<a href="tel:${esc(x.replace(/[^\d+]/g,''))}">${esc(x)}</a>`).join(', ')}</span></div>`:''}
       ${p.docs?`<div class="lc-ln">${ico('steth',15)}<span>${esc(p.docs)}</span></div>`:''}
@@ -2330,13 +2363,67 @@ async function uniSearch(){const q=$('#uniQ').value.trim();if(!q)return;const to
   $('#uniForm').onsubmit=e=>{e.preventDefault();uniSearch()};
   $('#uniChips').onclick=e=>{const b=e.target.closest('[data-uq]');if(b){$('#uniQ').value=b.dataset.uq;uniSearch()}}})();
 
+
+/* ================= ONLINE HOURS (like WhatsApp Business hours) ================= */
+const DAYS=[['Mo','Mon'],['Tu','Tue'],['We','Wed'],['Th','Thu'],['Fr','Fri'],['Sa','Sat'],['Su','Sun']];
+function tzNow(tz){try{return tz?new Date(new Date().toLocaleString('en-US',{timeZone:tz})):new Date()}catch{return new Date()}}
+function scheduleStatus(r){if(!r||!r.hours)return null;return ohStatus(r.hours,tzNow(r.tz))}
+const tzCity=tz=>tz?tz.split('/').pop().replace(/_/g,' '):'';
+function dayText(part){return part.split(',').map(x=>x.split('-').map(d=>(DAYS.find(z=>z[0]===d)||[0,d])[1]).join('–')).join(', ')}
+function fmtHours(h,tz){if(!h)return '';if(h==='24/7')return 'Every day, 24 hours';
+  const txt=h.split(';').map(rule=>{rule=rule.trim();const sp=rule.indexOf(' ');const days=rule.slice(0,sp),times=rule.slice(sp+1);
+    const tt=times.split(',').map(r=>{const [a,b]=r.split('-');const m=x=>{const [hh,mm]=x.split(':');return +hh*60+ +mm};return fmtT(m(a))+' – '+fmtT(m(b))}).join(' & ');
+    return dayText(days)+' · '+tt}).join('; ');
+  return txt+(tz&&tz!==myTZ?` (${tzCity(tz)} time)`:'')}
+function onlineWords(st){if(!st)return null;const l=st.label||'';
+  if(/24×7/.test(l))return ['open','Online','24 hours'];let m=l.match(/^Open until (.+)$/);if(m)return ['open','Online','until '+m[1]];
+  m=l.match(/opens at (.+)$/);if(m)return ['closed','Offline','back at '+m[1]];return ['closed','Offline',/today/i.test(l)?'for today':l]}
+function parseHours(h){const def={mode:'none',days:[0,1,2,3,4,5],r:[['09:00','18:00']]};if(!h)return def;if(h==='24/7')return Object.assign(def,{mode:'24'});
+  const rule=h.split(';')[0].trim(),sp=rule.indexOf(' ');const days=expandDays(rule.slice(0,sp));const r=rule.slice(sp+1).split(',').map(x=>x.split('-')).filter(x=>x.length===2).slice(0,2);
+  return {mode:'set',days:days.length?days:def.days,r:r.length?r:def.r}}
+function hoursEditor(id,h){const st=parseHours(h);const r2=st.r[1]||['17:00','21:00'];
+  return `<div class="hed" id="${id}" data-mode="${st.mode}"><label>ONLINE HOURS (LIKE WHATSAPP BUSINESS)</label>
+    <div class="seg3"><button type="button" data-hm="set">Set hours</button><button type="button" data-hm="24">24 hours</button><button type="button" data-hm="none">Not set</button></div>
+    <div class="hed-set"><div class="hed-days">${DAYS.map(([k,l],i)=>`<button type="button" data-d="${i}" class="${st.days.includes(i)?'on':''}">${l}</button>`).join('')}</div>
+      <div class="hed-row"><span>From</span><input type="time" data-t="a1" value="${st.r[0][0]}"><span>to</span><input type="time" data-t="b1" value="${st.r[0][1]}"></div>
+      <div class="hed-row hed-2" ${st.r[1]?'':'hidden'}><span>And</span><input type="time" data-t="a2" value="${r2[0]}"><span>to</span><input type="time" data-t="b2" value="${r2[1]}"><button type="button" class="hed-x" aria-label="Remove second slot">✕</button></div>
+      <button type="button" class="hed-add" ${st.r[1]?'hidden':''}>+ Add a second time slot (e.g. evening)</button></div>
+    <div class="hed-prev"></div></div>`}
+function readHours(id){const el=$('#'+id);if(!el)return {hours:'',tz:''};const mode=el.dataset.mode;const tz=myTZ||'';
+  if(mode==='24')return {hours:'24/7',tz};if(mode!=='set')return {hours:'',tz:''};
+  const days=[...el.querySelectorAll('.hed-days .on')].map(b=>+b.dataset.d).sort((a,b)=>a-b);if(!days.length)throw new Error('Pick at least one day for your online hours.');
+  const runs=[];for(const d of days){const last=runs[runs.length-1];if(last&&last[1]===d-1)last[1]=d;else runs.push([d,d])}
+  const dp=runs.map(([a,b])=>a===b?DAYS[a][0]:b===a+1?DAYS[a][0]+','+DAYS[b][0]:DAYS[a][0]+'-'+DAYS[b][0]).join(',');
+  const v=k=>el.querySelector(`[data-t="${k}"]`).value;if(!v('a1')||!v('b1'))throw new Error('Pick a start and end time for your online hours.');
+  let t=v('a1')+'-'+v('b1');if(!el.querySelector('.hed-2').hidden&&v('a2')&&v('b2'))t+=','+v('a2')+'-'+v('b2');return {hours:dp+' '+t,tz}}
+function wireHours(id){const el=$('#'+id);if(!el)return;
+  const sync=()=>{const m=el.dataset.mode;el.querySelectorAll('[data-hm]').forEach(b=>b.classList.toggle('on',b.dataset.hm===m));el.querySelector('.hed-set').hidden=m!=='set';
+    let txt='';try{const h=readHours(id);if(h.hours){const st=onlineWords(scheduleStatus(h));txt=`Patients will see: <b>${esc(fmtHours(h.hours))}</b>${st?` · right now <b style="color:${st[0]==='open'?'#3ddc84':'#ff6b7d'}">${st[1]}</b>`:''}`}
+      else txt='No hours set: you show as online only while you switch "Online" on.'}catch(e){txt='<span class="red">'+esc(e.message)+'</span>'}el.querySelector('.hed-prev').innerHTML=txt};
+  el.querySelectorAll('[data-hm]').forEach(b=>b.onclick=()=>{el.dataset.mode=b.dataset.hm;sync()});
+  el.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{b.classList.toggle('on');sync()});
+  el.querySelectorAll('input[type=time]').forEach(i=>i.oninput=sync);
+  el.querySelector('.hed-add').onclick=e=>{el.querySelector('.hed-2').hidden=false;e.target.hidden=true;sync()};
+  el.querySelector('.hed-x').onclick=()=>{el.querySelector('.hed-2').hidden=true;el.querySelector('.hed-add').hidden=false;sync()};
+  sync()}
+(()=>{const v=$('#rVideo');if(v){const w=document.createElement('div');w.innerHTML=hoursEditor('rHours','');v.closest('label').before(w.firstElementChild);wireHours('rHours')}})();
+
 /* ================= ACCOUNTS: patients & doctors ================= */
+const avImg=(id,ts)=>id&&ts?`<img src="/api/m/avatar/${id}?v=${ts}" alt="" loading="lazy" onerror="this.remove()">`:'';
+async function pickPhoto(file){if(!file)return;const msg=$('#phMsg');if(msg)msg.textContent='Uploading photo…';
+  try{const url=URL.createObjectURL(file);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read. Try a JPG or PNG.'));i.src=url});
+    const side=Math.min(img.naturalWidth,img.naturalHeight),S=Math.min(400,side);const c=document.createElement('canvas');c.width=c.height=S;
+    c.getContext('2d').drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,S,S);URL.revokeObjectURL(url);
+    let q=.88,data=c.toDataURL('image/jpeg',q);while(data.length>380000&&q>.4){q-=.12;data=c.toDataURL('image/jpeg',q)}
+    await mapi('photo',{image:data});renderAccount();const m2=$('#phMsg');if(m2)m2.innerHTML='<span class="teal">✅ Profile photo updated.</span>'}
+  catch(e){const m2=$('#phMsg');if(m2)m2.innerHTML='<span class="red">'+esc(e.message)+'</span>'}}
 let MEM={me:null,favs:[],threads:[],listing:null},openThread=null,acctMode='signup',signKind='patient',threadTimer=null;
 async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
   if(!r)throw new Error('Could not reach the server. Is it running?');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
   if(!r.ok||j.error)throw new Error(j.error||'Server error');
   if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();return j}
 function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
+  let im=b.querySelector('img');if(me&&me.photo_ts){if(!im){im=document.createElement('img');b.appendChild(im)}const src=`/api/m/avatar/${me.id}?v=${me.photo_ts}`;if(im.getAttribute('src')!==src)im.src=src}else if(im)im.remove();
   const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0)}
 async function toggleFollow(id){if(!MEM.me){go('account');acctNotice('Log in or create a free account to follow doctors.');return}
   try{await mapi('fav',{listing_id:id,on:!MEM.favs.includes(id)});if(dirInit)renderDir();if(nearInit)renderPlaces()}catch(e){alert(e.message)}}
@@ -2366,9 +2453,13 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     return}
   const doc=me.kind==='doctor',L=MEM.listing,soc=(L&&L.social)||{};
   const favs=(MEM.favs||[]).map(id=>regs().find(x=>x.id===id)).filter(Boolean).map(regToPlace);
-  box.innerHTML=`<div class="acct-head"><div class="lc-av" style="--avh:${hash(me.name)%360}">${esc(initials(me.name))}</div><div><h3>${esc(me.name)}</h3><div style="color:var(--mute);font-size:14px">${doc?'Doctor account':'Patient account'} · ${esc(me.email)}</div></div>
+  box.innerHTML=`<div class="acct-head"><button class="lc-av ph-edit" id="phBtn" style="--avh:${hash(me.name)%360}" title="Change profile photo" aria-label="Change profile photo">${esc(initials(me.name))}${avImg(me.id,me.photo_ts)}<span class="cam">${ico('cam',13)}</span></button>
+      <input type="file" id="phFile" accept="image/*" hidden>
+      <div><h3>${esc(me.name)}</h3><div style="color:var(--mute);font-size:14px">${doc?'Doctor account':'Patient account'} · ${esc(me.email)}</div>
+        <div class="ph-menu"><button type="button" id="phChange">${me.photo_ts?'Change photo':'Add profile photo'}</button>${me.photo_ts?'<button type="button" id="phRemove">Remove photo</button>':''}</div><div id="phMsg" style="font-size:13px;margin-top:6px"></div></div>
       <button class="btn ghost sm" id="loBtn" style="margin-left:auto">Log out</button></div>
-    ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':'You are offline'}</b><div style="font-size:13px;color:var(--mute)">${L?'Patients see a green "Online now" badge on your profile while this is on and this page is open.':'Fill in your public profile below first.'}</div></div></div>
+    ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
+    ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
       <form class="card form" id="dpForm" style="padding:22px;margin-bottom:18px"><h3>${L?'Your public profile':'Create your public profile'}</h3><p style="margin-bottom:10px">Shown in the World Directory and on the Nearby map. ${L&&L.followers?`${L.followers} people follow you.`:''}</p>
         <div class="two"><div><label>TYPE</label><select id="dpType">${['doctors','clinic','hospital','dentist'].map(t=>`<option value="${t}" ${L&&L.type===t?'selected':''}>${TYPELABEL[t]}</option>`).join('')}</select></div><div><label>SPECIALTY</label><input id="dpSpec" value="${esc(L?L.spec||'':'')}" placeholder="e.g. Cardiology"></div></div>
         <label>NAME SHOWN TO PATIENTS *</label><input id="dpName" required value="${esc(L?L.name:me.name)}">
@@ -2379,28 +2470,33 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <div class="two"><div><label>INSTAGRAM</label><input id="dpIg" value="${esc(soc.instagram||'')}" placeholder="@handle"></div><div><label>TELEGRAM</label><input id="dpTg" value="${esc(soc.telegram||'')}" placeholder="@handle"></div></div>
         <div class="two"><div><label>FACEBOOK</label><input id="dpFb" value="${esc(soc.facebook||'')}"></div><div><label>WHATSAPP NUMBER</label><input id="dpWa" value="${esc(soc.whatsapp||'')}" placeholder="+91…"></div></div>
         <div class="two"><div><label>YOUTUBE</label><input id="dpYt" value="${esc(soc.youtube||'')}"></div><div><label>LINKEDIN</label><input id="dpLi" value="${esc(soc.linkedin||'')}"></div></div>
+        ${hoursEditor('dpHours',L?L.hours:'')}
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
     <h3 style="margin-bottom:10px">Messages</h3>
-    <div class="inbox"><div class="threads" id="thrList">${(MEM.threads||[]).length?MEM.threads.map(t=>`<div class="thr ${openThread===t.with?'on':''}" data-thr="${t.with}"><div class="lc-av" style="--avh:${hash(t.name)%360}">${esc(initials(t.name))}</div><div style="min-width:0"><b>${esc(t.name)}</b><small>${t.mine?'You: ':''}${esc(t.last)}</small></div>${t.unread?`<em>${t.unread}</em>`:''}</div>`).join('')
+    <div class="inbox"><div class="threads" id="thrList">${(MEM.threads||[]).length?MEM.threads.map(t=>`<div class="thr ${openThread===t.with?'on':''}" data-thr="${t.with}"><div class="lc-av" style="--avh:${hash(t.name)%360}">${esc(initials(t.name))}${avImg(t.with,t.photo_ts)}</div><div style="min-width:0"><b>${esc(t.name)}</b><small>${t.mine?'You: ':''}${esc(t.last)}</small></div>${t.unread?`<em>${t.unread}</em>`:''}</div>`).join('')
       :`<div class="empty-note">${doc?'When patients message you, they appear here.':'Message a doctor from their card to start a chat.'}</div>`}</div>
       <div class="conv" id="conv"><div class="empty-note" style="margin:auto">Pick a conversation.</div></div></div>`;
+  const openPick=()=>$('#phFile').click();$('#phBtn').onclick=openPick;$('#phChange').onclick=openPick;
+  $('#phFile').onchange=e=>pickPhoto(e.target.files[0]);
+  if($('#phRemove'))$('#phRemove').onclick=async()=>{if(!confirm('Remove your profile photo?'))return;try{await mapi('photo',{remove:true});renderAccount()}catch(e){alert(e.message)}};
   $('#loBtn').onclick=async()=>{await mapi('logout').catch(()=>{});MEM={me:null,favs:[],threads:[],listing:null};openThread=null;updateAcctBtn();renderAccount()};
   $$('#thrList [data-thr]').forEach(t=>t.onclick=()=>openConv(+t.dataset.thr));
   if(doc){$('#onSw').onclick=async()=>{if(!MEM.listing){$('#dpMsg').innerHTML='<span class="red">Save your profile first.</span>';return}try{await mapi('status',{online:!me.online});renderAccount()}catch(e){alert(e.message)}};
-    $('#dpForm').onsubmit=async e=>{e.preventDefault();const v=id=>$(id).value.trim();$('#dpMsg').textContent='📍 Finding your address on the map…';
+    wireHours('dpHours');
+    $('#dpForm').onsubmit=async e=>{e.preventDefault();const v=id=>$(id).value.trim();try{readHours('dpHours')}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>';return}$('#dpMsg').textContent='📍 Finding your address on the map…';
       let lat,lon;try{const j=await nominatim(`${v('#dpAddr')}, ${v('#dpCity')}, ${v('#dpCountry')}`);const k=j.length?j:await nominatim(`${v('#dpCity')}, ${v('#dpCountry')}`);if(k.length){lat=+k[0].lat;lon=+k[0].lon}}catch{}
       if(lat==null){$('#dpMsg').innerHTML='<span class="red">Could not find that address on the map. Check the city and country.</span>';return}
       try{await mapi('profile',{name:v('#dpName'),type:$('#dpType').value,spec:v('#dpSpec'),phone:v('#dpPhone'),email:v('#dpEmail'),web:v('#dpWeb'),addr:v('#dpAddr'),city:v('#dpCity'),country:v('#dpCountry'),cc:nameToCC(v('#dpCountry')),
-        video:$('#dpVideo').checked,lat,lon,social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
+        video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
 }
 async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
   const c=$('#conv');if(!c)return;let th;
   try{th=(await mapi('thread',{with:withId})).result}catch(e){if(listingId){th={with:{id:withId,name:(regs().find(x=>x.id===listingId)||{}).name||'Doctor',kind:'doctor',online:null},messages:[]}}else{c.innerHTML='<div class="empty-note">'+esc(e.message)+'</div>';return}}
-  const w=th.with;c.innerHTML=`<div class="conv-h">${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}</div>
+  const w=th.with;c.innerHTML=`<div class="conv-h"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}</div>
     <div class="conv-m" id="convM">${th.messages.length?th.messages.map(m=>`<div class="bub ${m.from_id===MEM.me.id?'me':''}">${esc(m.body)}<small>${new Date(m.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></div>`).join(''):'<div class="empty-note">Say hello 👋 Don’t share emergencies here: call your local emergency number.</div>'}</div>
     <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;
   const M=$('#convM');M.scrollTop=M.scrollHeight;

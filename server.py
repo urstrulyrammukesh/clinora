@@ -418,8 +418,11 @@ def init_db():
                           ("pay_method", "TEXT"), ("pay_currency", "TEXT"), ("pay_amount", "INTEGER")]:
             if col not in cols:
                 conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {kind}")
+        mcols = {r["name"] for r in conn.execute("PRAGMA table_info(members)")}
+        if "photo_ts" not in mcols:
+            conn.execute("ALTER TABLE members ADD COLUMN photo_ts INTEGER")
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
-        for col, kind in [("owner", "INTEGER"), ("social", "TEXT")]:
+        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT")]:
             if col not in lcols:
                 conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {kind}")
         if conn.execute("SELECT COUNT(*) FROM live").fetchone()[0] == 0:
@@ -700,10 +703,10 @@ def add_listing(conn, d, user=None):
     if not d.get("consent"):
         raise InputError("Consent is required to publish a listing")
     conn.execute(
-        "INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,ts,social) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,ts,social,hours,tz) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (text(d, "name", 100), one_of(d, "type", LIST_TYPES), text(d, "spec", 80, False), phone_of(d),
          text(d, "email", 120, False), web, text(d, "addr", 160), text(d, "city", 80), text(d, "country", 80),
-         text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, now_ms(), json.dumps(clean_social(d.get("social")))))
+         text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, now_ms(), json.dumps(clean_social(d.get("social")))) + clean_hours(d))
 
 
 def delete_listing(conn, d, user=None):
@@ -741,10 +744,25 @@ def clean_social(raw):
     return out
 
 
+HOURS_RE = re.compile(r"^(24/7|(?:(?:Mo|Tu|We|Th|Fr|Sa|Su)(?:[-,](?:Mo|Tu|We|Th|Fr|Sa|Su))* \d{2}:\d{2}-\d{2}:\d{2}(?:,\d{2}:\d{2}-\d{2}:\d{2})*)(?:; ?(?:Mo|Tu|We|Th|Fr|Sa|Su)(?:[-,](?:Mo|Tu|We|Th|Fr|Sa|Su))* \d{2}:\d{2}-\d{2}:\d{2}(?:,\d{2}:\d{2}-\d{2}:\d{2})*)*)$")
+TZ_RE = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+\-]+){0,2}$")
+
+
+def clean_hours(d):
+    """Online / opening hours in the simple OpenStreetMap style, e.g. "Mo-Sa 09:00-18:00" or "24/7"."""
+    hours = str(d.get("hours") or "").strip()[:160]
+    tz = str(d.get("tz") or "").strip()[:64]
+    if hours and not HOURS_RE.match(hours):
+        raise InputError("Online hours look wrong. Pick days and times again.")
+    if tz and not TZ_RE.match(tz):
+        tz = ""
+    return hours, tz
+
+
 def public_listings(conn):
     cutoff = now_ms() - ONLINE_WINDOW_MS
     rows = conn.execute(
-        "SELECT l.*, m.online AS m_online, m.last_seen AS m_seen, "
+        "SELECT l.*, m.online AS m_online, m.last_seen AS m_seen, m.photo_ts AS owner_photo, "
         "(SELECT COUNT(*) FROM favs f WHERE f.listing_id = l.id) AS followers "
         "FROM listings l LEFT JOIN members m ON m.id = l.owner ORDER BY l.ts")
     out = []
@@ -766,7 +784,7 @@ def member_for_token(conn, token):
     if not token:
         return None
     row = conn.execute(
-        "SELECT m.id, m.email, m.name, m.kind, m.city, m.online FROM member_sessions s JOIN members m ON m.id = s.member_id "
+        "SELECT m.id, m.email, m.name, m.kind, m.city, m.online, m.photo_ts FROM member_sessions s JOIN members m ON m.id = s.member_id "
         "WHERE s.token = ? AND s.expires > ?", (token_hash(token), now_ms())).fetchone()
     if not row:
         return None
@@ -802,11 +820,11 @@ def member_state(conn, me):
             "SELECT other, MAX(id) AS last_id FROM (SELECT to_id AS other, id FROM messages WHERE from_id=:me "
             "UNION ALL SELECT from_id AS other, id FROM messages WHERE to_id=:me) GROUP BY other ORDER BY last_id DESC LIMIT 50",
             {"me": me["id"]}):
-        other = conn.execute("SELECT id, name, kind FROM members WHERE id=?", (r["other"],)).fetchone()
+        other = conn.execute("SELECT id, name, kind, photo_ts FROM members WHERE id=?", (r["other"],)).fetchone()
         last = conn.execute("SELECT body, ts, from_id FROM messages WHERE id=?", (r["last_id"],)).fetchone()
         unread = conn.execute("SELECT COUNT(*) FROM messages WHERE from_id=? AND to_id=? AND seen=0", (r["other"], me["id"])).fetchone()[0]
         if other:
-            threads.append({"with": other["id"], "name": other["name"], "kind": other["kind"], "last": last["body"][:80],
+            threads.append({"with": other["id"], "name": other["name"], "kind": other["kind"], "photo_ts": other["photo_ts"], "last": last["body"][:80],
                             "ts": last["ts"], "mine": last["from_id"] == me["id"], "unread": unread})
     return {"me": dict(me, listing_id=lst["id"] if lst else None), "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
@@ -851,14 +869,14 @@ def m_profile(conn, d, me):
         raise InputError("Address location invalid")
     vals = (text(d, "name", 100), one_of(d, "type", LIST_TYPES), text(d, "spec", 80, False), phone_of(d),
             text(d, "email", 120, False), web, text(d, "addr", 160), text(d, "city", 80), text(d, "country", 80),
-            text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, json.dumps(clean_social(d.get("social"))))
+            text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, json.dumps(clean_social(d.get("social")))) + clean_hours(d)
     lst = my_listing(conn, me)
     if lst:
-        conn.execute("UPDATE listings SET name=?,type=?,spec=?,phone=?,email=?,web=?,addr=?,city=?,country=?,cc=?,video=?,lat=?,lon=?,social=? "
+        conn.execute("UPDATE listings SET name=?,type=?,spec=?,phone=?,email=?,web=?,addr=?,city=?,country=?,cc=?,video=?,lat=?,lon=?,social=?,hours=?,tz=? "
                      "WHERE id=?", vals + (lst["id"],))
     else:
-        conn.execute("INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,social,ts,owner) "
-                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals + (now_ms(), me["id"]))
+        conn.execute("INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,social,hours,tz,ts,owner) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals + (now_ms(), me["id"]))
 
 
 def m_status(conn, d, me):
@@ -904,7 +922,7 @@ def m_send(conn, d, me):
 def m_thread(conn, d, me):
     need_member(me)
     other = int(d.get("with") or 0)
-    o = conn.execute("SELECT id, name, kind, online, last_seen FROM members WHERE id=?", (other,)).fetchone()
+    o = conn.execute("SELECT id, name, kind, online, last_seen, photo_ts FROM members WHERE id=?", (other,)).fetchone()
     if not o:
         raise InputError("Conversation not found")
     conn.execute("UPDATE messages SET seen=1 WHERE from_id=? AND to_id=?", (other, me["id"]))
@@ -912,11 +930,40 @@ def m_thread(conn, d, me):
         "SELECT id, from_id, body, ts FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) ORDER BY id DESC LIMIT 200",
         (me["id"], other, other, me["id"]))][::-1]
     online = bool(o["online"]) and o["last_seen"] > now_ms() - ONLINE_WINDOW_MS if o["kind"] == "doctor" else None
-    return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online}, "messages": msgs}
+    return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online, "photo_ts": o["photo_ts"]}, "messages": msgs}
+
+
+AVATAR_DIR = ROOT / "data" / "avatars"
+MAX_PHOTO_BYTES = 300_000
+
+
+def m_photo(conn, d, me):
+    """Set or remove the profile photo. The browser crops and shrinks it to a small JPEG first."""
+    need_member(me)
+    f = AVATAR_DIR / f"{me['id']}.jpg"
+    if d.get("remove"):
+        f.unlink(missing_ok=True)
+        conn.execute("UPDATE members SET photo_ts=NULL WHERE id=?", (me["id"],))
+        return
+    data = str(d.get("image") or "")
+    prefix = "data:image/jpeg;base64,"
+    if not data.startswith(prefix):
+        raise InputError("Please choose a photo (JPG, PNG or HEIC)")
+    try:
+        raw = base64.b64decode(data[len(prefix):], validate=True)
+    except ValueError:
+        raise InputError("That photo could not be read")
+    if len(raw) > MAX_PHOTO_BYTES:
+        raise InputError("That photo is too large")
+    if not raw.startswith(b"\xff\xd8\xff"):
+        raise InputError("That file is not a photo")
+    AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(raw)
+    conn.execute("UPDATE members SET photo_ts=? WHERE id=?", (now_ms(), me["id"]))
 
 
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
-                 "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread}
+                 "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo}
 
 
 # ---------------------------------------------------------------- doctors on university & institute websites (AI + web search)
@@ -1469,6 +1516,9 @@ def chat_turn(messages, context):
     }
 
 
+PUBLIC_FILES = {"index.html", "i18n.js", "favicon.ico", "robots.txt", "manifest.json", "sitemap.xml"}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -1531,11 +1581,58 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/status"):
             return self.send_json(200, {"ai": client is not None, "reason": AI_REASON, "model": MODEL,
                                         "pay_mode": PAY_MODE, "currency": CURRENCY, "video_needs_payment": REQUIRE_VIDEO_PAYMENT})
-        # never serve private files
-        name = self.path.split("?")[0].lstrip("/")
-        if name.startswith((".env", ".venv", "server.py", "data", "set-key", ".claude")):
+        if path_only.startswith("/api/m/avatar/"):
+            return self.send_avatar(path_only.rsplit("/", 1)[1])
+        if not self.is_public_file():
             return self.send_json(404, {"error": "not found"})
         return super().do_GET()
+
+    def do_HEAD(self):
+        if not self.is_public_file():
+            return self.send_json(404, {"error": "not found"})
+        return super().do_HEAD()
+
+    def is_public_file(self):
+        """Allowlist: only the website itself and its images. Everything else (database, .env, code,
+        git history, tools) is never served, however the address is written (%2e, ./, etc.)."""
+        try:
+            real = Path(self.translate_path(self.path)).resolve()
+            rel = real.relative_to(ROOT.resolve())
+        except (ValueError, OSError):
+            return False
+        parts = rel.parts
+        if any(part.startswith(".") for part in parts):
+            return False
+        if not parts:  # the home page "/"
+            return True
+        if len(parts) == 1:
+            return parts[0] in PUBLIC_FILES
+        return parts[0] == "assets" and real.is_file()
+
+    def send_avatar(self, raw_id):
+        try:
+            mid = int(raw_id)
+        except ValueError:
+            return self.send_json(404, {"error": "not found"})
+        with DB_LOCK, connect() as conn:
+            row = conn.execute("SELECT kind, photo_ts FROM members WHERE id=?", (mid,)).fetchone()
+            if not row or not row["photo_ts"]:
+                return self.send_json(404, {"error": "not found"})
+            if row["kind"] != "doctor":  # patient photos: only the patient and people they chat with
+                me = member_for_token(conn, self.member_token())
+                if not me or (me["id"] != mid and not conn.execute(
+                        "SELECT 1 FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) LIMIT 1",
+                        (mid, me["id"], me["id"], mid)).fetchone()):
+                    return self.send_json(404, {"error": "not found"})
+        f = AVATAR_DIR / f"{mid}.jpg"
+        if not f.is_file():
+            return self.send_json(404, {"error": "not found"})
+        body = f.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def read_json(self, limit):
         length = int(self.headers.get("Content-Length") or 0)
@@ -1665,7 +1762,7 @@ class Handler(SimpleHTTPRequestHandler):
     def member(self, path):
         ip = self.client_address[0]
         try:
-            data = self.read_json(10_000)
+            data = self.read_json(450_000 if path == "/api/m/photo" else 10_000)
             if not isinstance(data, dict):
                 raise InputError("Bad request")
             with DB_LOCK, connect() as conn:
@@ -1681,6 +1778,8 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json(404, {"error": "not found"})
                 me = member_for_token(conn, self.member_token())
                 extra = MEMBER_ROUTES[path](conn, data, me) or {}
+                if me:  # re-read: the route may have changed the photo or online status
+                    me = member_for_token(conn, self.member_token())
                 out = member_state(conn, me)
                 out["result"] = extra
                 out["listings"] = public_listings(conn)
