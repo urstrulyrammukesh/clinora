@@ -356,6 +356,10 @@ CREATE TABLE IF NOT EXISTS messages(
   ts INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS msg_pair ON messages(from_id, to_id, id);
 CREATE TABLE IF NOT EXISTS unidocs_cache(q TEXT PRIMARY KEY, result TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS reviews(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, member_id INTEGER NOT NULL, stars INTEGER NOT NULL,
+  body TEXT NOT NULL, gif TEXT, ts INTEGER NOT NULL, reply TEXT, reply_ts INTEGER, UNIQUE(listing_id, member_id));
+CREATE TABLE IF NOT EXISTS gallery(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, caption TEXT, ts INTEGER NOT NULL);
 """
 
 
@@ -764,7 +768,10 @@ def public_listings(conn):
     cutoff = now_ms() - ONLINE_WINDOW_MS
     rows = conn.execute(
         "SELECT l.*, m.online AS m_online, m.last_seen AS m_seen, m.photo_ts AS owner_photo, "
-        "(SELECT COUNT(*) FROM favs f WHERE f.listing_id = l.id) AS followers "
+        "(SELECT COUNT(*) FROM favs f WHERE f.listing_id = l.id) AS followers, "
+        "(SELECT ROUND(AVG(stars), 1) FROM reviews r WHERE r.listing_id = l.id) AS rating, "
+        "(SELECT COUNT(*) FROM reviews r WHERE r.listing_id = l.id) AS reviews, "
+        "(SELECT COUNT(*) FROM gallery g WHERE g.listing_id = l.id) AS photos "
         "FROM listings l LEFT JOIN members m ON m.id = l.owner ORDER BY l.ts")
     out = []
     for r in rows:
@@ -963,8 +970,136 @@ def m_photo(conn, d, me):
     conn.execute("UPDATE members SET photo_ts=? WHERE id=?", (now_ms(), me["id"]))
 
 
+
+
+# ---------------------------------------------------------------- reviews (stars, text, emoji, safe GIF stickers) and work photos
+GIF_IDS = {"thumbs", "heart", "clap", "stars", "thanks", "doctor", "getwell", "sad"}  # our own stickers in assets/gif/
+GALLERY_DIR = ROOT / "data" / "gallery"
+MAX_GALLERY = 12
+LINK_RE = re.compile(r"(https?://|www\.|\.com\b|\.in\b|\.net\b)", re.I)
+
+
+def short_name(name):
+    parts = str(name or "").split()
+    if not parts:
+        return "Patient"
+    return parts[0] + (" " + parts[-1][0] + "." if len(parts) > 1 else "")
+
+
+def listing_reviews(conn, lid, me=None):
+    row = conn.execute("SELECT id, owner FROM listings WHERE id=?", (lid,)).fetchone()
+    if not row:
+        raise InputError("This doctor is no longer listed")
+    revs = []
+    for r in conn.execute("SELECT r.*, m.name, m.photo_ts, m.kind FROM reviews r JOIN members m ON m.id = r.member_id "
+                          "WHERE r.listing_id=? ORDER BY r.ts DESC LIMIT 200", (lid,)):
+        revs.append({"id": r["id"], "stars": r["stars"], "body": r["body"], "gif": r["gif"], "ts": r["ts"],
+                     "name": short_name(r["name"]), "member_id": r["member_id"], "photo_ts": r["photo_ts"] if r["kind"] == "doctor" else None,
+                     "reply": r["reply"], "reply_ts": r["reply_ts"], "mine": bool(me and me["id"] == r["member_id"])})
+    dist = {str(i): 0 for i in range(1, 6)}
+    for r in revs:
+        dist[str(r["stars"])] += 1
+    avg = round(sum(r["stars"] for r in revs) / len(revs), 1) if revs else None
+    photos = [dict(g) for g in conn.execute("SELECT id, caption, ts FROM gallery WHERE listing_id=? ORDER BY ts DESC", (lid,))]
+    return {"listing_id": lid, "avg": avg, "count": len(revs), "dist": dist, "reviews": revs, "photos": photos,
+            "is_owner": bool(me and row["owner"] == me["id"])}
+
+
+def m_review(conn, d, me):
+    need_member(me)
+    lid = int(d.get("listing_id") or 0)
+    row = conn.execute("SELECT owner FROM listings WHERE id=?", (lid,)).fetchone()
+    if not row:
+        raise InputError("This doctor is no longer listed")
+    if row["owner"] == me["id"]:
+        raise AuthError("You can't review your own profile.")
+    if too_many("review", str(me["id"]), 20, 3600):
+        raise AuthError("Too many reviews. Please try again later.", 429)
+    try:
+        stars = int(d.get("stars"))
+    except (TypeError, ValueError):
+        stars = 0
+    if not 1 <= stars <= 5:
+        raise InputError("Please pick 1 to 5 stars")
+    body = str(d.get("body") or "").strip()[:1000]
+    if len(body) < 3:
+        raise InputError("Please write a few words about your visit")
+    if LINK_RE.search(body):
+        raise InputError("Please don't put links in reviews")
+    gif = str(d.get("gif") or "") or None
+    if gif and gif not in GIF_IDS:
+        raise InputError("Please pick one of the stickers")
+    conn.execute("INSERT INTO reviews(listing_id,member_id,stars,body,gif,ts) VALUES(?,?,?,?,?,?) "
+                 "ON CONFLICT(listing_id, member_id) DO UPDATE SET stars=excluded.stars, body=excluded.body, gif=excluded.gif, ts=excluded.ts",
+                 (lid, me["id"], stars, body, gif, now_ms()))
+    return listing_reviews(conn, lid, me)
+
+
+def m_review_delete(conn, d, me):
+    need_member(me)
+    r = conn.execute("SELECT listing_id, member_id FROM reviews WHERE id=?", (int(d.get("id") or 0),)).fetchone()
+    if not r or r["member_id"] != me["id"]:
+        raise AuthError("You can only remove your own review.")
+    conn.execute("DELETE FROM reviews WHERE id=?", (int(d["id"]),))
+    return listing_reviews(conn, r["listing_id"], me)
+
+
+def m_review_reply(conn, d, me):
+    """The doctor answers a review once (public), like a business owner reply."""
+    need_member(me, "doctor")
+    r = conn.execute("SELECT r.listing_id, l.owner FROM reviews r JOIN listings l ON l.id=r.listing_id WHERE r.id=?",
+                     (int(d.get("id") or 0),)).fetchone()
+    if not r or r["owner"] != me["id"]:
+        raise AuthError("You can only reply to reviews on your own profile.")
+    reply = str(d.get("reply") or "").strip()[:600]
+    if reply and LINK_RE.search(reply):
+        raise InputError("Please don't put links in replies")
+    conn.execute("UPDATE reviews SET reply=?, reply_ts=? WHERE id=?", (reply or None, now_ms() if reply else None, int(d["id"])))
+    return listing_reviews(conn, r["listing_id"], me)
+
+
+def m_gallery_add(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    if conn.execute("SELECT COUNT(*) FROM gallery WHERE listing_id=?", (lst["id"],)).fetchone()[0] >= MAX_GALLERY:
+        raise InputError(f"You can show up to {MAX_GALLERY} photos. Remove one first.")
+    data = str(d.get("image") or "")
+    prefix = "data:image/jpeg;base64,"
+    if not data.startswith(prefix):
+        raise InputError("Please choose a photo")
+    try:
+        raw = base64.b64decode(data[len(prefix):], validate=True)
+    except ValueError:
+        raise InputError("That photo could not be read")
+    if len(raw) > 900_000 or not raw.startswith(b"\xff\xd8\xff"):
+        raise InputError("That photo could not be used. Try another one.")
+    caption = str(d.get("caption") or "").strip()[:140]
+    cur = conn.execute("INSERT INTO gallery(listing_id, caption, ts) VALUES(?,?,?)", (lst["id"], caption, now_ms()))
+    GALLERY_DIR.mkdir(parents=True, exist_ok=True)
+    (GALLERY_DIR / f"{cur.lastrowid}.jpg").write_bytes(raw)
+    return listing_reviews(conn, lst["id"], me)
+
+
+def m_gallery_delete(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    gid = int(d.get("id") or 0)
+    if not lst or not conn.execute("SELECT 1 FROM gallery WHERE id=? AND listing_id=?", (gid, lst["id"])).fetchone():
+        raise AuthError("You can only remove your own photos.")
+    conn.execute("DELETE FROM gallery WHERE id=?", (gid,))
+    (GALLERY_DIR / f"{gid}.jpg").unlink(missing_ok=True)
+    return listing_reviews(conn, lst["id"], me)
+
+
+def m_reviews(conn, d, me):
+    return listing_reviews(conn, int(d.get("listing_id") or 0), me)
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
-                 "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo}
+                 "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
+                 "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
+                 "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete}
 
 
 
@@ -1764,6 +1899,18 @@ class Handler(SimpleHTTPRequestHandler):
                                         "pay_mode": PAY_MODE, "currency": CURRENCY, "video_needs_payment": REQUIRE_VIDEO_PAYMENT})
         if path_only.startswith("/api/m/avatar/"):
             return self.send_avatar(path_only.rsplit("/", 1)[1])
+        if path_only.startswith("/api/m/gallery/"):
+            gid = path_only.rsplit("/", 1)[1]
+            f = GALLERY_DIR / f"{int(gid)}.jpg" if gid.isdigit() else None
+            if not f or not f.is_file():
+                return self.send_json(404, {"error": "not found"})
+            body = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not self.is_public_file():
             return self.send_json(404, {"error": "not found"})
         return super().do_GET()
@@ -1967,7 +2114,7 @@ class Handler(SimpleHTTPRequestHandler):
     def member(self, path):
         ip = self.client_address[0]
         try:
-            data = self.read_json(450_000 if path == "/api/m/photo" else 10_000)
+            data = self.read_json(1_300_000 if path == "/api/m/gallery/add" else 450_000 if path == "/api/m/photo" else 10_000)
             if not isinstance(data, dict):
                 raise InputError("Bad request")
             with DB_LOCK, connect() as conn:

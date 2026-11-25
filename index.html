@@ -766,6 +766,85 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
 @keyframes bwRing{to{transform:scale(18);opacity:0}}
 html.fx-off .bw-tilt img,html.fx-off .bw-art.zap .bw-tilt img{animation:none}
 @media (prefers-reduced-motion: reduce){.bw-tilt img{animation:none}.bw-tilt{transform:none}}
+
+/* ===== ☰ MENU: one button for account, style, language, emergency ===== */
+.menu-btn{flex-shrink:0;width:46px;height:46px;border-radius:12px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;position:relative;transition:background .2s}
+.menu-btn span{display:block;width:26px;height:3px;border-radius:3px;background:#fff;transition:transform .3s,opacity .3s}
+.menu-btn:hover{background:var(--panel2)}
+.menu-btn.open span:nth-child(1){transform:translateY(9px) rotate(45deg)}
+.menu-btn.open span:nth-child(2){opacity:0}
+.menu-btn.open span:nth-child(3){transform:translateY(-9px) rotate(-45deg)}
+.menu-btn i{position:absolute;top:6px;right:5px;width:10px;height:10px;border-radius:50%;background:var(--red);border:2px solid var(--bg);display:none}
+.menu-btn i.on{display:block}
+#navShade{position:fixed;inset:0;z-index:109;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .3s}
+#navShade.on{opacity:1;pointer-events:auto}
+#navDrawer{position:fixed;top:0;right:0;bottom:0;z-index:110;width:min(370px,90vw);background:var(--panel);border-left:1px solid var(--line);transform:translateX(105%);transition:transform .35s cubic-bezier(.2,.8,.2,1);overflow-y:auto;padding:18px 16px 30px;box-shadow:-20px 0 60px rgba(0,0,0,.5)}
+html[dir=rtl] #navDrawer{right:auto;left:0;border-left:0;border-right:1px solid var(--line);transform:translateX(-105%)}
+#navDrawer{visibility:hidden;transition:transform .35s cubic-bezier(.2,.8,.2,1),visibility 0s .35s}
+#navDrawer.on{transform:none;visibility:visible;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+html{overflow-x:clip}
+.nd-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.nd-top b{font-size:13px;color:var(--mute);letter-spacing:1px}
+.nd-x{width:36px;height:36px;border-radius:50%;background:var(--panel2);font-size:16px}
+.nd-me{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);cursor:pointer;margin-bottom:12px}
+.nd-me:hover{border-color:var(--teal)}
+.nd-me .acct-btn{width:48px;height:48px;font-size:17px;pointer-events:none}
+.nd-me b{display:block;font-size:15.5px}.nd-me small{color:var(--mute);font-size:13px}
+.nd-sos{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border-radius:14px;background:linear-gradient(135deg,#e5394f,#ff5a3c);color:#fff;font-weight:700;font-size:15px;margin-bottom:16px;text-align:start}
+.nd-sos span{font-size:22px}.nd-sos small{display:block;font-weight:500;font-size:12.5px;opacity:.9}
+.nd-h{font-size:11.5px;color:var(--mute);letter-spacing:1px;margin:16px 4px 8px;font-weight:600}
+.nd-links{display:flex;flex-direction:column;gap:2px}
+.nd-links button{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;font-size:15px;font-weight:500;text-align:start}
+.nd-links button:hover{background:var(--panel2)}
+.nd-links button.active{background:hsla(var(--h),78%,50%,.15);color:var(--teal)}
+.nd-links button em{font-style:normal;width:22px;text-align:center}
+#navDrawer .fxwrap,#navDrawer .lang{position:static;width:100%}
+#navDrawer #fxBtn,#navDrawer #langBtn{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);font-family:var(--sys);font-size:15px;font-weight:500;text-align:start}
+#navDrawer .fx-panel,#navDrawer .lang-menu{position:static;width:auto;box-shadow:none;margin-top:8px}
+#navSos{display:none!important}
+
+/* ===== REVIEWS & WORK PHOTOS ===== */
+.rv-card{width:min(680px,100%)!important;padding:24px 22px 30px!important}
+.rv-head{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
+.rv-avg{font-size:46px;font-weight:800;line-height:1}
+.stars{color:#ffc53d;letter-spacing:2px;font-size:16px}.stars .off{color:#3a4552}
+.rv-dist{flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute)}
+.rv-dist div{display:flex;align-items:center;gap:8px}.rv-dist i{flex:1;height:7px;border-radius:99px;background:var(--bg);overflow:hidden}.rv-dist i b{display:block;height:100%;background:#ffc53d;border-radius:99px}
+.rv-photos{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;margin:4px 0 16px;scrollbar-width:thin}
+.rv-photos figure{flex:0 0 150px;margin:0;cursor:zoom-in}
+.rv-photos img{width:150px;height:150px;object-fit:cover;border-radius:12px;display:block;border:1px solid var(--line)}
+.rv-photos figcaption{font-size:12px;color:var(--mute);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rv-form{padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);margin-bottom:16px}
+.rv-pick{display:flex;gap:4px;margin:4px 0 10px}
+.rv-pick button{font-size:30px;color:#3a4552;line-height:1;transition:transform .15s,color .15s}
+.rv-pick button.on{color:#ffc53d}.rv-pick button:hover{transform:scale(1.15)}
+.rv-form textarea{width:100%;min-height:84px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font:inherit;font-size:14.5px;resize:vertical}
+.rv-tools{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.rv-emoji{display:flex;gap:2px;flex-wrap:wrap}
+.rv-emoji button{font-size:20px;width:34px;height:34px;border-radius:8px}.rv-emoji button:hover{background:var(--bg)}
+.rv-gifs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.rv-gifs button{border-radius:12px;overflow:hidden;border:2px solid transparent;background:var(--bg)}
+.rv-gifs button.on{border-color:var(--teal)}
+.rv-gifs img{width:100%;display:block;aspect-ratio:1}
+.rv-chosen{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+.rv-chosen img{width:56px;height:56px;border-radius:10px}
+.rv-item{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--line)}
+.rv-item .lc-av{flex:0 0 38px;width:38px;height:38px;font-size:13px}
+.rv-item b{font-size:14.5px}.rv-item small{color:var(--mute);font-size:12px;margin-left:6px}
+.rv-item p{font-size:14.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word}
+.rv-item .gif{width:110px;height:110px;border-radius:12px;margin-top:8px;display:block}
+.rv-reply{margin-top:8px;padding:10px 12px;border-left:3px solid var(--teal);background:var(--panel2);border-radius:0 10px 10px 0;font-size:13.5px}
+.rv-reply b{font-size:12.5px;color:var(--teal)}
+.rv-mini{font-size:12.5px;color:var(--teal);margin-top:6px;font-weight:600}
+.lc-rate{color:#ffc53d;font-weight:600}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:10px}
+.gal-grid figure{margin:0;position:relative}
+.gal-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;display:block;border:1px solid var(--line)}
+.gal-grid figcaption{font-size:12px;color:var(--mute);margin-top:4px}
+.gal-grid button{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff}
+#lightbox{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.92);display:none;place-items:center;padding:20px;cursor:zoom-out}
+.rv-card [hidden]{display:none!important}
+#lightbox.on{display:grid}#lightbox img{max-width:100%;max-height:82vh;border-radius:12px}#lightbox p{color:#ddd;text-align:center;margin-top:10px}
 </style>
 </head>
 <body>
@@ -1119,6 +1198,8 @@ html.fx-off .bw-tilt img,html.fx-off .bw-art.zap .bw-tilt img{animation:none}
 <!-- ================= AI CHAT SIDE PANEL ================= -->
 <a class="sos-float" id="navSos" href="tel:112" aria-label="Emergency numbers and helplines">🚑 112</a>
 <div class="sheet" id="ringSheet" role="dialog" aria-modal="true" aria-label="Incoming video call"><div class="sheet-card ring-card" id="ringCard"></div></div>
+<div class="sheet" id="revSheet" role="dialog" aria-modal="true" aria-label="Reviews"><div class="sheet-card rv-card"><button class="sheet-x" id="revX" aria-label="Close">✕</button><div id="revBody"></div></div></div>
+<div id="lightbox" role="dialog" aria-label="Photo"><div><img id="lbImg" alt=""><p id="lbCap"></p></div></div>
 <div class="sheet" id="helpSheet" role="dialog" aria-modal="true" aria-label="Emergency numbers and helplines"><div class="sheet-card"><button class="sheet-x" id="helpX" aria-label="Close">✕</button>
   <h3>Get help now</h3><p style="color:var(--mute);font-size:14px" id="helpWhere"></p><div id="helpBody"></div></div></div>
 <button class="fab" id="chatFab" aria-label="Open AI chat"><span class="fdot"></span>💬 Ask AI</button>
@@ -1754,7 +1835,7 @@ async function nominatim(q,extra=''){
 const HEALTH=/^(hospital|clinic|doctors|doctor|dentist|pharmacy|laboratory|university|college)$/;
 function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,
   hours:r.hours,tz:r.tz,live:!!(r.online||(hs&&hs.open)),hoursRaw:r.hours||'',
-  id:r.id,owner:r.owner,photo:r.owner_photo,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
+  id:r.id,owner:r.owner,photo:r.owner_photo,rating:r.rating,reviews:r.reviews||0,photos:r.photos||0,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
   tags:Object.assign({website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},r.social||{}),cc:r.cc}}
 async function dirSearch(city,name,type){
   $('#dirStatus').textContent=`🔍 Searching ${TYPEWORD[type]} ${name?'named "'+name+'" ':''}in ${city}…`;$('#dirResults').innerHTML='';
@@ -2231,7 +2312,7 @@ loadPrices();
   const SEL=['.sec-head','.step','.fcol','.price','.ticker>div','.page-title','.emerg','.near-wrap>.card','.dash-grid>*','.dir-search','.cities',
     '.dir-results>.dir-card','#nearItems>.place','.stats>.stat','.paycard','.prejoin','.nearby-teaser>*','footer>span','.methods>.method',
     '.fcol li','.price li','.call-top','.acct','.auth'].join(',');
-  const SKIP='nav,.drawer,#prof,#langMenu,#langToast,.lang-menu';
+  const SKIP='nav,.drawer,#prof,#langMenu,#langToast,.lang-menu,#navDrawer';
   if(reduce){bar.style.display='none'}
   const seen=new WeakSet();
   const io=new IntersectionObserver(es=>es.forEach(e=>{
@@ -2321,7 +2402,7 @@ function lcard(p,i,ctx){
     <div class="lc-av" style="--avh:${hash(p.name||'x')%360}">${edu?ico('cap',20):esc(initials(p.name||'')||'+')}${p.reg?avImg(p.owner,p.photo):''}${p.reg?`<span class="dot ${p.live?'on':''}"></span>`:''}</div>
     <div class="lc-b">
       <div class="lc-top"><h5>${esc(p.name)}</h5>${pills}</div>
-      <div class="lc-sub">${sub}${p.reg&&p.followers?` · ${p.followers} follower${p.followers>1?'s':''}`:''}</div>
+      <div class="lc-sub">${p.reg&&p.reviews?`<span class="lc-rate">★ ${p.rating}</span> (${p.reviews}) · `:''}${sub}${p.reg&&p.followers?` · ${p.followers} follower${p.followers>1?'s':''}`:''}</div>
       ${edu||p.reg?'':`<div class="lc-st ${sc}"><b>${esc(sw)}</b>${sr?' · '+esc(sr):''}</div>`}
       ${p.reg&&p.hours?(()=>{const w=p.online&&!(p.st&&p.st.open)?['open','Online','now']:onlineWords(p.st);return `<div class="lc-st ${w[0]}"><b>${w[1]}</b> · ${esc(w[2])}</div><div class="lc-ln">${ico('clock',15)}<span>Online hours: ${esc(fmtHours(p.hours,p.tz))}</span></div>`})():''}
       ${p.addr?`<div class="lc-ln">${ico('pin',15)}<span>${esc(p.addr)}</span></div>`:''}
@@ -2331,6 +2412,7 @@ function lcard(p,i,ctx){
         ${phones.length?`<a class="pri" href="tel:${esc(phones[0].replace(/[^\d+]/g,''))}">${ico('phone',14)}Call</a>`:''}
         <a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>
         ${p.reg?`<button class="fav ${fav?'on':''}" data-follow="${p.id}">${ico('heart',14)}${fav?'Following':'Follow'}</button>`:''}
+        ${p.reg?`<button data-rev="${p.id}">★ ${p.reviews?'Reviews':'Review'}${p.photos?` · ${p.photos} photo${p.photos>1?'s':''}`:''}</button>`:''}
         ${p.reg&&p.owner?`<button data-msg="${p.id}">${ico('msg',14)}Message</button>`:''}
         ${p.reg&&p.owner&&p.live?`<button class="pri" data-vcallm="${p.owner}">${ico('video',14)}Video call</button>`:''}
         ${edu?`<button data-unidocs="${esc(p.name)}">${ico('steth',14)}Doctors on website</button><a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(p.name+' UG PG courses admission')}">${ico('cap',14)}Courses</a>`:''}
@@ -2530,7 +2612,7 @@ async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'PO
   if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();return j}
 function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
   let im=b.querySelector('img');if(me&&me.photo_ts){if(!im){im=document.createElement('img');b.appendChild(im)}const src=`/api/m/avatar/${me.id}?v=${me.photo_ts}`;if(im.getAttribute('src')!==src)im.src=src}else if(im)im.remove();
-  const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0)}
+  const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0);if(window.syncMenu)syncMenu()}
 async function toggleFollow(id){if(!MEM.me){go('account');acctNotice('Log in or create a free account to follow doctors.');return}
   try{await mapi('fav',{listing_id:id,on:!MEM.favs.includes(id)});if(dirInit)renderDir();if(nearInit)renderPlaces()}catch(e){alert(e.message)}}
 function messageListing(id){const l=regs().find(x=>x.id===id);if(!MEM.me){go('account');acctNotice('Log in or create a free account to message doctors.');return}
@@ -2578,7 +2660,8 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <div class="two"><div><label>YOUTUBE</label><input id="dpYt" value="${esc(soc.youtube||'')}"></div><div><label>LINKEDIN</label><input id="dpLi" value="${esc(soc.linkedin||'')}"></div></div>
         ${hoursEditor('dpHours',L?L.hours:'')}
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
-        <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>`
+        <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
+      ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
     <h3 style="margin-bottom:10px">Messages</h3>
     <div class="inbox"><div class="threads" id="thrList">${(MEM.threads||[]).length?MEM.threads.map(t=>`<div class="thr ${openThread===t.with?'on':''}" data-thr="${t.with}"><div class="lc-av" style="--avh:${hash(t.name)%360}">${esc(initials(t.name))}${avImg(t.with,t.photo_ts)}</div><div style="min-width:0"><b>${esc(t.name)}</b><small>${t.mine?'You: ':''}${esc(t.last)}</small></div>${t.unread?`<em>${t.unread}</em>`:''}</div>`).join('')
@@ -2598,6 +2681,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
+  if(doc&&MEM.listing)renderGallery();
 }
 async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
   const c=$('#conv');if(!c)return;let th;
@@ -2725,6 +2809,108 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-fsask]');i
   // gentle tilt from the phone's motion sensor (no permission prompt needed where available)
   addEventListener('deviceorientation',e=>{if(!visible||e.gamma==null)return;const M=FX.motion;art.style.setProperty('--ry',(Math.max(-20,Math.min(20,e.gamma))*.35*M).toFixed(2)+'deg');art.style.setProperty('--rx',(Math.max(-20,Math.min(20,(e.beta||45)-45))*-.25*M).toFixed(2)+'deg')});
 })();
+
+
+/* ================= ☰ MENU ================= */
+(()=>{const nav=$('nav');if(!nav)return;
+  const btn=document.createElement('button');btn.className='menu-btn';btn.id='menuBtn';btn.setAttribute('aria-label','Open menu');btn.setAttribute('aria-expanded','false');
+  btn.innerHTML='<span></span><span></span><span></span><i id="menuDot"></i>';nav.appendChild(btn);
+  const shade=document.createElement('div');shade.id='navShade';document.body.appendChild(shade);
+  const dr=document.createElement('aside');dr.id='navDrawer';dr.setAttribute('aria-label','Menu');
+  const PAGES=[['home','🏠','Home'],['demo','💬','Ask AI'],['nearby','📍','Nearby Doctors'],['directory','🌍','World Directory'],['food','🍔','Food Scan'],['books','📚','Bookworm'],['dashboard','🏥','Clinic Dashboard']];
+  dr.innerHTML=`<div class="nd-top"><b>MENU</b><button class="nd-x" id="ndX" aria-label="Close menu">✕</button></div>
+    <div class="nd-me" id="ndMe" role="button" tabindex="0"><span id="ndAv"></span><div><b id="ndName">Log in or sign up</b><small id="ndSub">Follow doctors, messages, video calls</small></div></div>
+    <button class="nd-sos" id="ndSos" type="button"><span>🚑</span><div><span id="ndSosNum" style="font-size:15px">Emergency 112</span><small>Ambulance, helplines and support</small></div></button>
+    <div class="nd-h">PAGES</div><div class="nd-links">${PAGES.map(([v,e,t])=>`<button type="button" data-nd="${v}"><em>${e}</em>${t}</button>`).join('')}</div>
+    <div class="nd-h">LANGUAGE</div><div id="ndLang"></div>
+    <div class="nd-h">LOOK &amp; MOTION</div><div id="ndStyle"></div>`;
+  document.body.appendChild(dr);
+  // move the existing controls in, so they keep working exactly as before
+  const acct=$('#acctBtn');if(acct){acct.removeAttribute('data-go');$('#ndAv').appendChild(acct)}
+  const fx=$('.fxwrap');if(fx){$('#ndStyle').appendChild(fx);const fb=$('#fxBtn');fb.innerHTML='<span>🎛️ Style: motion, colours, font, size</span><span>›</span>'}
+  const lg=$('.lang');if(lg)$('#ndLang').appendChild(lg);
+  const open=on=>{dr.classList.toggle('on',on);shade.classList.toggle('on',on);btn.classList.toggle('open',on);btn.setAttribute('aria-expanded',on);if(on)syncMenu()};
+  btn.onclick=()=>open(!dr.classList.contains('on'));shade.onclick=()=>open(false);$('#ndX').onclick=()=>open(false);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&dr.classList.contains('on'))open(false)});
+  $('#ndMe').onclick=()=>{open(false);go('account')};$('#ndMe').onkeydown=e=>{if(e.key==='Enter')$('#ndMe').click()};
+  $('#ndSos').onclick=()=>{open(false);openHelp()};
+  dr.querySelectorAll('[data-nd]').forEach(b=>b.onclick=()=>{open(false);go(b.dataset.nd)});
+  window.syncMenu=function(){const me=typeof MEM!=='undefined'&&MEM.me;
+    $('#ndName').textContent=me?me.name:'Log in or sign up';$('#ndSub').textContent=me?(me.kind==='doctor'?'Doctor account · profile, hours, messages':'Patient account · doctors you follow, messages'):'Follow doctors, messages, video calls';
+    $('#ndSosNum').textContent='Emergency '+emNums()[0][0];
+    const v=(($('.view.active')||{}).id||'v-home').slice(2);dr.querySelectorAll('[data-nd]').forEach(b=>b.classList.toggle('active',b.dataset.nd===v));
+    const n=me?(MEM.threads||[]).reduce((s,t)=>s+t.unread,0):0;$('#menuDot').classList.toggle('on',n>0)};
+  syncMenu();
+})();
+
+
+/* ================= REVIEWS (stars, emoji, safe GIF stickers) & WORK PHOTOS ================= */
+const GIFS=[['thumbs','Thumbs up'],['heart','Love'],['clap','Clapping'],['stars','5 stars'],['thanks','Thank you'],['doctor','Great doctor'],['getwell','Get well'],['sad','Not happy']];
+const EMOJI=['😊','😍','🙏','👍','👏','❤️','💯','🌟','✅','😷','🤒','💊','🩺','😢','😕','👎'];
+const starTxt=n=>'★'.repeat(n)+`<span class="off">${'★'.repeat(5-n)}</span>`;
+let REV=null,revDraft={stars:0,gif:null};
+async function mpost(path,body){const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  if(!r)throw new Error('Could not reach the server.');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));if(!r.ok||j.error)throw new Error(j.error||'Server error');
+  if(j.listings){DB.listings=j.listings;refreshViews()}return j.result}
+async function openReviews(lid){REV={listing_id:lid,loading:true};$('#revSheet').classList.add('on');$('#revBody').innerHTML='<p style="color:var(--mute)">Loading reviews…</p>';
+  try{REV=await mpost('reviews',{listing_id:lid});const mine=REV.reviews.find(r=>r.mine);revDraft=mine?{stars:mine.stars,gif:mine.gif,body:mine.body}:{stars:0,gif:null,body:''};renderReviews()}
+  catch(e){$('#revBody').innerHTML='<p class="red">'+esc(e.message)+'</p>'}}
+function closeReviews(){$('#revSheet').classList.remove('on')}
+$('#revX').onclick=closeReviews;$('#revSheet').onclick=e=>{if(e.target.id==='revSheet')closeReviews()};
+function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{name:'Doctor'};const me=MEM.me;const mine=R2.reviews.find(r=>r.mine);
+  const max=Math.max(1,...Object.values(R2.dist));
+  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)}</h3><div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
+    <div class="rv-head"><div><div class="rv-avg">${R2.avg??'–'}</div><div class="stars">${starTxt(Math.round(R2.avg||0))}</div><div style="font-size:12.5px;color:var(--mute)">${R2.count} review${R2.count===1?'':'s'}</div></div>
+      <div class="rv-dist">${[5,4,3,2,1].map(n=>`<div>${n}★<i><b style="width:${R2.dist[n]/max*100}%"></b></i>${R2.dist[n]}</div>`).join('')}</div></div>
+    ${R2.photos.length?`<div class="nd-h" style="margin-left:0">PHOTOS OF THEIR WORK</div><div class="rv-photos">${R2.photos.map(g=>`<figure data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><img loading="lazy" src="/api/m/gallery/${g.id}" alt="${esc(g.caption||'Work photo')}"><figcaption>${esc(g.caption||'')}</figcaption></figure>`).join('')}</div>`:''}
+    ${R2.is_owner?'<p style="color:var(--mute);font-size:13.5px;margin-bottom:12px">This is your profile. You can reply to each review below.</p>':me?`<form class="rv-form" id="rvForm"><b>${mine?'Your review':'Write a review'}</b>
+        <div class="rv-pick" id="rvPick">${[1,2,3,4,5].map(n=>`<button type="button" data-s="${n}" class="${n<=revDraft.stars?'on':''}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div>
+        <textarea id="rvText" maxlength="1000" placeholder="How was your visit? Was the doctor kind, on time, helpful? Good or bad, honest feedback helps others.">${esc(revDraft.body||'')}</textarea>
+        <div class="rv-tools"><div class="rv-emoji">${EMOJI.map(e=>`<button type="button" data-emo="${e}">${e}</button>`).join('')}</div></div>
+        <div class="rv-tools"><button type="button" class="btn ghost sm" id="rvGifBtn">🎞️ Add a GIF sticker</button><span class="rv-chosen" id="rvChosen"></span></div>
+        <div class="rv-gifs" id="rvGifs" hidden>${GIFS.map(([g,t])=>`<button type="button" data-gif="${g}" title="${t}" class="${revDraft.gif===g?'on':''}"><img loading="lazy" src="assets/gif/${g}.gif" alt="${t}"></button>`).join('')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn primary sm" type="submit">${mine?'Update review':'Post review'}</button>${mine?`<button class="btn ghost sm" type="button" id="rvDel">Delete my review</button>`:''}</div>
+        <div id="rvMsg" style="font-size:13px;margin-top:8px"></div></form>`
+      :`<div class="rv-form"><b>Want to review this doctor?</b><p style="color:var(--mute);font-size:13.5px;margin:4px 0 10px">Log in or create a free account. It keeps reviews real and fair.</p><button class="btn primary sm" type="button" id="rvLogin">Log in to review</button></div>`}
+    <div>${R2.reviews.length?R2.reviews.map(r=>`<div class="rv-item"><div class="lc-av" style="--avh:${hash(r.name)%360}">${esc(initials(r.name))}${avImg(r.member_id,r.photo_ts)}</div><div style="flex:1;min-width:0">
+        <b>${esc(r.name)}</b><small>${new Date(r.ts).toLocaleDateString([], {day:'numeric',month:'short',year:'numeric'})}${r.mine?' · you':''}</small>
+        <div class="stars" style="font-size:14px">${starTxt(r.stars)}</div><p>${esc(r.body)}</p>${r.gif?`<img class="gif" src="assets/gif/${esc(r.gif)}.gif" alt="">`:''}
+        ${r.reply?`<div class="rv-reply"><b>Reply from the doctor</b><div>${esc(r.reply)}</div></div>`:''}
+        ${R2.is_owner?`<button class="rv-mini" type="button" data-rep="${r.id}">${r.reply?'Edit reply':'Reply'}</button><div data-repbox="${r.id}" hidden><textarea class="fs-note" maxlength="600" placeholder="Thank them or answer kindly…">${esc(r.reply||'')}</textarea><button class="btn primary sm" type="button" data-repsend="${r.id}" style="margin-top:6px">Post reply</button></div>`:''}
+      </div></div>`).join(''):'<p style="color:var(--mute);padding:14px 0;border-top:1px solid var(--line)">No reviews yet. Be the first to share your experience.</p>'}</div>`;
+  const pick=$('#rvPick');if(pick){pick.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;revDraft.stars=+b.dataset.s;pick.querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.s<=revDraft.stars))};
+    const ta=$('#rvText');ta.oninput=()=>revDraft.body=ta.value;
+    $$('#rvForm [data-emo]').forEach(b=>b.onclick=()=>{const st=ta.selectionStart??ta.value.length;ta.value=ta.value.slice(0,st)+b.dataset.emo+ta.value.slice(ta.selectionEnd??st);ta.focus();ta.selectionStart=ta.selectionEnd=st+b.dataset.emo.length;revDraft.body=ta.value});
+    const chosen=()=>{$('#rvChosen').innerHTML=revDraft.gif?`<img src="assets/gif/${revDraft.gif}.gif" alt=""><button type="button" class="rv-mini" id="rvGifX">Remove</button>`:'';const x=$('#rvGifX');if(x)x.onclick=()=>{revDraft.gif=null;$$('#rvGifs button').forEach(b=>b.classList.remove('on'));chosen()}};chosen();
+    $('#rvGifBtn').onclick=()=>{$('#rvGifs').hidden=!$('#rvGifs').hidden};
+    $$('#rvGifs [data-gif]').forEach(b=>b.onclick=()=>{revDraft.gif=b.dataset.gif;$$('#rvGifs button').forEach(x=>x.classList.toggle('on',x===b));$('#rvGifs').hidden=true;chosen()});
+    $('#rvForm').onsubmit=async e=>{e.preventDefault();if(!revDraft.stars){$('#rvMsg').innerHTML='<span class="red">Tap the stars to rate first.</span>';return}
+      try{REV=await mpost('review',{listing_id:REV.listing_id,stars:revDraft.stars,body:ta.value.trim(),gif:revDraft.gif});renderReviews();$('#rvMsg')&&($('#rvMsg').innerHTML='<span class="teal">✅ Thank you! Your review is live.</span>')}
+      catch(err){$('#rvMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+    const del=$('#rvDel');if(del)del.onclick=async()=>{if(!confirm('Delete your review?'))return;try{REV=await mpost('review/delete',{id:mine.id});revDraft={stars:0,gif:null,body:''};renderReviews()}catch(err){alert(err.message)}}}
+  const li=$('#rvLogin');if(li)li.onclick=()=>{closeReviews();go('account');acctNotice('Log in or create a free account to review doctors.')};
+  $$('#revBody [data-rep]').forEach(b=>b.onclick=()=>{const box=$(`[data-repbox="${b.dataset.rep}"]`);box.hidden=!box.hidden});
+  $$('#revBody [data-repsend]').forEach(b=>b.onclick=async()=>{const t=$(`[data-repbox="${b.dataset.repsend}"] textarea`).value.trim();try{REV=await mpost('review/reply',{id:+b.dataset.repsend,reply:t});renderReviews()}catch(err){alert(err.message)}});
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-rev]');if(b){e.stopPropagation();openReviews(+b.dataset.rev)}
+  const f=e.target.closest('[data-lb]');if(f){$('#lbImg').src='/api/m/gallery/'+f.dataset.lb;$('#lbCap').textContent=f.dataset.cap||'';$('#lightbox').classList.add('on')}});
+$('#lightbox').onclick=()=>$('#lightbox').classList.remove('on');
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#lightbox').classList.remove('on');closeReviews()}});
+
+// doctor's own work photos (account page)
+async function renderGallery(){const box=$('#galBox');if(!box||!MEM.listing)return;let d;try{d=await mpost('reviews',{listing_id:MEM.listing.id})}catch(e){box.innerHTML='<p class="red">'+esc(e.message)+'</p>';return}
+  box.innerHTML=`<p style="color:var(--mute);font-size:13.5px">Show patients your clinic, equipment, certificates or results (with your patients' permission, and no faces or private details). Up to 12 photos.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center"><input class="fs-note" id="galCap" maxlength="140" placeholder="Caption, e.g. 'Our new dental chair'" style="margin:0;flex:1;min-width:200px">
+      <label class="btn primary sm" style="cursor:pointer">📷 Add photo<input type="file" id="galFile" accept="image/*" hidden></label></div><div id="galMsg" style="font-size:13px;margin-top:6px"></div>
+    <div class="gal-grid">${d.photos.map(g=>`<figure><img src="/api/m/gallery/${g.id}" alt="" data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><figcaption>${esc(g.caption||'')}</figcaption><button type="button" data-galdel="${g.id}" aria-label="Remove photo">✕</button></figure>`).join('')}</div>
+    <div style="margin-top:14px;font-size:14px">${d.count?`★ <b>${d.avg}</b> from ${d.count} review${d.count>1?'s':''}`:'No reviews yet.'} <button class="rv-mini" type="button" data-rev="${MEM.listing.id}">See & reply to reviews</button></div>`;
+  $('#galFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;$('#galMsg').textContent='Uploading…';
+    try{const u=URL.createObjectURL(f);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read.'));i.src=u});
+      const M=1400,k=Math.min(1,M/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);let q=.85,data=c.toDataURL('image/jpeg',q);while(data.length>1_150_000&&q>.4){q-=.12;data=c.toDataURL('image/jpeg',q)}
+      await mpost('gallery/add',{image:data,caption:$('#galCap').value.trim()});renderGallery()}catch(err){$('#galMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+  $$('#galBox [data-galdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this photo?'))return;try{await mpost('gallery/delete',{id:+b.dataset.galdel});renderGallery()}catch(err){alert(err.message)}});
+}
 
 /* ================= BOOKWORM: free books ================= */
 const SHELF=[['🫀','Anatomy & Physiology','OpenStax · free textbook','https://openstax.org/details/books/anatomy-and-physiology-2e'],
