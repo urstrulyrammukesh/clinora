@@ -226,6 +226,7 @@ Never invent doctors, times, prices, booking IDs or addresses: use only what the
 Quote fees exactly as list_doctors gives them in "fee" (already in the patient's local currency); never convert currencies yourself.
 
 Health questions (any time of day or night, often private ones):
+- If someone asks whether a food is safe or healthy to eat, answer briefly and offer the Food Scan page (show_page "food"), where they can photograph it for a full check.
 - Answer general health, sexual-health and self-care questions clearly, kindly and without judgement, like a well-trained nurse on a helpline. This includes contraception and protection (condoms, the pill, emergency contraception and how soon it must be taken), safer sex, STI testing, consent, periods and pregnancy questions, colds, fever, stomach upsets, and when something needs a doctor today.
 - Give practical, evidence-based general information and say clearly when they should see a doctor, a pharmacist or a sexual-health clinic, and how urgently. Offer to find one nearby or book a video consultation.
 - If the person sounds low, anxious, lonely or upset, listen first: reflect what they said, be warm, and ask one gentle question at a time. Never lecture. Offer helplines (get_helplines) and a doctor or counsellor, but keep talking with them for as long as they want.
@@ -306,7 +307,7 @@ TOOLS = [
     tool(
         "show_page",
         "Open a page of the website for the patient.",
-        {"page": {"type": "string", "enum": ["home", "nearby", "directory", "dashboard", "books", "account"]}},
+        {"page": {"type": "string", "enum": ["home", "nearby", "directory", "dashboard", "books", "account", "food"]}},
     ),
 ]
 
@@ -965,6 +966,186 @@ def m_photo(conn, d, me):
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo}
 
+
+
+
+# ---------------------------------------------------------------- member video calls (WhatsApp-style)
+# Room "M<low id>-<high id>": the same browser-to-browser WebRTC as appointment calls. The member with the
+# lower id plays the "doctor" side of the signalling (sends the offer); that's only a technical role.
+RINGS = {}  # callee member id -> {"from", "name", "room", "photo_ts", "ts"}
+MROOM_RE = re.compile(r"^M(\d{1,9})-(\d{1,9})$")
+
+
+def can_contact(conn, me, other_id):
+    other = conn.execute("SELECT id, name, kind, photo_ts FROM members WHERE id=?", (other_id,)).fetchone()
+    if not other or other["id"] == me["id"]:
+        raise InputError("Can't call this person")
+    if me["kind"] == "patient" and other["kind"] == "doctor":
+        return other
+    if conn.execute("SELECT 1 FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) LIMIT 1",
+                    (me["id"], other_id, other_id, me["id"])).fetchone():
+        return other
+    raise AuthError("You can call people you already chat with, or any doctor.")
+
+
+def mroom(a, b):
+    return f"M{min(a, b)}-{max(a, b)}"
+
+
+def mcall_role(conn, d, me):
+    need_member(me)
+    m = MROOM_RE.match(str(d.get("room") or ""))
+    if not m:
+        raise AuthError("This call link is not valid.", 404)
+    a, b = int(m.group(1)), int(m.group(2))
+    if me["id"] not in (a, b) or a >= b:
+        raise AuthError("You are not part of this call.", 403)
+    other = can_contact(conn, me, b if me["id"] == a else a)
+    return ("doctor" if me["id"] == a else "patient"), m.group(0), other
+
+
+def mcall_join(conn, d, me):
+    role, room, other = mcall_role(conn, d, me)
+    conn.execute("DELETE FROM call_signals WHERE ts < ?", (now_ms() - 86_400_000,))
+    last = conn.execute("SELECT COALESCE(MAX(id),0) FROM call_signals WHERE room=?", (room,)).fetchone()[0]
+    RINGS.pop(me["id"], None)  # answering stops the ringing
+    return {"role": role, "last_id": last, "ice_servers": ICE_SERVERS,
+            "peer": {"id": other["id"], "name": other["name"], "kind": other["kind"], "photo_ts": other["photo_ts"]}}
+
+
+def mcall_send(conn, d, me):
+    role, room, _ = mcall_role(conn, d, me)
+    kind = one_of(d, "kind", SIGNAL_KINDS)
+    payload = json.dumps(d.get("payload"))
+    if len(payload) > 20_000:
+        raise InputError("Signal too large")
+    conn.execute("INSERT INTO call_signals(room,sender,kind,payload,ts) VALUES(?,?,?,?,?)", (room, role, kind, payload, now_ms()))
+    if kind == "bye":
+        for k, v in list(RINGS.items()):
+            if v["room"] == room:
+                RINGS.pop(k, None)
+    return {"ok": True}
+
+
+def mcall_poll(conn, d, me):
+    role, room, _ = mcall_role(conn, d, me)
+    PRESENCE[(room, role)] = time.time()
+    other = "patient" if role == "doctor" else "doctor"
+    since = int(d.get("since") or 0)
+    rows = conn.execute("SELECT id, kind, payload FROM call_signals WHERE room=? AND sender=? AND id>? ORDER BY id LIMIT 200",
+                        (room, other, since)).fetchall()
+    return {"messages": [{"id": r["id"], "kind": r["kind"], "payload": json.loads(r["payload"])} for r in rows],
+            "peer_online": time.time() - PRESENCE.get((room, other), 0) < 6}
+
+
+def mcall_ring(conn, d, me):
+    need_member(me)
+    if too_many("ring", str(me["id"]), 30, 3600):
+        raise AuthError("Too many calls. Please wait a little.", 429)
+    other = can_contact(conn, me, int(d.get("to") or 0))
+    room = mroom(me["id"], other["id"])
+    RINGS[other["id"]] = {"from": me["id"], "name": me["name"], "room": room, "photo_ts": me.get("photo_ts"), "ts": time.time()}
+    return {"room": room}
+
+
+def mcall_decline(conn, d, me):
+    need_member(me)
+    ring = RINGS.pop(me["id"], None)
+    if ring:  # tell the caller
+        a, b = (int(x) for x in MROOM_RE.match(ring["room"]).groups())
+        conn.execute("INSERT INTO call_signals(room,sender,kind,payload,ts) VALUES(?,?,?,?,?)",
+                     (ring["room"], "doctor" if me["id"] == a else "patient", "bye", json.dumps({"declined": True}), now_ms()))
+    return {"ok": True}
+
+
+def m_incoming(conn, d, me):
+    need_member(me)
+    ring = RINGS.get(me["id"])
+    if ring and time.time() - ring["ts"] > 45:
+        RINGS.pop(me["id"], None)
+        ring = None
+    return {"ring": {k: ring[k] for k in ("from", "name", "room", "photo_ts")} if ring else None}
+
+
+MCALL_ROUTES = {"/api/mcall/join": mcall_join, "/api/mcall/send": mcall_send, "/api/mcall/poll": mcall_poll,
+                "/api/mcall/ring": mcall_ring, "/api/mcall/decline": mcall_decline, "/api/mcall/incoming": m_incoming}
+
+
+# ---------------------------------------------------------------- FOOD SCAN: is this safe for me to eat?
+FOOD_SYSTEM = """You are the food checker on Clinora, a health website. People photograph what they are about to eat or drink: home food, restaurant and street food, junk food, sweets, drinks, fruit, leftovers, packaged snacks, nutrition labels and ingredient lists. Tell them clearly whether it is OK for them to eat, like a friendly, honest dietitian.
+
+- Identify the food. Estimate portion, calories and nutrition for what is visible. If it is a packaged product, read the label and ingredients.
+- verdict: "safe" (fine to eat), "moderation" (fine sometimes or in a small portion, e.g. most junk food), "caution" (real concern for this person, e.g. very high sugar with diabetes, possible allergen, looks undercooked), "avoid" (do not eat: visible mould or spoilage, clear allergen for this person, raw or unsafe meat/eggs/seafood, something not meant to be eaten), "unclear" (cannot tell from the photo).
+- Check the person's allergies, conditions, diet and note. Put anything that matters for them in personal_warnings. A listed allergen that may be present always means "caution" or "avoid".
+- Look for visible freshness and hygiene problems (mould, discolouration, sliminess, swollen packs, flies, raw meat next to cooked food). Say honestly that a photo can't detect germs, toxins or contamination, and give the smell / expiry / "when in doubt, throw it out" checks when relevant.
+- If the photo isn't food (or is a medicine, chemical, plant or mushroom you can't identify), set is_food false and verdict "unclear" or "avoid"; never say an unidentified wild mushroom or berry is safe.
+- Be kind and non-judgemental about junk food: say how to enjoy it more safely and a better swap.
+- health_score: 1 (very unhealthy) to 10 (very healthy) for this person.
+- Keep every text short and plain. Reply in the language given in the request."""
+
+_S = {"type": "string"}
+_A = {"type": "array", "items": {"type": "string"}}
+FOOD_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "is_food": {"type": "boolean"}, "name": _S,
+        "verdict": {"type": "string", "enum": ["safe", "moderation", "caution", "avoid", "unclear"]},
+        "headline": _S, "portion": _S, "calories": _S, "health_score": {"type": "integer"},
+        "nutrition": {"type": "object", "additionalProperties": False,
+                      "properties": {k: _S for k in ("protein", "carbs", "sugar", "fat", "salt", "fibre")},
+                      "required": ["protein", "carbs", "sugar", "fat", "salt", "fibre"]},
+        "ingredients": _A, "allergens": _A, "personal_warnings": _A, "risks": _A,
+        "freshness": _S, "better_choice": _S, "tips": _A,
+        "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    },
+    "required": ["is_food", "name", "verdict", "headline", "portion", "calories", "health_score", "nutrition", "ingredients",
+                 "allergens", "personal_warnings", "risks", "freshness", "better_choice", "tips", "confidence"],
+}
+MAX_FOOD_PHOTO = 3_000_000
+
+
+def str_list(v, n=20, ln=40):
+    return [str(x).strip()[:ln] for x in (v if isinstance(v, list) else [])[:n] if str(x).strip()]
+
+
+def food_scan(d, ip):
+    if client is None:
+        raise InputError("The food scanner needs the AI: add ANTHROPIC_API_KEY to .env")
+    if too_many("food", ip, 30, 3600):
+        raise AuthError("You've scanned a lot this hour. Please try again a little later.", 429)
+    data = str(d.get("image") or "")
+    prefix = "data:image/jpeg;base64,"
+    if not data.startswith(prefix):
+        raise InputError("Please take or choose a photo of the food")
+    try:
+        raw = base64.b64decode(data[len(prefix):], validate=True)
+    except ValueError:
+        raise InputError("That photo could not be read")
+    if len(raw) > MAX_FOOD_PHOTO or not raw.startswith(b"\xff\xd8\xff"):
+        raise InputError("That photo could not be used. Try another one.")
+    prof = d.get("profile") if isinstance(d.get("profile"), dict) else {}
+    about = "\n".join([
+        "Allergies: " + (", ".join(str_list(prof.get("allergies"))) or "none given"),
+        "Health conditions: " + (", ".join(str_list(prof.get("conditions"))) or "none given"),
+        "Diet: " + (", ".join(str_list(prof.get("diet"))) or "none given"),
+        "Their note: " + (str(d.get("note") or "").strip()[:300] or "none"),
+        "Country: " + str(d.get("country") or "")[:40],
+        "Reply language: " + str(d.get("lang") or "English")[:40],
+    ])
+    response = client.beta.messages.create(
+        model=MODEL, max_tokens=8000, system=FOOD_SYSTEM,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data[len(prefix):]}},
+            {"type": "text", "text": "Is this safe and OK for me to eat?\n" + about}]}],
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": FOOD_SCHEMA}},
+        betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+    if response.stop_reason == "refusal":
+        raise InputError("Sorry, this photo can't be checked. Try a clearer photo of the food.")
+    txt = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
+    try:
+        return json.loads(txt)
+    except ValueError:
+        raise InputError("The check didn't finish. Please try again.")
 
 # ---------------------------------------------------------------- doctors on university & institute websites (AI + web search)
 UNI_SYSTEM = """You find medical doctors listed on the official websites of universities, medical colleges, institutes and their hospitals or health centres (for example AIIMS, PGIMER, JIPMER, CMC Vellore, IIT and NIT hospitals / health centres, university medical schools anywhere in the world).
@@ -1679,6 +1860,30 @@ class Handler(SimpleHTTPRequestHandler):
             return self.auth(path)
         if path.startswith("/api/m/"):
             return self.member(path)
+        if path in MCALL_ROUTES:
+            try:
+                data = self.read_json(40_000)
+                if not isinstance(data, dict):
+                    raise InputError("Bad request")
+                with DB_LOCK, connect() as conn:
+                    return self.send_json(200, MCALL_ROUTES[path](conn, data, member_for_token(conn, self.member_token())))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+        if path == "/api/foodscan":
+            try:
+                data = self.read_json(4_200_000)
+                if not isinstance(data, dict):
+                    raise InputError("Bad request")
+                return self.send_json(200, food_scan(data, self.client_address[0]))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+            except Exception as e:
+                print("Food scan error:", repr(e)[:300])
+                return self.send_json(502, {"error": "The food checker is busy. Please try again."})
         if path == "/api/unidocs":
             try:
                 data = self.read_json(2_000)

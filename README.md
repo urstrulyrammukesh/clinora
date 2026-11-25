@@ -21,6 +21,8 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 - 📮 **PIN / ZIP code search** in the directory and on the map
 - 🧍 **Live map**: you appear as a person that walks, runs or drives as you move (GPS + motion sensor)
 - ☎️ **Helplines per country**: emergency, women and harassment, suicide and emotional support, children
+- 📹 **WhatsApp-style video calls** between patients and doctors, with a ringing screen (Accept / Decline)
+- 🍔 **Food Scan**: photograph any food or packet label and the AI says if it's OK for you (allergies, conditions, diet), with calories and a healthier swap
 - 📚 **Bookworm**: free medical books (Open Library, Google Books, OpenStax, NCBI, WHO and more)
 
 ## Run it on your computer (macOS)

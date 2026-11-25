@@ -643,7 +643,7 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 
 /* ===== BOOKWORM (free books) ===== */
 .bw-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:0;overflow:hidden;padding:0;margin-bottom:18px;align-items:center}
-.bw-hero img{width:100%;height:100%;min-height:260px;object-fit:cover;display:block}
+.bw-hero>img{width:100%;height:100%;min-height:260px;object-fit:cover;display:block}
 .bw-hero .in{padding:28px}
 .bw-hero h3{font-size:26px;letter-spacing:-.4px}
 .bw-hero p{color:var(--mute);margin:8px 0 16px}
@@ -702,6 +702,70 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
 .hed-prev{font-size:13px;color:var(--mute);border-top:1px dashed var(--line);padding-top:10px;margin-top:4px}
 .hed-prev b{color:var(--text)}
 .hed [hidden]{display:none!important}
+
+/* ===== INCOMING CALL ===== */
+.ring-card{text-align:center;padding:34px 24px 28px}
+.ring-card .lc-av{width:110px;height:110px;flex-basis:110px;font-size:38px;margin:0 auto 14px;box-shadow:0 0 0 0 hsla(140,70%,50%,.6);animation:ringPulse 1.4s infinite}
+@keyframes ringPulse{70%{box-shadow:0 0 0 26px hsla(140,70%,50%,0)}100%{box-shadow:0 0 0 0 hsla(140,70%,50%,0)}}
+.ring-card h3{font-size:24px}.ring-card p{color:var(--mute);margin-top:4px}
+.ring-btns{display:flex;justify-content:center;gap:40px;margin-top:26px}
+.ring-btns button{width:66px;height:66px;border-radius:50%;font-size:26px;color:#fff;display:grid;place-items:center}
+.ring-btns .no{background:#e5394f}.ring-btns .yes{background:#22c55e;animation:ringPulse 1.4s infinite}
+.ring-btns small{display:block;font-size:12px;color:var(--mute);margin-top:6px}
+.conv-h .vc{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:7px 12px;border-radius:99px;background:hsla(140,70%,45%,.16);color:#3ddc84;font-weight:600}
+
+/* ===== FOOD SCAN ===== */
+.fs-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;align-items:start}
+.fs-cam{padding:18px}
+.fs-view{position:relative;aspect-ratio:4/3;border-radius:14px;overflow:hidden;background:radial-gradient(circle at 50% 40%,hsla(var(--h),70%,30%,.35),var(--bg));display:grid;place-items:center;border:1px dashed var(--line)}
+.fs-view video,.fs-view img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.fs-view .ph{text-align:center;color:var(--mute);font-size:14px;padding:20px}.fs-view .ph b{display:block;font-size:44px;margin-bottom:8px}
+.fs-view .scanline{position:absolute;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--teal),transparent);box-shadow:0 0 18px var(--teal);top:0;animation:scanMove 1.6s ease-in-out infinite alternate;display:none}
+.fs-view.busy .scanline{display:block}
+@keyframes scanMove{to{top:calc(100% - 3px)}}
+.fs-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.fs-note{width:100%;margin-top:12px;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:12px 14px;border-radius:10px;font:inherit;font-size:14px}
+.fs-prof{padding:18px}
+.fs-prof h4{font-size:12px;color:var(--mute);letter-spacing:.6px;text-transform:uppercase;margin:14px 0 8px}.fs-prof h4:first-of-type{margin-top:6px}
+.fs-chips{display:flex;flex-wrap:wrap;gap:6px}
+.fs-chips button{padding:6px 12px;border-radius:99px;border:1px solid var(--line);font-size:13px;color:var(--mute)}
+.fs-chips button.on{background:hsla(var(--h),78%,50%,.16);border-color:var(--teal);color:var(--teal)}
+.fs-res{margin-top:18px}
+.fs-verdict{display:flex;gap:16px;align-items:center;padding:20px;border-radius:16px;border:1px solid var(--line)}
+.fs-verdict .big{font-size:44px;line-height:1}
+.fs-verdict h3{font-size:22px}.fs-verdict p{color:#c3ccd5;margin-top:4px}
+.fs-verdict.safe{background:linear-gradient(135deg,rgba(46,224,122,.16),var(--panel2));border-color:rgba(46,224,122,.45)}
+.fs-verdict.moderation{background:linear-gradient(135deg,rgba(255,181,71,.16),var(--panel2));border-color:rgba(255,181,71,.45)}
+.fs-verdict.caution{background:linear-gradient(135deg,rgba(255,140,60,.18),var(--panel2));border-color:rgba(255,140,60,.5)}
+.fs-verdict.avoid{background:linear-gradient(135deg,rgba(255,61,85,.2),var(--panel2));border-color:rgba(255,61,85,.55)}
+.fs-verdict.unclear{background:var(--panel2)}
+.fs-tag{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;margin-bottom:6px;letter-spacing:.3px}
+.fs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
+.fs-cards .card{padding:16px}.fs-cards h4{font-size:13px;color:var(--mute);margin-bottom:8px;font-weight:600}
+.fs-cards ul{list-style:none;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.fs-cards li:before{content:'• ';color:var(--teal)}
+.fs-cards .warn li:before{content:'⚠️ '}
+.fs-nut{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13.5px}.fs-nut span{color:var(--mute)}.fs-nut b{display:block;font-size:15px}
+.fs-score{height:8px;border-radius:99px;background:var(--bg);overflow:hidden;margin-top:6px}.fs-score i{display:block;height:100%;border-radius:99px}
+.fs-disc{font-size:12.5px;color:var(--mute);margin-top:12px}
+@media(max-width:900px){.fs-grid{grid-template-columns:1fr}}
+#v-food [hidden]{display:none!important}
+
+/* ===== BOOKS HERO: living, interactive image ===== */
+.bw-hero .bw-art{position:relative;overflow:hidden;min-height:280px;height:100%;cursor:pointer;perspective:900px;outline:none;--rx:0deg;--ry:0deg;--mx:50%;--my:40%}
+.bw-tilt{position:absolute;inset:-6%;transform:rotateX(var(--rx)) rotateY(var(--ry)) translateZ(0);transition:transform .25s ease-out;transform-style:preserve-3d}
+.bw-tilt img{width:100%;height:100%;object-fit:cover;display:block;animation:bwDrift 22s ease-in-out infinite alternate;transition:filter .7s;filter:hue-rotate(var(--bwh,0deg)) saturate(1.1)}
+@keyframes bwDrift{0%{transform:scale(1.04) translate(0,0)}50%{transform:scale(1.1) translate(-1.5%,-1%)}100%{transform:scale(1.06) translate(1.5%,.8%)}}
+.bw-shine{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--mx) var(--my),rgba(140,230,255,.22),transparent 38%);mix-blend-mode:screen;transition:background .1s}
+.bw-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.bw-tip{position:absolute;left:14px;bottom:14px;font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:99px;background:rgba(6,10,16,.7);border:1px solid rgba(140,230,255,.35);color:#bfefff;backdrop-filter:blur(6px);transition:opacity .4s}
+.bw-art.used .bw-tip{opacity:0}
+.bw-art.zap .bw-tilt img{animation:bwDrift 22s ease-in-out infinite alternate,bwZap .9s ease-out}
+@keyframes bwZap{0%{filter:hue-rotate(var(--bwh,0deg)) brightness(1.7) saturate(1.6)}100%{filter:hue-rotate(var(--bwh,0deg)) brightness(1) saturate(1.1)}}
+.bw-ring{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:2px solid rgba(140,230,255,.9);box-shadow:0 0 24px rgba(140,230,255,.8);pointer-events:none;animation:bwRing .9s ease-out forwards}
+@keyframes bwRing{to{transform:scale(18);opacity:0}}
+html.fx-off .bw-tilt img,html.fx-off .bw-art.zap .bw-tilt img{animation:none}
+@media (prefers-reduced-motion: reduce){.bw-tilt img{animation:none}.bw-tilt{transform:none}}
 </style>
 </head>
 <body>
@@ -716,6 +780,7 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
     <button class="tab" data-go="nearby">Nearby Doctors</button>
     <button class="tab" data-go="dashboard">Clinic Dashboard</button>
     <button class="tab" data-go="directory">World Directory</button>
+    <button class="tab" data-go="food">Food Scan</button>
     <button class="tab" data-go="books">Bookworm</button>
   </div>
   <div class="fxwrap notranslate"><button id="fxBtn" aria-label="Style settings" title="Style: motion, colours, font, size">🎛️</button>
@@ -929,7 +994,9 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
       <div><div class="kicker">BOOKWORM</div><h2>Free medical books</h2></div>
       <p>Read and study real medical books for free: open textbooks, public-domain classics and official health manuals from around the world. Everything here is free and legal to read.</p>
     </div>
-    <div class="card bw-hero"><img src="assets/bookworm.jpg" alt="A cute bookworm doctor reading a medical book" onerror="this.style.display='none'">
+    <div class="card bw-hero"><div class="bw-art" id="bwArt" role="button" tabindex="0" aria-label="Interactive medical hologram, tap to animate">
+        <div class="bw-tilt"><img src="assets/med-library.jpg" alt="A glowing holographic human anatomy rising from an open medical book"></div>
+        <span class="bw-shine"></span><canvas class="bw-fx" id="bwFx"></canvas><span class="bw-tip">✨ Tap the hologram</span></div>
       <div class="in"><h3>What do you want to learn today?</h3><p>Search millions of free books on Google Books and the Open Library, or start with a hand-picked shelf below.</p>
         <form class="book-search" id="bookForm"><input id="bookQ" placeholder="e.g. anatomy, heart, nursing, first aid" required><button class="btn primary sm" type="submit">Search</button></form>
         <div class="uni-chips" id="bookChips"></div></div></div>
@@ -937,6 +1004,38 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
     <div class="book-grid" id="bookRes"></div>
     <h3 class="shelf-h">Hand-picked free shelves</h3>
     <div class="shelf" id="shelf"></div>
+  </div>
+</div>
+
+<!-- ================= FOOD SCAN ================= -->
+<div class="view" id="v-food">
+  <div class="page">
+    <div class="page-title">
+      <div><div class="kicker">FOOD SCAN</div><h2>Is it safe to eat?</h2></div>
+      <p>Point your camera at any food: home cooking, street food, junk food, a packet label or leftovers. The AI tells you if it's OK for <b>you</b>, with calories, allergens and a healthier swap.</p>
+    </div>
+    <div class="fs-grid">
+      <div class="card fs-cam">
+        <div class="fs-view" id="fsView"><div class="ph" id="fsPh"><b>📸</b>Take a photo of your food, a menu item or a packet label</div><div class="scanline"></div></div>
+        <div class="fs-btns">
+          <button class="btn primary sm" id="fsCam" type="button">📷 Open camera</button>
+          <button class="btn primary sm" id="fsSnap" type="button" hidden>📸 Take photo</button>
+          <label class="btn ghost sm" style="cursor:pointer">🖼️ Upload photo<input type="file" id="fsFile" accept="image/*" capture="environment" hidden></label>
+          <button class="btn ghost sm" id="fsRetake" type="button" hidden>↺ Retake</button>
+        </div>
+        <input class="fs-note" id="fsNote" maxlength="300" placeholder="Anything to add? e.g. 'left out overnight', 'from a street stall', 'for my 2-year-old'">
+        <button class="btn primary" id="fsGo" type="button" style="width:100%;margin-top:12px" disabled>🔍 Check this food</button>
+        <div id="fsMsg" style="font-size:13.5px;margin-top:10px;color:var(--mute)"></div>
+      </div>
+      <div class="card fs-prof">
+        <h3 style="font-size:18px">My health profile</h3>
+        <p style="font-size:13px;color:var(--mute);margin-top:2px">Optional. Saved only on this device, used to check each food for you.</p>
+        <h4>Allergies</h4><div class="fs-chips" data-fp="allergies"></div>
+        <h4>Health conditions</h4><div class="fs-chips" data-fp="conditions"></div>
+        <h4>Diet</h4><div class="fs-chips" data-fp="diet"></div>
+      </div>
+    </div>
+    <div class="fs-res" id="fsRes"></div>
   </div>
 </div>
 
@@ -1019,6 +1118,7 @@ html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate
 
 <!-- ================= AI CHAT SIDE PANEL ================= -->
 <a class="sos-float" id="navSos" href="tel:112" aria-label="Emergency numbers and helplines">🚑 112</a>
+<div class="sheet" id="ringSheet" role="dialog" aria-modal="true" aria-label="Incoming video call"><div class="sheet-card ring-card" id="ringCard"></div></div>
 <div class="sheet" id="helpSheet" role="dialog" aria-modal="true" aria-label="Emergency numbers and helplines"><div class="sheet-card"><button class="sheet-x" id="helpX" aria-label="Close">✕</button>
   <h3>Get help now</h3><p style="color:var(--mute);font-size:14px" id="helpWhere"></p><div id="helpBody"></div></div></div>
 <button class="fab" id="chatFab" aria-label="Open AI chat"><span class="fdot"></span>💬 Ask AI</button>
@@ -1196,7 +1296,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);window.scrollTo(0,0);openCall(v.slice(5));return}
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
-  if(!['home','nearby','dashboard','directory','books','account'].includes(v)) v='home';
+  if(!['home','nearby','dashboard','directory','books','account','food'].includes(v)) v='home';
   $$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));
   $$('.tab').forEach(e=>e.classList.toggle('active',e.dataset.go===v));
   if(location.hash!=='#'+v) history.replaceState(null,'','#'+v);
@@ -1205,6 +1305,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(v==='nearby') initNearby();
   if(v==='directory') initDirectory();
   if(v==='books') initBooks();
+  if(v==='food') initFood(); else if(typeof fsStopCam==='function') fsStopCam();
   if(v==='account') renderAccount();
   if(v!=='nearby') stopMoveWatch();
 }
@@ -1807,10 +1908,10 @@ async function startPayment(method,currency,id,token,p){
 }
 
 /* ---------- VIDEO CALLS (WebRTC: video goes browser-to-browser; server only relays connection messages) ---------- */
-const CALL={room:'',token:'',role:'',since:0,pc:null,local:null,ice:[],pending:[],poll:null,busy:false,queue:[],t0:0,tick:null,info:null};
+const CALL={api:'/api/call/',member:false,autoJoin:false,peer:null,room:'',token:'',role:'',since:0,pc:null,local:null,ice:[],pending:[],poll:null,busy:false,queue:[],t0:0,tick:null,info:null};
 const callLink=(id,token)=>`${location.origin}${location.pathname}#call/${id}.${token}`;
 async function callApi(kind,extra={}){
-  const r=await fetch('/api/call/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room:CALL.room,token:CALL.token,...extra})});
+  const r=await fetch(CALL.api+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({room:CALL.room,token:CALL.token,...extra})});
   const j=await r.json().catch(()=>({error:'Server error'}));if(!r.ok||j.error){const e=new Error(j.error||'Server error');e.status=r.status;throw e}return j;
 }
 function setCallStatus(t,cls=''){const el=$('#callStatus');el.textContent=t;el.className=cls}
@@ -1818,19 +1919,22 @@ async function openCall(arg){
   const [room,token]=String(arg).split('.');
   if(CALL.room&&CALL.room!==room.toUpperCase())leaveCall(true);
   if(CALL.pc||CALL.poll)return; // already in this call
-  Object.assign(CALL,{room:room.toUpperCase(),token:token||'',role:'',since:0});
+  const isM=/^M\d+-\d+$/i.test(room);
+  Object.assign(CALL,{room:room.toUpperCase(),token:token||'',role:'',since:0,api:isM?'/api/mcall/':'/api/call/',member:isM});
   $('#prejoin').style.display='block';$('#stage').style.display='none';$('#callErr').textContent='';$('#cJoin').disabled=true;
   setCallStatus('Checking link…');
   try{
-    const j=await callApi('join');CALL.role=j.role;CALL.since=j.last_id;CALL.ice=j.ice_servers;CALL.info=j.appointment;
-    const d=docById(j.appointment.doc);
+    const j=await callApi('join');CALL.role=j.role;CALL.since=j.last_id;CALL.ice=j.ice_servers;CALL.info=j.appointment||{};CALL.peer=j.peer||null;
+    if(CALL.member){$('#callTitle').textContent=`Video call with ${j.peer.name}`;$('#callSub').textContent='Private video call on Clinora · the video goes directly between you two'}
+    else{const d=docById(j.appointment.doc);
     $('#callTitle').textContent=j.role==='doctor'?`Call with ${j.appointment.patient}`:`Video consultation with ${d?d.name:'your doctor'}`;
-    $('#callSub').textContent=`#${j.appointment.id} · ${dateLabel(j.appointment.date)} · ${fmtT(tToMin(j.appointment.time))} (${TZA}) · ${j.role==='doctor'?'You are the doctor':'You are the patient'}`;
+    $('#callSub').textContent=`#${j.appointment.id} · ${dateLabel(j.appointment.date)} · ${fmtT(tToMin(j.appointment.time))} (${TZA}) · ${j.role==='doctor'?'You are the doctor':'You are the patient'}`}
     setCallStatus('Not connected');$('#cJoin').disabled=false;
     try{CALL.local=await getMedia();$('#preVideo').srcObject=CALL.local}catch(e){$('#callErr').textContent='Camera/microphone not available or not allowed. You can still join and see/hear the other person.'}
+    if(CALL.autoJoin){CALL.autoJoin=false;$('#cJoin').click()}
   }catch(e){
     setCallStatus('Cannot join','warn');
-    $('#callErr').innerHTML=esc(e.message)+(e.status===403?' <a class="teal" href="#dashboard">Log in →</a>':'')+(e.status===402?`<div style="margin-top:14px"><a class="btn primary" href="#pay/${esc(CALL.room)}.${esc(CALL.token)}">💳 Pay now</a></div>`:'');
+    $('#callErr').innerHTML=esc(e.message)+(e.status===403||e.status===401?` <a class="teal" href="#${CALL.member?'account':'dashboard'}">Log in →</a>`:'')+(e.status===402?`<div style="margin-top:14px"><a class="btn primary" href="#pay/${esc(CALL.room)}.${esc(CALL.token)}">💳 Pay now</a></div>`:'');
   }
 }
 async function getMedia(){
@@ -1840,13 +1944,14 @@ async function getMedia(){
 $('#cJoin').onclick=async()=>{
   $('#prejoin').style.display='none';$('#stage').style.display='block';
   $('#localVideo').srcObject=CALL.local||null;$('#localVideo').style.display=CALL.local&&CALL.local.getVideoTracks().length?'block':'none';
-  $('#waitTitle').textContent=CALL.role==='doctor'?'Waiting for the patient to join…':'Waiting for the doctor to join…';
+  $('#waitTitle').textContent=CALL.member?`${CALL.answering?'Connecting to':'Calling'} ${CALL.peer?CALL.peer.name:''}…`:CALL.role==='doctor'?'Waiting for the patient to join…':'Waiting for the doctor to join…';
+  if(CALL.member&&!CALL.answering){const room=CALL.room;setTimeout(()=>{if(CALL.room===room&&(!CALL.pc||CALL.pc.connectionState!=='connected')){$('#waitTitle').textContent='No answer';$('#waitSub').textContent='They may be busy. Send them a message, or try again later.';setCallStatus('No answer','warn')}},45000)}
   setCallStatus('Waiting…','warn');
   await callApi('send',{kind:'hello',payload:{}}).catch(()=>{});
   CALL.poll=setInterval(pollCall,1000);pollCall();
   window.addEventListener('beforeunload',sendBye);
 };
-function sendBye(){if(CALL.room)navigator.sendBeacon&&fetch('/api/call/send',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({room:CALL.room,token:CALL.token,kind:'bye',payload:{}})}).catch(()=>{})}
+function sendBye(){if(CALL.room)navigator.sendBeacon&&fetch(CALL.api+'send',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({room:CALL.room,token:CALL.token,kind:'bye',payload:{}})}).catch(()=>{})}
 async function pollCall(){
   if(CALL.busy)return;CALL.busy=true;
   try{const j=await callApi('poll',{since:CALL.since});
@@ -1880,7 +1985,7 @@ async function onSignal(m){
   else if(m.kind==='answer'&&CALL.role==='doctor'&&CALL.pc&&CALL.pc.signalingState==='have-local-offer'){await CALL.pc.setRemoteDescription(p);for(const c of CALL.pending)await addIce(c);CALL.pending=[]}
   else if(m.kind==='ice'){if(CALL.pc&&CALL.pc.remoteDescription)await addIce(p);else CALL.pending.push(p)}
   else if(m.kind==='bye'){if(CALL.pc){CALL.pc.close();CALL.pc=null}$('#remoteVideo').srcObject=null;stopTimer();
-    setCallStatus('They left the call','warn');$('#waitBox').style.display='grid';$('#waitTitle').textContent='The other person left the call.';$('#waitSub').textContent='You can wait here if they reconnect, or end the call.'}
+    setCallStatus(p&&p.declined?'Call declined':'They left the call','warn');$('#waitBox').style.display='grid';$('#waitTitle').textContent=p&&p.declined?'They declined the call.':'The other person left the call.';$('#waitSub').textContent='You can wait here if they reconnect, or end the call.'}
 }
 function startTimer(){if(CALL.tick)return;CALL.t0=Date.now();$('#callTimer').style.display='block';
   CALL.tick=setInterval(()=>{const s=Math.floor((Date.now()-CALL.t0)/1000);$('#callTimer').textContent=`${pad(Math.floor(s/60))}:${pad(s%60)}`},1000)}
@@ -2044,7 +2149,7 @@ loadPrices();
 })();
 /* ================= LIVE COLOUR: scroll + tab ================= */
 (()=>{
-  const BASE={home:170,nearby:145,directory:28,dashboard:262,pay:200,call:190,books:300,account:210};
+  const BASE={home:170,nearby:145,directory:28,dashboard:262,pay:200,call:190,books:300,account:210,food:95};
   const root=document.documentElement;let cur=170,target=170,raf=0;
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   function view(){const v=(document.querySelector('.view.active')||{}).id||'v-home';return v.slice(2)}
@@ -2227,6 +2332,7 @@ function lcard(p,i,ctx){
         <a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>
         ${p.reg?`<button class="fav ${fav?'on':''}" data-follow="${p.id}">${ico('heart',14)}${fav?'Following':'Follow'}</button>`:''}
         ${p.reg&&p.owner?`<button data-msg="${p.id}">${ico('msg',14)}Message</button>`:''}
+        ${p.reg&&p.owner&&p.live?`<button class="pri" data-vcallm="${p.owner}">${ico('video',14)}Video call</button>`:''}
         ${edu?`<button data-unidocs="${esc(p.name)}">${ico('steth',14)}Doctors on website</button><a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(p.name+' UG PG courses admission')}">${ico('cap',14)}Courses</a>`:''}
         ${ctx==='fav'?'':`<button ${prof}>${ico('user',14)}Profile</button>
         <button ${ride}>${ico('car',14)}Ride</button>
@@ -2496,7 +2602,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
 async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
   const c=$('#conv');if(!c)return;let th;
   try{th=(await mapi('thread',{with:withId})).result}catch(e){if(listingId){th={with:{id:withId,name:(regs().find(x=>x.id===listingId)||{}).name||'Doctor',kind:'doctor',online:null},messages:[]}}else{c.innerHTML='<div class="empty-note">'+esc(e.message)+'</div>';return}}
-  const w=th.with;c.innerHTML=`<div class="conv-h"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}</div>
+  const w=th.with;c.innerHTML=`<div class="conv-h" style="flex-wrap:wrap"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}<button class="vc" type="button" data-vcallm="${w.id}">${ico('video',15)}Video call</button></div>
     <div class="conv-m" id="convM">${th.messages.length?th.messages.map(m=>`<div class="bub ${m.from_id===MEM.me.id?'me':''}">${esc(m.body)}<small>${new Date(m.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></div>`).join(''):'<div class="empty-note">Say hello 👋 Don’t share emergencies here: call your local emergency number.</div>'}</div>
     <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;
   const M=$('#convM');M.scrollTop=M.scrollHeight;
@@ -2507,6 +2613,118 @@ async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').
 }
 mapi('me').then(()=>{if($('#v-account').classList.contains('active'))renderAccount()}).catch(()=>{});
 setInterval(()=>{if(MEM.me)mapi('me').catch(()=>{})},45000);
+
+
+/* ================= WHATSAPP-STYLE VIDEO CALLS between members ================= */
+async function startVideoCall(otherId){CALL.answering=false;
+  if(!MEM.me){go('account');acctNotice('Log in or create a free account to video call doctors.');return}
+  try{const r=await fetch('/api/mcall/ring',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:otherId})});
+    const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||'Could not start the call');CALL.autoJoin=true;go('call/'+j.room)}
+  catch(e){alert(e.message)}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-vcallm]');if(b){e.stopPropagation();startVideoCall(+b.dataset.vcallm)}});
+let ringShown=null,ringAudio=null;
+function ringTone(on){try{if(!on){if(ringAudio){ringAudio.stop&&ringAudio.stop();ringAudio=null}return}if(ringAudio)return;
+  const ac=new (window.AudioContext||window.webkitAudioContext)();const g=ac.createGain();g.gain.value=0;g.connect(ac.destination);
+  const o=ac.createOscillator();o.frequency.value=520;o.connect(g);o.start();let t=ac.currentTime;
+  for(let i=0;i<30;i++){g.gain.setValueAtTime(.08,t);g.gain.setValueAtTime(0,t+.4);g.gain.setValueAtTime(.08,t+.6);g.gain.setValueAtTime(0,t+1);t+=2.5}
+  ringAudio={stop:()=>{try{o.stop();ac.close()}catch{}}}}catch{}}
+function showRing(r){ringShown=r.room;$('#ringCard').innerHTML=`<div class="lc-av" style="--avh:${hash(r.name)%360}">${esc(initials(r.name))}${avImg(r.from,r.photo_ts)}</div>
+  <h3>${esc(r.name)}</h3><p>📹 Incoming video call on Clinora…</p>
+  <div class="ring-btns"><div><button class="no" id="ringNo" aria-label="Decline">✕</button><small>Decline</small></div><div><button class="yes" id="ringYes" aria-label="Accept">📹</button><small>Accept</small></div></div>`;
+  $('#ringSheet').classList.add('on');ringTone(true);
+  $('#ringYes').onclick=()=>{hideRing();CALL.autoJoin=true;CALL.answering=true;go('call/'+r.room)};
+  $('#ringNo').onclick=()=>{hideRing();fetch('/api/mcall/decline',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>{})}}
+function hideRing(){$('#ringSheet').classList.remove('on');ringTone(false)}
+setInterval(async()=>{if(!MEM.me||CALL.room)return;
+  try{const r=await fetch('/api/mcall/incoming',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const j=await r.json();
+    if(j.ring&&ringShown!==j.ring.room)showRing(j.ring);else if(!j.ring&&$('#ringSheet').classList.contains('on')){hideRing();ringShown=null}
+    if(!j.ring)ringShown=null}catch{}},4000);
+
+/* ================= FOOD SCAN ================= */
+const FP_OPTS={allergies:['Peanuts','Tree nuts','Milk','Egg','Gluten / wheat','Soy','Fish','Shellfish','Sesame','Mustard'],
+  conditions:['Diabetes','High blood pressure','High cholesterol','Heart disease','Kidney disease','Pregnant','Breastfeeding','IBS / sensitive stomach','Acid reflux','Weight loss goal'],
+  diet:['Vegetarian','Vegan','Eggetarian','Jain','Halal','Kosher','Keto / low carb','Lactose free','Gluten free']};
+let FP=(()=>{try{return JSON.parse(localStorage.getItem('sd_foodprof'))||{}}catch{return {}}})(),fsInit=false,fsStream=null,fsImg=null,fsTok=0;
+function initFood(){if(fsInit)return;fsInit=true;
+  $$('#v-food [data-fp]').forEach(box=>{const k=box.dataset.fp;FP[k]=FP[k]||[];
+    box.innerHTML=FP_OPTS[k].map(o=>`<button type="button" class="${FP[k].includes(o)?'on':''}">${o}</button>`).join('');
+    box.onclick=e=>{const b=e.target.closest('button');if(!b)return;const o=b.textContent;FP[k]=FP[k].includes(o)?FP[k].filter(x=>x!==o):[...FP[k],o];b.classList.toggle('on');try{localStorage.setItem('sd_foodprof',JSON.stringify(FP))}catch{}}});
+  $('#fsCam').onclick=fsOpenCam;$('#fsSnap').onclick=fsSnap;$('#fsRetake').onclick=()=>{fsImg=null;fsShow(null);$('#fsGo').disabled=true;$('#fsRes').innerHTML='';fsOpenCam()};
+  $('#fsFile').onchange=e=>{const f=e.target.files[0];if(f)fsLoadFile(f);e.target.value=''};
+  $('#fsGo').onclick=fsCheck;}
+function fsShow(src){const v=$('#fsView');v.querySelectorAll('video,img').forEach(x=>x.remove());$('#fsPh').hidden=!!src;
+  if(src){const i=document.createElement('img');i.src=src;i.alt='Your food photo';v.prepend(i)}$('#fsRetake').hidden=!src}
+async function fsOpenCam(){fsStopCam();$('#fsMsg').textContent='';
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('#fsMsg').textContent='This browser can’t open the camera here. Use "Upload photo" instead.';return}
+  try{fsStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}},audio:false});
+    fsShow(null);const v=document.createElement('video');v.autoplay=true;v.muted=true;v.playsInline=true;v.srcObject=fsStream;$('#fsView').prepend(v);$('#fsPh').hidden=true;
+    $('#fsSnap').hidden=false;$('#fsCam').hidden=true}
+  catch(e){$('#fsMsg').textContent='Camera not available or not allowed. You can use "Upload photo" instead.'}}
+function fsStopCam(){if(fsStream){fsStream.getTracks().forEach(t=>t.stop());fsStream=null}const s=$('#fsSnap');if(s){s.hidden=true;$('#fsCam').hidden=false}}
+function fsToJpeg(src,w,h){const M=1280,k=Math.min(1,M/Math.max(w,h));const c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);let q=.85,d=c.toDataURL('image/jpeg',q);while(d.length>3_500_000&&q>.4){q-=.15;d=c.toDataURL('image/jpeg',q)}return d}
+function fsSnap(){const v=$('#fsView video');if(!v||!v.videoWidth)return;fsImg=fsToJpeg(v,v.videoWidth,v.videoHeight);fsStopCam();fsShow(fsImg);$('#fsGo').disabled=false;fsCheck()}
+function fsLoadFile(f){fsStopCam();const u=URL.createObjectURL(f);const i=new Image();i.onload=()=>{fsImg=fsToJpeg(i,i.naturalWidth,i.naturalHeight);URL.revokeObjectURL(u);fsShow(fsImg);$('#fsGo').disabled=false;fsCheck()};
+  i.onerror=()=>{$('#fsMsg').textContent='That file is not a photo we can read. Try a JPG or PNG.'};i.src=u}
+const VERD={safe:['✅','Good to eat','#2ee07a'],moderation:['🟡','OK in moderation','#ffb547'],caution:['⚠️','Be careful','#ff8c3c'],avoid:['⛔','Better not eat this','#ff3d55'],unclear:['❔','Can’t tell from this photo','#8693a0']};
+async function fsCheck(){if(!fsImg)return;const tok=++fsTok;$('#fsGo').disabled=true;$('#fsView').classList.add('busy');$('#fsMsg').textContent='🔍 Checking your food… this takes a few seconds.';$('#fsRes').innerHTML='';
+  try{const r=await fetch('/api/foodscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:fsImg,note:$('#fsNote').value.trim(),profile:FP,country:countryName(),lang:(LANG_LIST[LANG]||[0,'English'])[1]})});
+    const j=await r.json();if(tok!==fsTok)return;if(!r.ok||j.error)throw new Error(j.error||'The check failed');$('#fsMsg').textContent='';fsRender(j)}
+  catch(e){if(tok===fsTok)$('#fsMsg').innerHTML='<span class="red">⚠️ '+esc(e.message)+'</span>'}
+  finally{if(tok===fsTok){$('#fsGo').disabled=false;$('#fsView').classList.remove('busy')}}}
+function fsRender(j){const v=VERD[j.verdict]||VERD.unclear;const sc=Math.max(1,Math.min(10,+j.health_score||0));
+  const list=(t,a,cls='')=>a&&a.length?`<div class="card ${cls}"><h4>${t}</h4><ul>${a.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'';
+  const n=j.nutrition||{};
+  $('#fsRes').innerHTML=`<div class="fs-verdict ${esc(j.verdict)}"><div class="big">${v[0]}</div><div><span class="fs-tag" style="background:${v[2]}22;color:${v[2]}">${v[1].toUpperCase()}</span>
+      <h3>${esc(j.name||'Unknown food')}</h3><p>${esc(j.headline||'')}</p></div></div>
+    <div class="fs-cards">
+      ${j.is_food?`<div class="card"><h4>Calories & nutrition</h4><div style="font-size:20px;font-weight:700">${esc(j.calories||'?')}</div><div style="font-size:13px;color:var(--mute);margin-bottom:10px">${esc(j.portion||'')}</div>
+        <div class="fs-nut">${['protein','carbs','sugar','fat','salt','fibre'].map(k=>`<div><span>${k[0].toUpperCase()+k.slice(1)}</span><b>${esc(n[k]||'?')}</b></div>`).join('')}</div>
+        <h4 style="margin-top:12px">Health score for you: ${sc}/10</h4><div class="fs-score"><i style="width:${sc*10}%;background:hsl(${sc*12},75%,50%)"></i></div></div>`:''}
+      ${list('⚠️ Warnings for you',j.personal_warnings,'warn')}
+      ${list('Risks',j.risks,'warn')}
+      ${list('Allergens',j.allergens)}
+      ${list('Ingredients spotted',j.ingredients)}
+      ${j.freshness?`<div class="card"><h4>Freshness & hygiene</h4><p style="font-size:14px">${esc(j.freshness)}</p></div>`:''}
+      ${j.better_choice?`<div class="card"><h4>💚 Healthier swap</h4><p style="font-size:14px">${esc(j.better_choice)}</p></div>`:''}
+      ${list('Tips',j.tips)}
+    </div>
+    <p class="fs-disc">Confidence: ${esc(j.confidence||'?')}. A photo can't detect germs, toxins or hidden ingredients: check the smell, expiry date and allergy labels too. If you feel unwell after eating, or have trouble breathing or swelling, call <b>${esc(emNums()[0][0])}</b> now.</p>
+    <div class="fs-btns"><button class="btn ghost sm" type="button" data-fsask="${esc(j.name||'food')}">💬 Ask the AI about this</button>
+      <button class="btn ghost sm" type="button" onclick="document.getElementById('fsRetake').click()">📷 Scan another food</button></div>`;
+  $('#fsRes').scrollIntoView({behavior:'smooth',block:'start'})}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-fsask]');if(b){openChat();$('#chatIn').value='About the '+b.dataset.fsask+' I just scanned: ';$('#chatIn').focus()}});
+
+
+/* ================= BOOKS HERO: tilt, drift, particles, tap burst ================= */
+(()=>{const art=$('#bwArt');if(!art)return;const cv=$('#bwFx'),ctx=cv.getContext('2d');let W=0,H=0,parts=[],raf=0,visible=false,hue=0;
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function size(){const r=art.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0)}
+  function mote(x,y,burst){const a=Math.random()*Math.PI*2,sp=burst?1.5+Math.random()*5:.15+Math.random()*.35;
+    return {x:x??Math.random()*W,y:y??H+5,vx:burst?Math.cos(a)*sp:(Math.random()-.5)*.2,vy:burst?Math.sin(a)*sp-1:-sp,r:burst?1+Math.random()*2.6:.6+Math.random()*1.6,
+      life:1,decay:burst?.012+Math.random()*.012:.0025+Math.random()*.003,c:Math.random()<.65?'140,230,255':'190,150,255'}}
+  function loop(){raf=0;if(!visible||reduce)return;const M=Math.max(.2,FX.motion);ctx.clearRect(0,0,W,H);
+    if(parts.filter(p=>!p.b).length<Math.round(46*M))parts.push(mote());
+    for(const p of parts){p.x+=p.vx;p.y+=p.vy;if(p.b){p.vy+=.03;p.vx*=.985}p.life-=p.decay;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fillStyle=`rgba(${p.c},${Math.max(0,p.life)*(p.b?.95:.7)})`;ctx.shadowBlur=p.b?12:8;ctx.shadowColor=`rgba(${p.c},.9)`;ctx.fill()}
+    parts=parts.filter(p=>p.life>0&&p.y>-10);raf=requestAnimationFrame(loop)}
+  new IntersectionObserver(es=>{visible=es[0].isIntersecting;if(visible){size();if(!raf)raf=requestAnimationFrame(loop)}}).observe(art);
+  addEventListener('resize',()=>{if(visible)size()});
+  function aim(cx,cy){const r=art.getBoundingClientRect(),x=(cx-r.left)/r.width,y=(cy-r.top)/r.height,M=FX.motion;
+    art.style.setProperty('--ry',((x-.5)*14*M).toFixed(2)+'deg');art.style.setProperty('--rx',((.5-y)*10*M).toFixed(2)+'deg');
+    art.style.setProperty('--mx',(x*100).toFixed(1)+'%');art.style.setProperty('--my',(y*100).toFixed(1)+'%')}
+  art.addEventListener('pointermove',e=>aim(e.clientX,e.clientY));
+  art.addEventListener('pointerleave',()=>{art.style.setProperty('--rx','0deg');art.style.setProperty('--ry','0deg')});
+  function burst(cx,cy){const r=art.getBoundingClientRect(),x=cx-r.left,y=cy-r.top;art.classList.add('used');
+    hue=(hue+55)%360;art.style.setProperty('--bwh',hue+'deg');art.classList.remove('zap');void art.offsetWidth;art.classList.add('zap');
+    const ring=document.createElement('span');ring.className='bw-ring';ring.style.left=x+'px';ring.style.top=y+'px';art.appendChild(ring);setTimeout(()=>ring.remove(),950);
+    for(let i=0;i<70;i++){const m=mote(x,y,true);m.b=1;parts.push(m)}if(!raf&&visible)raf=requestAnimationFrame(loop);
+    art.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}],{duration:350,easing:'ease-out'})}
+  art.addEventListener('click',e=>burst(e.clientX,e.clientY));
+  art.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();const r=art.getBoundingClientRect();burst(r.left+r.width/2,r.top+r.height/2)}});
+  // gentle tilt from the phone's motion sensor (no permission prompt needed where available)
+  addEventListener('deviceorientation',e=>{if(!visible||e.gamma==null)return;const M=FX.motion;art.style.setProperty('--ry',(Math.max(-20,Math.min(20,e.gamma))*.35*M).toFixed(2)+'deg');art.style.setProperty('--rx',(Math.max(-20,Math.min(20,(e.beta||45)-45))*-.25*M).toFixed(2)+'deg')});
+})();
 
 /* ================= BOOKWORM: free books ================= */
 const SHELF=[['🫀','Anatomy & Physiology','OpenStax · free textbook','https://openstax.org/details/books/anatomy-and-physiology-2e'],
