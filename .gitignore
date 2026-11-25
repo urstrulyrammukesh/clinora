@@ -1,0 +1,22 @@
+# Secrets: never upload
+.env
+.env.*
+!.env.example
+
+# Patient data, logins and bookings (the live database): never upload
+data/*.db
+data/*.db-*
+
+# Local Python environment (re-created by start.command)
+.venv/
+__pycache__/
+
+# Mac / editor files
+.DS_Store
+.claude/
+
+# Large original image (the website uses the compressed .jpg)
+assets/hero-doctor-brain.png
+
+# Local tools (GitHub CLI download)
+.tools/
