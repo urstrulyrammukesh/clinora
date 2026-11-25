@@ -500,7 +500,8 @@ html.fx-off .mv{opacity:1!important;transform:none!important;filter:none!importa
 html.fx-off .btn.primary:after,html.fx-off .brain-layer.idle,html.fx-off .phone{animation:none!important}
 /* STYLE PANEL */
 .fxwrap{position:relative;flex-shrink:0}
-#fxBtn{font-size:13px;padding:8px 12px;border:1px solid var(--line);border-radius:99px;background:var(--panel)}
+#fxBtn{width:38px;height:38px;display:grid;place-items:center;font-size:17px;padding:0;border:1px solid var(--line);border-radius:50%;background:var(--panel);transition:.2s}
+#fxBtn:hover{border-color:var(--teal);transform:rotate(25deg)}
 #fxBtn:hover{border-color:var(--teal)}
 .fx-panel{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:60;width:min(320px,92vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .fx-panel.on{display:block}
@@ -514,6 +515,14 @@ html.fx-off .btn.primary:after,html.fx-off .brain-layer.idle,html.fx-off .phone{
 .fx-fonts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .fx-fonts button{padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);font-size:14px}
 .fx-fonts button.on{border-color:var(--teal);color:var(--teal)}
+
+/* floating emergency button (bottom-left) */
+.sos-float{position:fixed;left:22px;bottom:22px;z-index:85;display:flex;align-items:center;gap:6px;padding:13px 18px;border-radius:99px;background:var(--red);color:#fff;font-weight:700;font-size:15px;box-shadow:0 12px 34px rgba(255,61,85,.45);animation:pulse 2s infinite;transition:transform .2s}
+.sos-float:hover{transform:translateY(-3px)}
+html[dir=rtl] .sos-float{left:auto;right:22px}
+#langToast{bottom:92px!important}
+@media(max-width:600px){.sos-float{left:14px;bottom:14px;padding:11px 14px;font-size:14px}}
+@media (prefers-reduced-motion: reduce){.sos-float{animation:none}}
 </style>
 </head>
 <body>
@@ -529,7 +538,7 @@ html.fx-off .btn.primary:after,html.fx-off .brain-layer.idle,html.fx-off .phone{
     <button class="tab" data-go="dashboard">Clinic Dashboard</button>
     <button class="tab" data-go="directory">World Directory</button>
   </div>
-  <div class="fxwrap notranslate"><button id="fxBtn" aria-label="Style settings">🎛️ Style</button>
+  <div class="fxwrap notranslate"><button id="fxBtn" aria-label="Style settings" title="Style: motion, colours, font, size">🎛️</button>
     <div class="fx-panel" id="fxPanel">
       <h4>MOTION</h4><div class="fx-seg" id="fxMotion"><button data-m="0">Off</button><button data-m=".25">Low</button><button data-m=".45">Medium</button><button data-m="1">High</button></div>
       <h4>COLOURS</h4><div class="fx-row"><span>Change colours while scrolling &amp; per tab</span><button class="sw" id="fxColors"></button></div>
@@ -545,7 +554,6 @@ html.fx-off .btn.primary:after,html.fx-off .brain-layer.idle,html.fx-off .phone{
     </div></div>
   <div class="lang notranslate"><button id="langBtn" aria-label="Change language">🌐 EN</button>
     <div class="lang-menu" id="langMenu"></div></div>
-  <a class="sos-pill" id="navSos" href="tel:112">🚑 112</a>
 </nav>
 
 <!-- ================= HOME ================= -->
@@ -789,6 +797,7 @@ html.fx-off .btn.primary:after,html.fx-off .brain-layer.idle,html.fx-off .phone{
 </div>
 
 <!-- ================= AI CHAT SIDE PANEL ================= -->
+<a class="sos-float" id="navSos" href="tel:112" aria-label="Call emergency number">🚑 112</a>
 <button class="fab" id="chatFab" aria-label="Open AI chat"><span class="fdot"></span>💬 Ask AI</button>
 <aside class="drawer" id="drawer" aria-label="AI receptionist chat">
   <div class="chat-head"><div class="av">S</div><div style="min-width:0"><b>Sunrise Medical Center</b><span id="aiBadge">AI Receptionist · connecting…</span></div>
