@@ -16,6 +16,12 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 - 🚕 **Ride booking** links per country (Uber, Ola, Rapido, Lyft, Careem, Grab, Bolt…)
 - 🔒 **Clinic dashboard** with admin and doctor roles, hashed passwords, private patient data
 - 🎛️ **Style panel**: motion level, colours, font and text size
+- 👤 **Patient and doctor accounts**: follow favourite doctors, see who is online now, private messages; doctors edit their own profile (Instagram, Telegram, WhatsApp, Facebook, YouTube, LinkedIn)
+- 🎓 **University doctors**: AI search of official websites (AIIMS, IIT and NIT hospitals, medical colleges) with a source link for every name
+- 📮 **PIN / ZIP code search** in the directory and on the map
+- 🧍 **Live map**: you appear as a person that walks, runs or drives as you move (GPS + motion sensor)
+- ☎️ **Helplines per country**: emergency, women and harassment, suicide and emotional support, children
+- 📚 **Bookworm**: free medical books (Open Library, Google Books, OpenStax, NCBI, WHO and more)
 
 ## Run it on your computer (macOS)
 1. Double-click **`start.command`**. The first run sets everything up.

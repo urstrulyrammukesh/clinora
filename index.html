@@ -523,6 +523,156 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 #langToast{bottom:92px!important}
 @media(max-width:600px){.sos-float{left:14px;bottom:14px;padding:11px 14px;font-size:14px}}
 @media (prefers-reduced-motion: reduce){.sos-float{animation:none}}
+
+/* ===== NORMAL-WEBSITE LISTING CARDS (like Google Maps / Instagram) ===== */
+.ic{display:inline-block;vertical-align:middle;flex:0 0 auto}
+.lc{display:flex;gap:14px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);transition:border-color .2s,background .2s;font-family:var(--sys)}
+.lc:hover{border-color:hsla(var(--h),78%,50%,.5)}
+.lc.sel{border-color:var(--teal)}
+.lc.place{margin-bottom:10px;cursor:pointer;padding:16px}
+.lc.hl{background:linear-gradient(135deg,hsla(var(--h),78%,50%,.07),var(--panel2));border-color:hsla(var(--h),78%,50%,.35)}
+.lc-av{flex:0 0 44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:15px;color:#fff;background:hsl(var(--avh,200),45%,38%);position:relative}
+.lc-av .dot{position:absolute;right:0;bottom:0;width:12px;height:12px;border-radius:50%;border:2px solid var(--panel2);background:#6b7785}
+.lc-av .dot.on{background:var(--green)}
+.lc-b{flex:1;min-width:0}
+.lc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lc h5{font-size:16px;font-weight:600;line-height:1.3;letter-spacing:-.1px;margin:0;color:var(--text)}
+.lc-sub{font-size:13.5px;color:var(--mute);margin-top:2px}
+.lc-st{font-size:13.5px;margin-top:6px;color:var(--mute)}
+.lc-st b{font-weight:600}
+.lc-st.open b{color:#3ddc84}.lc-st.closed b{color:#ff6b7d}.lc-st.unk b{color:var(--mute);font-weight:500}
+.lc-ln{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:#c3ccd5;margin-top:6px;line-height:1.45;word-break:break-word}
+.lc-ln .ic{margin-top:2px;color:var(--mute)}
+.lc-ln a{color:#8ab4f8}.lc-ln a:hover{text-decoration:underline}
+.lc-acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.lc-acts a,.lc-acts button{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--text);transition:background .15s,border-color .15s}
+.lc-acts a:hover,.lc-acts button:hover{background:var(--panel);border-color:#2c3744}
+.lc-acts .pri{background:hsla(var(--h),78%,50%,.15);border-color:transparent;color:var(--teal)}
+.lc-acts .fav.on{color:#ff6b9a;border-color:#ff6b9a66}
+.lc-pill{font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:var(--panel);color:var(--mute);border:1px solid var(--line);white-space:nowrap}
+.lc-pill.live{color:#3ddc84;border-color:#3ddc8455}
+.lc-pill.live:before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#3ddc84;margin-right:6px;vertical-align:1px;animation:livePulse 1.6s infinite}
+@keyframes livePulse{50%{box-shadow:0 0 0 4px #3ddc8433}}
+.lc-pill.v{color:var(--teal);border-color:hsla(var(--h),78%,50%,.4)}
+
+/* ===== NAV: account button, clickable logo ===== */
+.logo-mark{background:hsl(var(--lh,var(--h)),80%,52%);transition:background .5s}
+.brand{cursor:pointer}
+.logo-mark.spin{animation:logoSpin .8s cubic-bezier(.2,.8,.2,1.2)}
+@keyframes logoSpin{0%{transform:rotate(0) scale(1)}40%{transform:rotate(200deg) scale(1.35)}100%{transform:rotate(360deg) scale(1)}}
+.acct-btn{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;position:relative;font-weight:700;font-size:15px}
+.acct-btn:hover{border-color:var(--teal)}
+.acct-btn.in{background:hsl(var(--h),70%,42%);color:#fff;border-color:transparent}
+.acct-btn i{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--red);color:#fff;font-size:10px;font-style:normal;display:none;place-items:center}
+.acct-btn i.on{display:grid}
+
+/* ===== HELP SHEET (112 button) ===== */
+.sheet{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center}
+.sheet.on{display:flex;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0}}
+.sheet-card{width:min(560px,100%);max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:20px 20px 0 0;padding:22px 22px 28px;animation:sheetUp .3s cubic-bezier(.2,.8,.2,1);position:relative}
+@media(min-width:700px){.sheet{align-items:center}.sheet-card{border-radius:20px}}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:0}}
+.sheet-card h3{font-size:22px;margin-bottom:4px}
+.sheet-x{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;background:var(--panel2)}
+.hgrp{margin-top:16px}.hgrp h4{font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--panel2)}
+.hrow b{font-size:17px}.hrow span{font-size:13px;color:var(--mute)}
+.hrow a{flex-shrink:0;padding:8px 14px;border-radius:99px;background:var(--red);color:#fff;font-weight:600;font-size:13px}
+.hrow.calm a{background:hsla(var(--h),78%,50%,.18);color:var(--teal)}
+.help-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.help-acts button,.help-acts a{padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);font-weight:600;font-size:14px;text-align:center}
+.help-acts button:hover,.help-acts a:hover{border-color:var(--teal)}
+
+/* ===== MAP: you as a person, moving ===== */
+.me-wrap{position:relative;width:56px;height:56px;display:grid;place-items:center;pointer-events:auto}
+.me-ring{position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle,rgba(74,163,255,.45),rgba(74,163,255,0) 70%);animation:meRing 2s infinite}
+@keyframes meRing{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.6);opacity:0}}
+.me-fig{position:relative;font-size:34px;line-height:1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));transform-origin:50% 90%}
+.me-fig.walk{animation:meWalk .55s ease-in-out infinite}
+.me-fig.run{animation:meWalk .3s ease-in-out infinite}
+.me-fig.still{animation:meIdle 2.4s ease-in-out infinite}
+.me-fig.flip{scale:-1 1}
+@keyframes meWalk{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-5px) rotate(4deg)}}
+@keyframes meIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+.me-tag{position:absolute;bottom:-16px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;background:#4aa3ff;color:#fff;white-space:nowrap}
+.move-chip{position:absolute;left:12px;top:12px;z-index:5;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:99px;background:rgba(12,16,21,.88);border:1px solid var(--line);font-size:13px;font-weight:600;backdrop-filter:blur(6px)}
+.move-chip small{color:var(--mute);font-weight:500}
+.move-chip button{font-size:12px;color:var(--teal);font-weight:600}
+
+/* ===== ACCOUNT ===== */
+.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.acct-grid .card{padding:22px}
+.seg2{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--bg);padding:4px;border-radius:10px;margin-bottom:12px}
+.seg2 button{padding:9px;border-radius:7px;color:var(--mute);font-weight:600}
+.seg2 button.on{background:var(--teal);color:#021512}
+.acct-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.acct-head .lc-av{flex-basis:56px;height:56px;font-size:20px}
+.acct-head h3{font-size:22px}
+.sw-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.inbox{display:grid;grid-template-columns:260px 1fr;min-height:380px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.inbox .threads{border-right:1px solid var(--line);overflow:auto;max-height:520px}
+.thr{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;align-items:center}
+.thr:hover,.thr.on{background:var(--panel2)}
+.thr .lc-av{flex-basis:36px;height:36px;font-size:13px}
+.thr b{font-size:14px;display:block}.thr small{color:var(--mute);font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+.thr em{margin-left:auto;background:var(--red);color:#fff;font-style:normal;font-size:11px;border-radius:99px;padding:1px 7px}
+.conv{display:flex;flex-direction:column;min-width:0}
+.conv-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;display:flex;gap:8px;align-items:center}
+.conv-m{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;max-height:420px}
+.bub{max-width:75%;padding:9px 13px;border-radius:16px;background:var(--panel2);font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.bub.me{align-self:flex-end;background:hsl(var(--h),65%,38%);color:#fff;border-bottom-right-radius:4px}
+.bub small{display:block;font-size:10.5px;opacity:.65;margin-top:3px}
+.conv-f{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+.conv-f input{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:99px;padding:10px 16px;font:inherit}
+.empty-note{color:var(--mute);padding:24px;text-align:center;font-size:14px}
+@media(max-width:860px){.acct-grid,.inbox{grid-template-columns:1fr}.inbox .threads{max-height:220px;border-right:0;border-bottom:1px solid var(--line)}}
+
+/* ===== UNIVERSITY DOCTORS ===== */
+.uni-box{padding:22px;margin-bottom:22px}
+.uni-box h3{font-size:20px}.uni-box p{color:var(--mute);font-size:14px;margin-top:4px;max-width:760px}
+.uni-form{display:grid;grid-template-columns:1.4fr 1fr auto;gap:10px;margin-top:14px}
+.uni-form input{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:12px 14px;border-radius:9px;font:inherit;font-size:14px}
+.uni-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.uni-res{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:14px}
+.uni-doc{display:flex;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.uni-doc b{font-size:15px;display:block}.uni-doc span{font-size:13px;color:var(--mute);display:block}
+.uni-doc a{font-size:12.5px;color:#8ab4f8;margin-top:4px;display:inline-block}
+@media(max-width:760px){.uni-form{grid-template-columns:1fr}}
+
+/* ===== BOOKWORM (free books) ===== */
+.bw-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:0;overflow:hidden;padding:0;margin-bottom:18px;align-items:center}
+.bw-hero img{width:100%;height:100%;min-height:260px;object-fit:cover;display:block}
+.bw-hero .in{padding:28px}
+.bw-hero h3{font-size:26px;letter-spacing:-.4px}
+.bw-hero p{color:var(--mute);margin:8px 0 16px}
+.book-search{display:flex;gap:8px}
+.book-search input{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:13px 16px;border-radius:99px;font:inherit;font-size:15px}
+.book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin:16px 0 30px}
+.book{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);transition:border-color .2s}
+.book:hover{border-color:var(--teal)}
+.book .cv{aspect-ratio:2/3;border-radius:8px;background:linear-gradient(160deg,hsl(var(--avh,200),45%,32%),hsl(calc(var(--avh,200) + 40),50%,18%));display:grid;place-items:center;overflow:hidden;font-size:34px}
+.book .cv img{width:100%;height:100%;object-fit:cover}
+.book b{font-size:14px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.book span{font-size:12.5px;color:var(--mute)}
+.book .rd{margin-top:auto;font-size:13px;font-weight:600;color:var(--teal)}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:12px}
+.shelf a{display:flex;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);transition:border-color .2s}
+.shelf a:hover{border-color:var(--teal)}
+.shelf .e{font-size:26px;flex-shrink:0}
+.shelf b{display:block;font-size:14.5px}.shelf span{display:block;font-size:12.5px;color:var(--mute);margin-top:2px}
+.shelf-h{font-size:20px;margin-top:10px}
+@media(max-width:860px){.bw-hero{grid-template-columns:1fr}}
+
+/* ===== MORE MOTION while scrolling (any direction) ===== */
+.tab{rotate:calc(var(--vel,0) * 7deg)}
+.logo-mark{rotate:calc(var(--vel,0) * -40deg)}
+.page-title h2,.sec-head h2{scale:1 calc(1 + var(--vela,0) * .18);transform-origin:50% 100%}
+.step,.fcol,.price,.lc,.book,.shelf a,.uni-doc,.stat,.ticker>div{translate:0 calc(var(--vel,0) * -30px);rotate:calc(var(--vel,0) * -1.4deg)}
+.lc:nth-child(2n),.book:nth-child(2n),.step:nth-child(2n),.shelf a:nth-child(2n){translate:0 calc(var(--vel,0) * -48px);rotate:calc(var(--vel,0) * 1.4deg)}
+.lc-acts a,.lc-acts button{translate:calc(var(--vel,0) * 6px) 0}
+html.fx-off .tab,html.fx-off .logo-mark,html.fx-off .lc,html.fx-off .book{rotate:none;translate:none}
+@media (prefers-reduced-motion: reduce){.tab,.logo-mark,.lc,.book,.step,.fcol,.price,.shelf a,.uni-doc{rotate:none!important;translate:none!important;scale:none!important}}
 </style>
 </head>
 <body>
@@ -537,10 +687,11 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
     <button class="tab" data-go="nearby">Nearby Doctors</button>
     <button class="tab" data-go="dashboard">Clinic Dashboard</button>
     <button class="tab" data-go="directory">World Directory</button>
+    <button class="tab" data-go="books">Bookworm</button>
   </div>
   <div class="fxwrap notranslate"><button id="fxBtn" aria-label="Style settings" title="Style: motion, colours, font, size">🎛️</button>
     <div class="fx-panel" id="fxPanel">
-      <h4>MOTION</h4><div class="fx-seg" id="fxMotion"><button data-m="0">Off</button><button data-m=".25">Low</button><button data-m=".45">Medium</button><button data-m="1">High</button></div>
+      <h4>MOTION</h4><div class="fx-seg" id="fxMotion"><button data-m="0">Off</button><button data-m=".25">Low</button><button data-m=".55">Medium</button><button data-m="1">High</button></div>
       <h4>COLOURS</h4><div class="fx-row"><span>Change colours while scrolling &amp; per tab</span><button class="sw" id="fxColors"></button></div>
       <div id="fxHueBox" style="margin-top:10px"><div class="fx-row" style="margin-bottom:6px"><span>Main colour</span><span id="fxHueDot" style="width:18px;height:18px;border-radius:50%;background:var(--teal)"></span></div>
         <input type="range" id="fxHue" min="0" max="359"><div class="hue-bar"></div></div>
@@ -552,6 +703,7 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
       <h4>TEXT SIZE</h4><div class="fx-seg" id="fxSize"><button data-s=".9">A−</button><button data-s="1">A</button><button data-s="1.1">A+</button><button data-s="1.2">A++</button></div>
       <div style="margin-top:14px;text-align:right"><button class="btn ghost sm" id="fxReset">↺ Reset</button></div>
     </div></div>
+  <button class="acct-btn" id="acctBtn" data-go="account" aria-label="Your account" title="Your account">👤<i id="acctDot"></i></button>
   <div class="lang notranslate"><button id="langBtn" aria-label="Change language">🌐 EN</button>
     <div class="lang-menu" id="langMenu"></div></div>
 </nav>
@@ -670,11 +822,11 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
     <div class="near-wrap">
       <div class="card near-list">
         <div class="near-tools">
-          <div class="loc-row"><button class="btn primary sm" id="gpsBtn">📍 My location</button><input id="areaIn" placeholder="Or type any city / area, worldwide…"><button class="btn ghost sm" id="areaBtn">Search</button></div>
+          <div class="loc-row"><button class="btn primary sm" id="gpsBtn">📍 My location</button><input id="areaIn" placeholder="Or type any city, area or PIN code…"><button class="btn ghost sm" id="areaBtn">Search</button></div>
           <div class="chips" id="chips">
             <button class="chip on" data-f="all">All</button><button class="chip" data-f="hospital">🏥 Hospital</button>
             <button class="chip" data-f="clinic">Clinic</button><button class="chip" data-f="dentist">🦷 Dentist</button><button class="chip" data-f="laboratory">🧪 Lab</button>
-            <button class="chip" data-f="doctors">👨‍⚕️ Doctor</button><button class="chip" data-f="open">🟢 Open only</button>
+            <button class="chip" data-f="doctors">👨‍⚕️ Doctor</button><button class="chip" data-f="local">🏘️ Local doctors</button><button class="chip" data-f="open">🟢 Open only</button>
           </div>
           <div id="nearStatus">Waiting for location…</div>
         </div>
@@ -697,11 +849,18 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
     </div>
     <form class="card dir-search" id="dirForm">
       <input id="dirName" placeholder="Name (optional), e.g. St Mary's, Apollo, Mayo…">
-      <input id="dirCity" placeholder="City or country, e.g. Dubai, Kenya, Toronto" required>
+      <input id="dirCity" placeholder="City, country or PIN / ZIP code, e.g. Dubai or 110001" required>
       <select id="dirType"><option value="hospital">🏥 Hospitals</option><option value="clinic">Clinics</option><option value="doctors">👨‍⚕️ Doctors</option><option value="dentist">🦷 Dentists</option><option value="pharmacy">💊 Pharmacies</option><option value="laboratory">🧪 Labs &amp; diagnostics</option><option value="university">🎓 Universities &amp; colleges</option></select>
       <button class="btn primary sm" type="submit">🔍 Search</button>
     </form>
-    <div class="cities" id="cityChips"><span>POPULAR</span></div>
+    <div class="cities" id="cityChips"><button class="chip" type="button" id="dirNear">📍 Near me</button><span>POPULAR</span></div>
+    <div class="card uni-box" id="uniBox">
+      <h3>🎓 Doctors at universities &amp; institutes</h3>
+      <p>Search the official websites of AIIMS, PGIMER, IIT and NIT hospitals, medical colleges and universities anywhere in the world. Every name links to the official page it came from.</p>
+      <form class="uni-form" id="uniForm"><input id="uniQ" required placeholder="Institute, e.g. AIIMS New Delhi or IIT Bombay Hospital"><input id="uniDept" placeholder="Department (optional), e.g. Cardiology"><button class="btn primary sm" type="submit">Search websites</button></form>
+      <div class="uni-chips" id="uniChips"></div>
+      <div id="uniStatus" style="margin-top:12px;color:var(--mute);font-size:14px"></div><div class="uni-res" id="uniRes"></div>
+    </div>
     <div class="dir-grid">
       <div><div id="dirStatus">Pick a city above or type any place in the world.</div><div class="dir-results" id="dirResults"></div></div>
       <div class="card">
@@ -714,6 +873,8 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
           <div class="two"><div><label>PHONE (WITH COUNTRY CODE) *</label><input id="rPhone" required placeholder="+1 555 010 0200"></div>
             <div><label>EMAIL</label><input id="rEmail" type="email" placeholder="clinic@example.com"></div></div>
           <label>WEBSITE</label><input id="rWeb" placeholder="https://…">
+          <div class="two"><div><label>INSTAGRAM</label><input id="rIg" placeholder="@yourclinic"></div><div><label>TELEGRAM</label><input id="rTg" placeholder="@yourclinic"></div></div>
+          <label>FACEBOOK</label><input id="rFb" placeholder="facebook page name">
           <label>ADDRESS *</label><input id="rAddr" required placeholder="Street, area">
           <div class="two"><div><label>CITY *</label><input id="rCity" required placeholder="City"></div>
             <div><label>COUNTRY *</label><input id="rCountry" required list="countryList" placeholder="Country"></div></div>
@@ -723,10 +884,41 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
           <button class="btn primary" type="submit">Add my listing</button>
           <div id="regMsg"></div>
           <div id="regList"></div>
+          <p style="font-size:13px;margin-top:6px">Want to edit your profile later, go online and get messages from patients? <a class="teal" href="#account" data-go="account">Create a free doctor account</a>.</p>
           <p style="font-size:11.5px">Listings are saved in the Clinora database. Coming soon: each doctor's licence is checked before a "Verified" badge is shown.</p>
         </form>
       </div>
     </div>
+  </div>
+</div>
+
+
+<!-- ================= BOOKWORM: free medical books ================= -->
+<div class="view" id="v-books">
+  <div class="page">
+    <div class="page-title">
+      <div><div class="kicker">BOOKWORM</div><h2>Free medical books</h2></div>
+      <p>Read and study real medical books for free: open textbooks, public-domain classics and official health manuals from around the world. Everything here is free and legal to read.</p>
+    </div>
+    <div class="card bw-hero"><img src="assets/bookworm.jpg" alt="A cute bookworm doctor reading a medical book" onerror="this.style.display='none'">
+      <div class="in"><h3>What do you want to learn today?</h3><p>Search millions of free books on Google Books and the Open Library, or start with a hand-picked shelf below.</p>
+        <form class="book-search" id="bookForm"><input id="bookQ" placeholder="e.g. anatomy, heart, nursing, first aid" required><button class="btn primary sm" type="submit">Search</button></form>
+        <div class="uni-chips" id="bookChips"></div></div></div>
+    <div id="bookStatus" style="color:var(--mute);font-size:14px"></div>
+    <div class="book-grid" id="bookRes"></div>
+    <h3 class="shelf-h">Hand-picked free shelves</h3>
+    <div class="shelf" id="shelf"></div>
+  </div>
+</div>
+
+<!-- ================= MY ACCOUNT (patients & doctors) ================= -->
+<div class="view" id="v-account">
+  <div class="page">
+    <div class="page-title">
+      <div><div class="kicker">MY CLINORA</div><h2>Your account</h2></div>
+      <p>Patients follow their favourite doctors, see when they are online and message them. Doctors run their own public profile, go online when they are free and answer patients.</p>
+    </div>
+    <div id="acctBox"></div>
   </div>
 </div>
 
@@ -797,7 +989,9 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 </div>
 
 <!-- ================= AI CHAT SIDE PANEL ================= -->
-<a class="sos-float" id="navSos" href="tel:112" aria-label="Call emergency number">🚑 112</a>
+<a class="sos-float" id="navSos" href="tel:112" aria-label="Emergency numbers and helplines">🚑 112</a>
+<div class="sheet" id="helpSheet" role="dialog" aria-modal="true" aria-label="Emergency numbers and helplines"><div class="sheet-card"><button class="sheet-x" id="helpX" aria-label="Close">✕</button>
+  <h3>Get help now</h3><p style="color:var(--mute);font-size:14px" id="helpWhere"></p><div id="helpBody"></div></div></div>
 <button class="fab" id="chatFab" aria-label="Open AI chat"><span class="fdot"></span>💬 Ask AI</button>
 <aside class="drawer" id="drawer" aria-label="AI receptionist chat">
   <div class="chat-head"><div class="av">C</div><div style="min-width:0"><b>Clinora Medical Center</b><span id="aiBadge">AI Receptionist · connecting…</span></div>
@@ -832,7 +1026,7 @@ const dayPhrase=s=>{const l=dateLabel(s);return /^(Today|Tomorrow)$/.test(l)?l.t
 const dateLabel=s=>{const d=new Date(s+'T00:00');const t=ymd(new Date()),k=ymd(addDays(new Date(),1));return s===t?'Today':s===k?'Tomorrow':`${DAYN[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`};
 
 /* ---------- STYLE SETTINGS (motion, colours, font, size) ---------- */
-const FX=Object.assign({motion:.45,colors:true,hue:170,font:'modern',size:1},(()=>{try{return JSON.parse(localStorage.getItem('sd_fx'))||{}}catch{return {}}})());
+const FX=Object.assign({motion:1,colors:true,hue:170,font:'modern',size:1},(()=>{try{const o=JSON.parse(localStorage.getItem('sd_fx'))||{};if(o.v!==2){o.motion=1;o.v=2}return o}catch{return {v:2}}})());
 const FONTS={modern:'-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif',
   rounded:'ui-rounded,"SF Pro Rounded","Nunito","Varela Round",-apple-system,"Segoe UI",Roboto,sans-serif',
   elegant:'ui-serif,"New York","Iowan Old Style",Georgia,"Times New Roman",serif',
@@ -864,7 +1058,7 @@ function applyDB(d){const sig=JSON.stringify(d);DBok=true;if(sig===DBsig)return;
 function refreshViews(){
   if(document.getElementById('v-dashboard').classList.contains('active'))renderDash();
   if(typeof nearInit!=='undefined'&&nearInit)refreshPartners();
-  if(typeof dirInit!=='undefined'&&dirInit)renderRegList();
+  if(typeof dirInit!=='undefined'&&dirInit){renderRegList();if(dirResults.some(p=>p.reg)){const byId=new Map(DB.listings.map(r=>[r.id,r]));dirResults=dirResults.map(p=>p.reg&&byId.has(p.id)?regToPlace(byId.get(p.id)):p);renderDir()}}
 }
 async function loadDB(){try{const r=await fetch('/api/data');if(!r.ok)throw 0;applyDB(await r.json());dbBanner(false)}catch{DBok=false;dbBanner(true)}}
 async function api(path,body={}){
@@ -973,7 +1167,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);window.scrollTo(0,0);openCall(v.slice(5));return}
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
-  if(!['home','nearby','dashboard','directory'].includes(v)) v='home';
+  if(!['home','nearby','dashboard','directory','books','account'].includes(v)) v='home';
   $$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));
   $$('.tab').forEach(e=>e.classList.toggle('active',e.dataset.go===v));
   if(location.hash!=='#'+v) history.replaceState(null,'','#'+v);
@@ -981,6 +1175,9 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(v==='dashboard') renderDash();
   if(v==='nearby') initNearby();
   if(v==='directory') initDirectory();
+  if(v==='books') initBooks();
+  if(v==='account') renderAccount();
+  if(v!=='nearby') stopMoveWatch();
 }
 document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){e.preventDefault();go(g.dataset.go)}});
 window.addEventListener('hashchange',()=>go(location.hash.slice(1)));
@@ -1074,6 +1271,7 @@ async function runTool(name,a){
     case 'search_directory':{go('directory');$('#dirCity').value=a.city;$('#dirName').value='';$('#dirType').value=a.type;await dirSearch(a.city,'',a.type);
       return {city:a.city,type:a.type,shown_on_page:true,results:dirResults.slice(0,8).map(p=>({name:p.name,address:p.addr,phone:p.phone||null,open_now:p.st?p.st.open:null})),total:dirResults.length}}
     case 'show_page':go(a.page);return {opened:a.page};
+    case 'get_helplines':return helplinesFor(COUNTRY);
     case 'show_ride_options':{const cp=clinicPlace();openRide(cp);return {opened:true,apps:((CC_RIDES[(cp.cc||COUNTRY||'').toUpperCase()]||DEFAULT_RIDES)).map(k=>RIDE_APPS[k].n)}}
     default:throw new Error('Unknown tool '+name);
   }
@@ -1302,12 +1500,12 @@ function useGPS(){
   const my=++locReq;
   setStatus('📡 Getting your GPS location…');
   if(!navigator.geolocation){return setLoc(DEFAULT.lat,DEFAULT.lon,DEFAULT.label,DEFAULT.cc)}
-  navigator.geolocation.getCurrentPosition(p=>my===locReq&&setLoc(p.coords.latitude,p.coords.longitude,'Your live location'),
+  navigator.geolocation.getCurrentPosition(p=>{gotFix(p);if(my===locReq)setLoc(p.coords.latitude,p.coords.longitude,'Your live location');startMoveWatch()},
     ()=>my===locReq&&setLoc(DEFAULT.lat,DEFAULT.lon,DEFAULT.label+'. Location permission was not given. Search any city above',DEFAULT.cc),{enableHighAccuracy:true,timeout:8000});
 }
 async function searchArea(){
   const qv=$('#areaIn').value.trim();if(!qv)return;locReq++;setStatus('🔍 Searching for "'+qv+'"…');
-  try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=${encodeURIComponent(qv)}`);const j=await r.json();
+  try{const j=await geocode(qv);
     if(!j.length)return setStatus('😕 Area not found. Try another name or PIN code.');setLoc(+j[0].lat,+j[0].lon,j[0].display_name.split(',').slice(0,3).join(','),(j[0].address||{}).country_code)}
   catch{setStatus('⚠️ Search failed (check your internet).')}
 }
@@ -1336,7 +1534,7 @@ async function setLoc(lat,lon,label,cc){
   renderPlaces();
 }
 async function overpass(lat,lon,R){
-  const qq=`[out:json][timeout:25];(nwr["amenity"~"^(clinic|hospital|doctors|dentist)$"](around:${R},${lat},${lon});nwr["healthcare"~"^(clinic|hospital|doctor|dentist|laboratory)$"](around:${R},${lat},${lon}););out center tags 80;`;
+  const qq=`[out:json][timeout:25];(nwr["amenity"~"^(clinic|hospital|doctors|dentist)$"](around:${R},${lat},${lon});nwr["healthcare"~"^(clinic|hospital|doctor|dentist|laboratory|physiotherapist|optometrist|psychotherapist|counselling|midwife|alternative|centre|rehabilitation)$"](around:${R},${lat},${lon}););out center tags 150;`;
   const EP=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
   let j=null;
   for(const ep of EP){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),7000);
@@ -1367,17 +1565,12 @@ function stCls(p){return !p.st?'unk':p.st.open?'open':'closed'}
 function renderPlaces(){
   if(!userLoc)return;
   places.forEach(p=>p.d=dist(userLoc,p));
-  let list=places.filter(p=>filter==='all'?true:filter==='open'?p.st&&p.st.open:p.type===filter);
+  let list=places.filter(p=>filter==='all'?true:filter==='open'?p.st&&p.st.open:filter==='local'?!/^(hospital|university|college)$/.test(p.type):p.type===filter);
   const rank=p=>(p.partner?0:1)+(p.st&&p.st.open?0:p.st?2:1);
   list.sort((a,b)=>rank(a)-rank(b)||a.d-b.d);
   const hosp=places.filter(p=>p.type==='hospital').sort((a,b)=>a.d-b.d)[0];
   $('#nearestHosp').innerHTML=hosp?`🏥 Nearest hospital: <b style="color:var(--text)">${esc(hosp.name)}</b> · ${fmtD(hosp.d)} · <a class="teal" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${hosp.lat},${hosp.lon}">🧭 Directions</a>${hosp.phone?` · <a class="teal" href="tel:${esc(hosp.phone)}">📞 ${esc(hosp.phone)}</a>`:''}`:'🏥 Finding the nearest hospital…';
-  $('#nearItems').innerHTML=list.length?list.map((p,i)=>{const c=stCls(p);const lbl=p.st?p.st.label:'Hours unknown: call to confirm';
-    return `<div class="place ${p.partner||p.reg?'partner':''}" data-i="${places.indexOf(p)}"><div class="top"><h5>${esc(p.name)}</h5><span class="badge ${p.partner?'v':''}">${p.partner?'✓ VERIFIED LIVE':p.reg?'JOINED CLINORA':p.sample?'SAMPLE · '+esc(p.type.toUpperCase()):esc(p.type.toUpperCase())}</span></div>
-      <div class="st ${c}">${c==='open'?'OPEN NOW':c==='closed'?'CLOSED':'?'} · ${esc(lbl)}</div>
-      <div class="meta"><span>📏 ${fmtD(p.d)} away</span>${p.addr?`<span>📍 ${esc(p.addr)}</span>`:''}${p.docs?`<span>👨‍⚕️ ${esc(p.docs)}</span>`:''}${p.phone?`<span>📞 ${esc(p.phone)}</span>`:''}</div>
-      <div class="acts">${p.phone?`<a href="tel:${esc(p.phone.split(';')[0])}">📞 Call</a>`:''}<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">🧭 Directions</a><button data-prof="${places.indexOf(p)}">👤 Profile</button><button data-ride="${places.indexOf(p)}">🚕 Ride</button><button data-fly="${places.indexOf(p)}">🗺️ Map</button>${p.partner?`<button data-go="demo">📅 Book with AI</button>`:''}</div></div>`}).join('')
-    :'<div class="empty">Nothing found for this filter.</div>';
+  $('#nearItems').innerHTML=list.length?list.map(p=>lcard(p,places.indexOf(p),'near')).join(''):'<div class="empty">Nothing found for this filter.</div>';
   $$('#nearItems .place').forEach(el=>el.onclick=e=>{if(e.target.closest('a,button[data-go],button[data-prof],button[data-ride]'))return;fly(+el.dataset.i)});
   drawMarkers(list);
 }
@@ -1396,8 +1589,9 @@ function setupMap(){
 }
 function drawMarkers(list){
   if(!map)return;markers.forEach(m=>m.remove());markers=[];
-  const me=document.createElement('div');me.className='pin me';
-  markers.push(new maplibregl.Marker({element:me}).setLngLat([userLoc.lon,userLoc.lat]).setPopup(new maplibregl.Popup({offset:14}).setHTML('<b>📍 You are here</b>')).addTo(map));
+  if(!gpsLoc||dist(gpsLoc,userLoc)>0.3){const me=document.createElement('div');me.className='pin me';
+    markers.push(new maplibregl.Marker({element:me}).setLngLat([userLoc.lon,userLoc.lat]).setPopup(new maplibregl.Popup({offset:14}).setHTML('<b>📍 Search area</b>')).addTo(map))}
+  placeMe();
   list.forEach(p=>{const el=document.createElement('div');el.className='pin '+(p.partner?'partner':stCls(p));
     const pop=new maplibregl.Popup({offset:16}).setHTML(`<b>${esc(p.name)}</b><br><span style="color:${p.st?(p.st.open?'#2ee07a':'#ff3d55'):'#ffb547'}">${p.st?esc(p.st.label):'Hours unknown'}</span><br>${fmtD(p.d)}${p.phone?`<br>📞 <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>`:''}<br><a style="color:#19e3c4" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">🧭 Directions</a> · <a style="color:#19e3c4" href="#" data-prof="${places.indexOf(p)}">👤 Profile</a>`);
     const m=new maplibregl.Marker({element:el}).setLngLat([p.lon,p.lat]).setPopup(pop).addTo(map);m._i=places.indexOf(p);markers.push(m)});
@@ -1429,15 +1623,16 @@ async function nominatim(q,extra=''){
 }
 const HEALTH=/^(hospital|clinic|doctors|doctor|dentist|pharmacy|laboratory|university|college)$/;
 function regToPlace(r){return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:null,spec:r.spec,video:r.video,
-  tags:{website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},cc:r.cc}}
+  id:r.id,owner:r.owner,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
+  tags:Object.assign({website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},r.social||{}),cc:r.cc}}
 async function dirSearch(city,name,type){
   $('#dirStatus').textContent=`🔍 Searching ${TYPEWORD[type]} ${name?'named "'+name+'" ':''}in ${city}…`;$('#dirResults').innerHTML='';
   const mine=regs().filter(r=>(r.city+' '+r.country).toLowerCase().includes(city.toLowerCase())&&(!name||r.name.toLowerCase().includes(name.toLowerCase()))).map(regToPlace);
   let found=[];const tok=++dirTok;
   try{
-    const g=await nominatim(city,'&limit=1');if(tok!==dirTok)return;
-    if(!g.length){$('#dirStatus').textContent=`😕 Could not find "${city}" on the map. Check the spelling.`;return}
-    const bb=g[0].boundingbox,vb=`&bounded=1&viewbox=${bb[2]},${bb[1]},${bb[3]},${bb[0]}`;
+    const g=await geocode(city);if(tok!==dirTok)return;
+    if(!g.length){$('#dirStatus').textContent=`😕 Could not find "${city}" on the map. Check the spelling or the PIN code.`;return}
+    const bb=g[0].boundingbox,la=+g[0].lat,lo=+g[0].lon,vb=g[0].__postal?`&bounded=1&viewbox=${lo-.05},${la+.05},${lo+.05},${la-.05}`:`&bounded=1&viewbox=${bb[2]},${bb[1]},${bb[3]},${bb[0]}`;
     await new Promise(r=>setTimeout(r,1000));
     if(!name&&MULTI_Q[type]){const seen=new Set();
       for(const [i,q] of MULTI_Q[type].entries()){if(i)await new Promise(r=>setTimeout(r,1100));if(tok!==dirTok)return;
@@ -1459,12 +1654,7 @@ async function dirSearch(city,name,type){
 const dirTypeNow=()=>($('#dirType')||{}).value;
 function renderDirPartial(list){dirResults=list.slice();renderDir()}
 function renderDir(){
-  $('#dirResults').innerHTML=dirResults.map((p,i)=>{const c=stCls(p);return `<div class="dir-card ${p.reg?'reg':''}">
-    <div style="display:flex;justify-content:space-between;gap:8px"><h5>${esc(p.name)}</h5><span class="badge ${p.reg?'v':''}">${p.reg?'JOINED':/^(university|college)$/.test(p.type)?(/medic|aiims|health|nursing|dental|pharma|ayurved/i.test(p.name)?'🎓 MEDICAL COLLEGE':'🎓 '+esc(p.type.toUpperCase())):p.type==='laboratory'||LABNAME.test(p.name||'')&&p.type!=='university'&&dirTypeNow()==='laboratory'?'🧪 LAB':esc((p.type||'').toUpperCase())}</span></div>
-    ${p.st?`<div class="st ${c}" style="margin:0">${c==='open'?'OPEN NOW':'CLOSED'} · ${esc(p.st.label)}</div>`:''}
-    <div class="meta">${p.spec?`<span>🩺 ${esc(p.spec)}</span>`:''}<span>📍 ${esc(p.addr||'Address not listed')}</span>${p.phone?`<span>📞 ${esc(p.phone)}</span>`:'<span>📞 Phone not listed publicly</span>'}${p.video?'<span>📹 Video consultations</span>':''}</div>
-    <div class="acts">${p.phone?`<a href="tel:${esc(p.phone.split(';')[0])}">📞 Call</a>`:''}<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">🧭 Directions</a>
-      ${/^(university|college)$/.test(p.type)?`<a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(p.name+' UG PG courses admission')}">🎓 Courses (UG/PG)</a>`:''}<button data-dprof="${i}">👤 Profile</button><button data-dride="${i}">🚕 Ride</button><button data-dmap="${i}">🗺️ Show on map</button></div></div>`}).join('');
+  $('#dirResults').innerHTML=dirResults.map((p,i)=>lcard(p,i,'dir')).join('');
 }
 function renderRegList(){const L=regs();$('#regList').innerHTML=L.length?'<label style="display:block;margin-top:8px">LISTINGS ON CLINORA ('+L.length+')</label>'+L.slice(-8).reverse().map(r=>`<div class="reg-item"><span>${esc(r.name)} · ${esc(r.city)}</span><button type="button" data-rdel="${r.id}">Remove</button></div>`).join(''):''}
 function initDirectory(){
@@ -1479,12 +1669,13 @@ function initDirectory(){
     $('#regMsg').textContent='📍 Finding your address on the map…';
     let lat,lon;try{const j=await nominatim(`${v('#rAddr')}, ${v('#rCity')}, ${v('#rCountry')}`);if(!j.length){const k=await nominatim(`${v('#rCity')}, ${v('#rCountry')}`);if(k.length){lat=+k[0].lat;lon=+k[0].lon}}else{lat=+j[0].lat;lon=+j[0].lon}}catch{}
     if(lat==null){$('#regMsg').innerHTML='<span class="red">Could not find that address on the map. Check the city and country.</span>';return}
-    try{await api('/api/listings',{name:v('#rName'),type:$('#rType').value,spec:v('#rSpec'),phone:v('#rPhone'),email:v('#rEmail'),web,addr:v('#rAddr'),city:v('#rCity'),country:v('#rCountry'),cc:nameToCC(v('#rCountry')),video:$('#rVideo').checked,consent:$('#rConsent').checked,lat,lon})}
+    try{await api('/api/listings',{name:v('#rName'),type:$('#rType').value,spec:v('#rSpec'),phone:v('#rPhone'),email:v('#rEmail'),web,addr:v('#rAddr'),city:v('#rCity'),country:v('#rCountry'),cc:nameToCC(v('#rCountry')),video:$('#rVideo').checked,consent:$('#rConsent').checked,lat,lon,
+      social:{instagram:v('#rIg'),telegram:v('#rTg'),facebook:v('#rFb')}})}
     catch(err){$('#regMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>';return}
     $('#regMsg').innerHTML='<span class="teal">✅ Listing added! It now shows in this directory and on the Nearby map.</span>';
     $('#regForm').reset();$('#rCountry').value=countryName();renderRegList();if(nearInit)renderPlaces();};
   renderRegList();
-  $('#dirCity').value=DEFAULT.label.replace(' (default)','');dirSearch($('#dirCity').value,'', 'hospital');
+  $('#dirCity').value=window.__myCity||DEFAULT.label.replace(' (default)','');dirSearch($('#dirCity').value,'', 'hospital');
 }
 document.addEventListener('click',e=>{
   const c=e.target.closest('[data-city]');if(c){$('#dirCity').value=c.dataset.city;$('#dirName').value='';dirSearch(c.dataset.city,'',$('#dirType').value)}
@@ -1737,7 +1928,8 @@ function clinicPlace(){const p=(typeof places!=='undefined'&&places.find(x=>x.pa
 
 /* ---------- PROFILE ---------- */
 const SOC=[['website','Website','🌐','#3a4654',v=>v],['facebook','Facebook','f','#1877f2',v=>'https://facebook.com/'+v],['instagram','Instagram','IG','#d62976',v=>'https://instagram.com/'+v.replace('@','')],
- ['twitter','X / Twitter','X','#111',v=>'https://x.com/'+v.replace('@','')],['youtube','YouTube','▶','#ff0000',v=>'https://youtube.com/'+v],['linkedin','LinkedIn','in','#0a66c2',v=>'https://linkedin.com/in/'+v]];
+ ['twitter','X / Twitter','X','#111',v=>'https://x.com/'+v.replace('@','')],['x','X','X','#111',v=>'https://x.com/'+v.replace('@','')],
+ ['telegram','Telegram','✈','#229ED9',v=>'https://t.me/'+v.replace(/^@/,'')],['whatsapp','WhatsApp','✆','#25D366',v=>'https://wa.me/'+v.replace(/\D/g,'')],['youtube','YouTube','▶','#ff0000',v=>'https://youtube.com/'+v],['linkedin','LinkedIn','in','#0a66c2',v=>'https://linkedin.com/in/'+v]];
 const safeUrl=u=>{try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.href:null}catch{return null}};
 function socialLinks(t){const out=[];
   for(const [k,label,ic,col,mk] of SOC){let v=k==='website'?(t.website||t['contact:website']||t.url):(t['contact:'+k]||t[k]);if(!v)continue;v=v.split(';')[0].trim();
@@ -1751,7 +1943,7 @@ function searchLinks(name,area){const q=encodeURIComponent(`${name} ${area}`);co
   return [{label:'Google',ic:'G',col:'#4285f4',u:g(`${name} ${area}`)},{label:'Google reviews',ic:'★',col:'#fbbc05',u:`https://www.google.com/maps/search/?api=1&query=${q}`},
    ...(DIRS[COUNTRY]||[['Doctor reviews','','#6b7785','★']]).map(([l,dom,col,ic])=>({label:l,ic,col,u:g(`${dom?'site:'+dom+' ':''}${name} ${area}${dom?'':' doctor reviews'}`)})),
    {label:'Instagram',ic:'IG',col:'#d62976',u:g(`site:instagram.com ${name} ${area}`)},{label:'Facebook',ic:'f',col:'#1877f2',u:g(`site:facebook.com ${name} ${area}`)},
-   {label:'LinkedIn',ic:'in',col:'#0a66c2',u:g(`site:linkedin.com ${name} ${area}`)},{label:'YouTube',ic:'▶',col:'#ff0000',u:`https://www.youtube.com/results?search_query=${q}`}]}
+   {label:'LinkedIn',ic:'in',col:'#0a66c2',u:g(`site:linkedin.com ${name} ${area}`)},{label:'Telegram',ic:'✈',col:'#229ED9',u:g(`site:t.me ${name} ${area}`)},{label:'YouTube',ic:'▶',col:'#ff0000',u:`https://www.youtube.com/results?search_query=${q}`}]}
 const lkHtml=(l,on)=>`<a class="lk ${on?'on':''}" target="_blank" rel="noopener" href="${esc(l.u)}"><i style="background:${l.col}">${l.ic}</i>${esc(l.label)}</a>`;
 function docCard(d){return `<div class="pdoc"><div class="pav">${initials(d.name)}</div><div style="flex:1"><b>${d.name}</b> <span class="badge v">⭐ ${d.rating}</span>
   <small>${d.dept} · ${d.qual}</small><small>🩺 ${d.exp} yrs experience · 🗣️ ${d.langs} · 💰 ${feeText(d)}</small>
@@ -1776,7 +1968,7 @@ function openProfile(p){window.__profPlace=p;
        ${p.partner?`<a class="lk on" href="#demo"><i style="background:var(--teal)">📅</i>Book with AI</a>`:''}</div></div>
    ${p.team?`<div class="psec"><h4>DOCTORS (DEMO PROFILES)</h4>${p.team.map(docCard).join('')}</div>`:''}
    <div class="psec"><h4>OFFICIAL WEBSITE & SOCIAL MEDIA</h4>
-     ${p.demoSocial?`<div class="links">${[['Website','🌐','#3a4654'],['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div><div class="pnote">Demo links. A real partner clinic adds its own links from the dashboard.</div>`
+     ${p.demoSocial?`<div class="links">${[['Website','🌐','#3a4654'],['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div><div class="pnote">Demo links. A real partner clinic adds its own links from the dashboard.</div>`
        :soc.length?`<div class="links">${soc.map(l=>lkHtml(l,1)).join('')}</div><div class="pnote">✓ These links come from OpenStreetMap public data.</div>`
        :'<div class="pnote">No official links found on OpenStreetMap. Search online below 👇</div>'}</div>
    <div class="psec"><h4>FIND ONLINE (REVIEWS, PROFILES)</h4><div class="links">${searchLinks(p.name,area).map(l=>lkHtml(l)).join('')}</div>
@@ -1787,7 +1979,7 @@ function openProfile(p){window.__profPlace=p;
 function openDocProfile(id){const d=docById(id);
   $('#profBody').innerHTML=`<div class="phead"><div class="pav">${initials(d.name)}</div><div><h3>${d.name}</h3><span class="badge v">${CLINIC.name.toUpperCase()}</span></div></div>
    <div class="psec"><h4>PROFILE (DEMO)</h4>${docCard(d)}</div>
-   <div class="psec"><h4>SOCIAL MEDIA</h4><div class="links">${[['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2'],['Doctor directory','★','#6b7785']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div>
+   <div class="psec"><h4>SOCIAL MEDIA</h4><div class="links">${[['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2'],['Doctor directory','★','#6b7785']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div>
      <div class="pnote">Demo links. In the real version, doctors add their own profile links from the dashboard.</div></div>
    <div class="psec"><button class="btn primary sm" onclick="$('#prof').classList.remove('on');user('Book an appointment with ${d.dept}')">📅 Book an appointment with ${d.name}</button></div>`;
   $('#prof').classList.add('on');
@@ -1799,7 +1991,6 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-prof]');if
   const d=e.target.closest('[data-doc]');if(d)openDocProfile(d.dataset.doc)});
 
 (()=>{const q=new URLSearchParams(location.search);if(q.get('paid'))history.replaceState(null,'',location.pathname+location.search+'#paid/'+q.get('paid'))})();
-go(location.hash.slice(1)||'home');
 loadPrices();
 
 /* ================= STYLE PANEL ================= */
@@ -1817,17 +2008,17 @@ loadPrices();
   document.getElementById('fxHue').oninput=e=>{FX.colors=false;set('hue',+e.target.value)};
   P.querySelectorAll('#fxFonts button').forEach(b=>b.onclick=()=>set('font',b.dataset.f));
   P.querySelectorAll('#fxSize button').forEach(b=>b.onclick=()=>set('size',+b.dataset.s));
-  document.getElementById('fxReset').onclick=()=>{Object.assign(FX,{motion:.45,colors:true,hue:170,font:'modern',size:1});applyFX();sync()};
+  document.getElementById('fxReset').onclick=()=>{Object.assign(FX,{motion:1,colors:true,hue:170,font:'modern',size:1});applyFX();sync()};
   applyFX();sync();
 })();
 /* ================= LIVE COLOUR: scroll + tab ================= */
 (()=>{
-  const BASE={home:170,nearby:145,directory:28,dashboard:262,pay:200,call:190};
+  const BASE={home:170,nearby:145,directory:28,dashboard:262,pay:200,call:190,books:300,account:210};
   const root=document.documentElement;let cur=170,target=170,raf=0;
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   function view(){const v=(document.querySelector('.view.active')||{}).id||'v-home';return v.slice(2)}
   function compute(){const h=document.documentElement.scrollHeight-innerHeight;const p=h>0?scrollY/h:0;
-    if(!FX.colors)return FX.hue;return (BASE[view()]??170)+(reduce?0:p*140)}
+    if(!FX.colors)return FX.hue;return (BASE[view()]??170)+(window.__hueShift||0)+(reduce?0:p*140)}
   function tick(){raf=0;const d=target-cur;cur+=Math.abs(d)<.3?d:d*.12;root.style.setProperty('--h',cur.toFixed(1));if(Math.abs(target-cur)>.3)raf=requestAnimationFrame(tick)}
   function update(){target=compute();if(!raf)raf=requestAnimationFrame(tick)}
   addEventListener('scroll',update,{passive:true});addEventListener('hashchange',()=>setTimeout(update,30));
@@ -1953,7 +2144,315 @@ loadPrices();
 })();
 buildLangMenu();refreshLangInfo();
 setLang(initialLang(COUNTRY));setTimeout(()=>suggestLangFor(COUNTRY),1500);
+
+/* ================= ICONS ================= */
+const IC={phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+ nav:'<polygon points="3 11 22 2 13 21 11 13 3 11"/>',user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ car:'<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+ map:'<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>',
+ pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+ heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
+ msg:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+ cap:'<path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
+ video:'<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+ steth:'<path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>',
+ globe:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+ clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'};
+const ico=(n,sz=16)=>`<svg class="ic" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+
+/* ================= LISTING CARD (one look everywhere) ================= */
+const TYPELABEL={hospital:'Hospital',clinic:'Clinic',doctors:'Doctor',doctor:'Doctor',dentist:'Dentist',pharmacy:'Pharmacy',laboratory:'Lab & diagnostics',university:'University',college:'College',
+  physiotherapist:'Physiotherapist',optometrist:'Eye clinic',psychotherapist:'Therapist',counselling:'Counselling',midwife:'Midwife',alternative:'Alternative medicine',centre:'Health centre',rehabilitation:'Rehabilitation'};
+const isEdu=p=>/^(university|college)$/.test(p.type);
+function typeLabel(p){if(isEdu(p)&&/medic|aiims|health|nursing|dental|pharma|ayurved/i.test(p.name))return 'Medical college';
+  if(p.type!=='laboratory'&&dirTypeNow&&dirTypeNow()==='laboratory'&&LABNAME.test(p.name||''))return 'Lab & diagnostics';
+  return TYPELABEL[p.type]||String(p.type||'').replace(/_/g,' ').replace(/^./,c=>c.toUpperCase())}
+function stParts(p){if(!p.st)return ['unk','Hours not listed',''];let l=p.st.label||'';
+  if(l==='24×7 emergency')return ['open','Open 24 hours','Emergency'];if(l==='Open 24×7')return ['open','Open 24 hours',''];
+  let m=l.match(/^(Open|Closed)\s*(?:·\s*)?(.*)$/i);if(m)return [p.st.open?'open':'closed',m[1].replace(/^./,c=>c.toUpperCase()),m[2]];
+  return [p.st.open?'open':'closed',p.st.open?'Open':'Closed',l]}
+const agoText=ts=>{if(!ts)return 'Offline';const m=Math.round((Date.now()-ts)/60000);return m<60?`Last seen ${Math.max(1,m)} min ago`:m<1440?`Last seen ${Math.round(m/60)} h ago`:`Last seen ${Math.round(m/1440)} d ago`};
+function lcard(p,i,ctx){
+  const near=ctx==='near',edu=isEdu(p);const [sc,sw,sr]=stParts(p);
+  const phones=String(p.phone||'').split(';').map(x=>x.trim()).filter(Boolean).slice(0,3);
+  const fav=p.reg&&MEM.favs&&MEM.favs.includes(p.id);
+  const sub=[typeLabel(p),p.spec,near&&p.d!=null?fmtD(p.d)+' away':''].filter(Boolean).map(esc).join(' · ');
+  const pills=[p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.online?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${agoText(p.last_seen)}</span>`):'',
+    p.sample?'<span class="lc-pill">Sample</span>':'',p.video?'<span class="lc-pill">Video visits</span>':''].join('');
+  const prof=near?`data-prof="${i}"`:`data-dprof="${i}"`,ride=near?`data-ride="${i}"`:`data-dride="${i}"`,mapb=near?`data-fly="${i}"`:`data-dmap="${i}"`;
+  return `<article class="lc ${near?'place':''} ${p.partner||p.reg?'hl':''}" ${near?`data-i="${i}"`:''}>
+    <div class="lc-av" style="--avh:${hash(p.name||'x')%360}">${edu?ico('cap',20):esc(initials(p.name||'')||'+')}${p.reg?`<span class="dot ${p.online?'on':''}"></span>`:''}</div>
+    <div class="lc-b">
+      <div class="lc-top"><h5>${esc(p.name)}</h5>${pills}</div>
+      <div class="lc-sub">${sub}${p.reg&&p.followers?` · ${p.followers} follower${p.followers>1?'s':''}`:''}</div>
+      ${edu||p.reg?'':`<div class="lc-st ${sc}"><b>${esc(sw)}</b>${sr?' · '+esc(sr):''}</div>`}
+      ${p.addr?`<div class="lc-ln">${ico('pin',15)}<span>${esc(p.addr)}</span></div>`:''}
+      ${phones.length?`<div class="lc-ln">${ico('phone',15)}<span>${phones.map(x=>`<a href="tel:${esc(x.replace(/[^\d+]/g,''))}">${esc(x)}</a>`).join(', ')}</span></div>`:''}
+      ${p.docs?`<div class="lc-ln">${ico('steth',15)}<span>${esc(p.docs)}</span></div>`:''}
+      <div class="lc-acts">
+        ${phones.length?`<a class="pri" href="tel:${esc(phones[0].replace(/[^\d+]/g,''))}">${ico('phone',14)}Call</a>`:''}
+        <a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>
+        ${p.reg?`<button class="fav ${fav?'on':''}" data-follow="${p.id}">${ico('heart',14)}${fav?'Following':'Follow'}</button>`:''}
+        ${p.reg&&p.owner?`<button data-msg="${p.id}">${ico('msg',14)}Message</button>`:''}
+        ${edu?`<button data-unidocs="${esc(p.name)}">${ico('steth',14)}Doctors on website</button><a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(p.name+' UG PG courses admission')}">${ico('cap',14)}Courses</a>`:''}
+        ${ctx==='fav'?'':`<button ${prof}>${ico('user',14)}Profile</button>
+        <button ${ride}>${ico('car',14)}Ride</button>
+        <button ${mapb}>${ico('map',14)}Map</button>`}
+      </div></div></article>`;
+}
+
+/* ================= PIN / ZIP code search ================= */
+const isPostal=s=>{s=String(s||'').trim();return /^\d{3,10}$/.test(s.replace(/[\s-]/g,''))&&s.replace(/\D/g,'').length>=3||/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(s)||/^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i.test(s)};
+async function geocode(q){
+  if(isPostal(q)){const base=`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&postalcode=${encodeURIComponent(q.trim())}`;
+    let r=await fetch(base+'&countrycodes='+COUNTRY.toLowerCase()).then(x=>x.json()).catch(()=>[]);
+    if(!r.length){await new Promise(z=>setTimeout(z,1000));r=await fetch(base).then(x=>x.json()).catch(()=>[])}
+    if(r.length){r[0].__postal=true;r[0].display_name='PIN '+q.trim()+', '+r[0].display_name;return r}}
+  return nominatim(q,'&limit=1');
+}
+
+/* ================= HELPLINES (per country) ================= */
+const HELP={
+ IN:{women:[['181','Women helpline'],['1091','Women in distress (police)']],mind:[['14416','Tele-MANAS mental health, 24×7'],['1800-599-0019','KIRAN mental health helpline']],child:[['1098','Childline']],online:[['1930','Cyber crime and online harassment']]},
+ US:{mind:[['988','Suicide & Crisis Lifeline (call or text)']],women:[['1-800-799-7233','National Domestic Violence Hotline'],['1-800-656-4673','RAINN sexual assault hotline']],child:[['1-800-422-4453','Childhelp']]},
+ CA:{mind:[['988','Suicide Crisis Helpline (call or text)']],child:[['1-800-668-6868','Kids Help Phone']]},
+ GB:{mind:[['116 123','Samaritans, free 24/7'],['111','NHS 111 (option 2: mental health)']],women:[['0808 2000 247','National Domestic Abuse Helpline']],child:[['0800 1111','Childline']]},
+ IE:{mind:[['116 123','Samaritans, free 24/7']]},
+ AU:{mind:[['13 11 14','Lifeline'],['1300 22 4636','Beyond Blue']],women:[['1800 737 732','1800RESPECT']],child:[['1800 55 1800','Kids Helpline']]},
+ NZ:{mind:[['1737','Need to talk? (call or text)']]},
+ DE:{mind:[['0800 111 0 111','TelefonSeelsorge'],['0800 111 0 222','TelefonSeelsorge']],women:[['116 016','Violence against women helpline']]},
+ FR:{mind:[['3114','Suicide prevention, 24/7']],women:[['3919','Violences Femmes Info']],child:[['119','Allô Enfance en Danger']]},
+ ES:{mind:[['024','Suicide prevention line']],women:[['016','Gender violence helpline']]},
+ IT:{women:[['1522','Violence and stalking helpline']]},
+ NL:{mind:[['113','113 Suicide Prevention'],['0800-0113','113, free']]},
+ BR:{mind:[['188','CVV emotional support']],women:[['180','Women’s helpline']]},
+ MX:{mind:[['800 911 2000','Línea de la Vida']]},
+ ZA:{mind:[['0800 567 567','SADAG suicide crisis line']]},
+ SG:{mind:[['1767','Samaritans of Singapore']]},
+ PH:{mind:[['1553','NCMH crisis hotline']]},
+ BD:{women:[['109','Violence against women and children']]}};
+function helplinesFor(cc){const h=HELP[cc]||{};return {country:countryName(),emergency:emNums().map(([n,l])=>({number:n,for:l})),
+  women_and_harassment:(h.women||[]).map(([n,l])=>({number:n,name:l})),suicide_and_emotional_support:(h.mind||[]).map(([n,l])=>({number:n,name:l})),
+  children:(h.child||[]).map(([n,l])=>({number:n,name:l})),online_harassment:(h.online||[]).map(([n,l])=>({number:n,name:l})),
+  find_more:'https://findahelpline.com (free, confidential helplines in every country)'}}
+function renderHelp(){const h=HELP[COUNTRY]||{};const row=(n,l,calm)=>`<div class="hrow ${calm?'calm':''}"><div><b>${esc(n)}</b><br><span>${esc(l)}</span></div><a href="tel:${esc(n.replace(/[^\d+]/g,''))}">Call</a></div>`;
+  const grp=(t,list,calm)=>list&&list.length?`<div class="hgrp"><h4>${t}</h4>${list.map(([n,l])=>row(n,l,calm)).join('')}</div>`:'';
+  $('#helpWhere').textContent='Numbers for '+countryName()+'. Calls to these lines are free in most countries.';
+  $('#helpBody').innerHTML=grp('Emergency',emNums())+grp('Women, harassment and abuse',h.women,1)+grp('Feeling low or thinking of suicide',h.mind,1)+grp('Children',h.child,1)+grp('Online harassment',h.online,1)+
+    `<div class="hgrp"><h4>More free helplines</h4><div class="hrow calm"><div><b>Find a helpline</b><br><span>Free, confidential lines in every country</span></div><a target="_blank" rel="noopener" href="https://findahelpline.com">Open</a></div></div>
+     <div class="help-acts"><button id="helpTalk">💬 Talk to someone now (AI, private)</button><button id="helpDoc">👩‍⚕️ Talk to a doctor</button></div>`;
+  $('#helpTalk').onclick=()=>{closeHelp();supportChat()};$('#helpDoc').onclick=()=>{closeHelp();go('nearby')};}
+function openHelp(){renderHelp();$('#helpSheet').classList.add('on')}
+function closeHelp(){$('#helpSheet').classList.remove('on')}
+$('#navSos').addEventListener('click',e=>{e.preventDefault();openHelp()});
+$('#helpX').onclick=closeHelp;$('#helpSheet').onclick=e=>{if(e.target.id==='helpSheet')closeHelp()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeHelp()});
+function supportChat(){openChat();setTimeout(()=>addMsg('bot',"I'm here with you 💙 You can talk to me about anything, privately, at any time of day or night. How are you feeling right now?"),450)}
+(()=>{const em=$('.emerg');if(em){const b=document.createElement('button');b.className='btn ghost sm';b.type='button';b.textContent='☎️ More helplines';b.onclick=openHelp;em.appendChild(b)}})();
+
+/* ================= LOGO: tap to change colour ================= */
+(()=>{const LH=[350,28,48,145,170,200,262,300];let k=+(localStorage.getItem('sd_logo')||-1);
+  const set=()=>{if(k>=0)document.documentElement.style.setProperty('--lh',LH[k%LH.length])};set();
+  $('.brand').addEventListener('click',()=>{k=(k+1)%LH.length;try{localStorage.setItem('sd_logo',k)}catch{}set();
+    window.__hueShift=((window.__hueShift||0)+45)%360;const m=$('.logo-mark');m.classList.remove('spin');void m.offsetWidth;m.classList.add('spin');
+    if(window.__updateHue)setTimeout(window.__updateHue,40)});})();
+
+/* ================= SCROLL MOTION: cards, tabs and headings react to scroll speed ================= */
+(()=>{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const root=document.documentElement;let last=scrollY,lt=performance.now(),vel=0,raf=0;
+  function loop(){raf=0;vel*=.86;const M=FX.motion;if(Math.abs(vel)<.003){vel=0}
+    root.style.setProperty('--vel',(vel*M).toFixed(3));root.style.setProperty('--vela',Math.abs(vel*M).toFixed(3));if(vel)raf=requestAnimationFrame(loop)}
+  const kick=v=>{vel=Math.max(-1,Math.min(1,v));if(!raf)raf=requestAnimationFrame(loop)};
+  addEventListener('scroll',()=>{const t=performance.now(),dy=scrollY-last,dt=Math.max(16,t-lt);last=scrollY;lt=t;kick(vel*.5+dy/dt*.35)},{passive:true});
+  addEventListener('wheel',e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY))kick(vel+e.deltaX/300)},{passive:true});
+  let tx=null;addEventListener('touchmove',e=>{const x=e.touches[0].clientX;if(tx!=null&&Math.abs(x-tx)>2)kick(vel+(tx-x)/200);tx=x},{passive:true});addEventListener('touchend',()=>tx=null);
+})();
+
+/* ================= MAP: you as a person + walking / running detection ================= */
+let gpsLoc=null,meMarker=null,moveWatch=null,lastFix=null,speedEMA=0,motionStd=0,moveMode='still',heading=null;
+function gotFix(p){const c=p.coords,t=p.timestamp||Date.now();const here={lat:c.latitude,lon:c.longitude};
+  let sp=(c.speed!=null&&!isNaN(c.speed))?c.speed:null;
+  if(sp==null&&lastFix&&c.accuracy<60){const dt=(t-lastFix.t)/1000;if(dt>=2)sp=dist(lastFix,here)*1000/dt}
+  if(sp!=null)speedEMA=speedEMA*.6+sp*.4;
+  if(c.heading!=null&&!isNaN(c.heading))heading=c.heading;else if(lastFix&&dist(lastFix,here)>0.004)heading=(Math.atan2(here.lon-lastFix.lon,here.lat-lastFix.lat)*180/Math.PI+360)%360;
+  lastFix={...here,t};gpsLoc={...here,acc:c.accuracy};updateMode();placeMe()}
+function updateMode(){const s=speedEMA;let m='still';
+  if(s>7)m='vehicle';else if(s>2.4||motionStd>4.5)m='run';else if(s>0.6||motionStd>1.1)m='walk';moveMode=m;renderMoveChip()}
+function placeMe(){if(!map||!gpsLoc||!window.maplibregl)return;
+  if(!meMarker){const el=document.createElement('div');el.className='me-wrap';el.innerHTML='<div class="me-ring"></div><div class="me-fig still" id="meFig">🧍</div><div class="me-tag">You</div>';
+    meMarker=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([gpsLoc.lon,gpsLoc.lat]).addTo(map);
+    const chip=document.createElement('div');chip.className='move-chip';chip.id='moveChip';$('#map').parentElement.appendChild(chip)}
+  meMarker.setLngLat([gpsLoc.lon,gpsLoc.lat]);
+  const f=$('#meFig');if(f){f.textContent={still:'🧍',walk:'🚶',run:'🏃',vehicle:'🚗'}[moveMode];f.className='me-fig '+(moveMode==='run'?'run':moveMode==='walk'?'walk':'still')+(heading!=null&&heading<180&&moveMode!=='still'?' flip':'')}
+  renderMoveChip()}
+function renderMoveChip(){const c=$('#moveChip');if(!c)return;const kmh=(speedEMA*3.6).toFixed(1);
+  const t={still:['🧍','Standing still'],walk:['🚶','Walking'],run:['🏃','Running'],vehicle:['🚗','In a vehicle']}[moveMode];
+  const needPerm=typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&!window.__motionOn;
+  c.innerHTML=`${t[0]} ${t[1]} <small>${moveMode==='still'?'':kmh+' km/h · '}GPS ±${Math.round((gpsLoc&&gpsLoc.acc)||0)} m</small>${needPerm?'<button id="motionBtn">Use motion sensor</button>':''}`;
+  const b=$('#motionBtn');if(b)b.onclick=()=>DeviceMotionEvent.requestPermission().then(r=>{if(r==='granted')startMotion()}).catch(()=>{})}
+const accBuf=[];
+function onMotion(e){const a=e.accelerationIncludingGravity||e.acceleration;if(!a||a.x==null)return;const g=Math.hypot(a.x,a.y,a.z);const now=performance.now();accBuf.push([now,g]);
+  while(accBuf.length&&now-accBuf[0][0]>2000)accBuf.shift();if(accBuf.length<10)return;
+  const mean=accBuf.reduce((s,x)=>s+x[1],0)/accBuf.length;motionStd=Math.sqrt(accBuf.reduce((s,x)=>s+(x[1]-mean)**2,0)/accBuf.length);
+  if(!onMotion.t||now-onMotion.t>700){onMotion.t=now;updateMode();placeMe()}}
+function startMotion(){if(window.__motionOn)return;window.__motionOn=true;addEventListener('devicemotion',onMotion)}
+function startMoveWatch(){if(moveWatch!=null||!navigator.geolocation)return;
+  if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission!=='function')startMotion();
+  moveWatch=navigator.geolocation.watchPosition(gotFix,()=>{},{enableHighAccuracy:true,maximumAge:2000,timeout:20000})}
+function stopMoveWatch(){if(moveWatch!=null){navigator.geolocation.clearWatch(moveWatch);moveWatch=null}if(window.__motionOn){removeEventListener('devicemotion',onMotion);window.__motionOn=false}}
+// capture the current location automatically when the visitor already allowed it before
+(async()=>{try{const st=await navigator.permissions.query({name:'geolocation'});if(st.state!=='granted')return;
+  navigator.geolocation.getCurrentPosition(p=>{gotFix(p);fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&lat=${p.coords.latitude}&lon=${p.coords.longitude}`).then(r=>r.json()).then(j=>{
+    const a=j.address||{};if(a.country_code)setCountry(a.country_code);const city=a.city||a.town||a.state_district||a.state;if(city&&!dirInit)window.__myCity=city}).catch(()=>{})},()=>{},{timeout:8000})}catch{}})();
+
+/* ================= DIRECTORY extras: near me, follow, message, university doctors ================= */
+document.addEventListener('click',e=>{
+  if(e.target.closest('#dirNear')){if(!navigator.geolocation)return;$('#dirStatus').textContent='📡 Getting your location…';
+    navigator.geolocation.getCurrentPosition(p=>{gotFix(p);fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=12&lat=${p.coords.latitude}&lon=${p.coords.longitude}`).then(r=>r.json()).then(j=>{
+      const a=j.address||{};const c=a.postcode||a.city||a.town||a.village||a.state;if(a.country_code)setCountry(a.country_code);$('#dirCity').value=c;dirSearch(c,$('#dirName').value.trim(),$('#dirType').value)}).catch(()=>{$('#dirStatus').textContent='⚠️ Could not read your area. Type it instead.'})},
+      ()=>{$('#dirStatus').textContent='Location permission was not given. Type a city or PIN code instead.'},{enableHighAccuracy:true,timeout:9000})}
+  const f=e.target.closest('[data-follow]');if(f){e.stopPropagation();toggleFollow(+f.dataset.follow)}
+  const m=e.target.closest('[data-msg]');if(m){e.stopPropagation();messageListing(+m.dataset.msg)}
+  const u=e.target.closest('[data-unidocs]');if(u){e.stopPropagation();go('directory');$('#uniQ').value=u.dataset.unidocs;$('#uniBox').scrollIntoView({behavior:'smooth',block:'start'});uniSearch()}
+});
+const UNI_CHIPS=['AIIMS New Delhi','PGIMER Chandigarh','JIPMER Puducherry','CMC Vellore','IIT Bombay Hospital','IIT Delhi Hospital','IIT Kharagpur B.C. Roy Hospital','NIT Trichy Hospital','KGMU Lucknow','Johns Hopkins Medicine','Harvard Medical School','Oxford Medical Sciences'];
+let uniTok=0;
+async function uniSearch(){const q=$('#uniQ').value.trim();if(!q)return;const tok=++uniTok;
+  $('#uniRes').innerHTML='';$('#uniStatus').textContent=`🔎 Reading the official website of "${q}"… this can take up to a minute.`;
+  try{const r=await fetch('/api/unidocs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({institute:q,department:$('#uniDept').value.trim()})});
+    const j=await r.json();if(tok!==uniTok)return;if(!r.ok||j.error)throw new Error(j.error||'Search failed');
+    $('#uniStatus').innerHTML=`${j.doctors.length?`<b style="color:var(--text)">${j.doctors.length} doctors</b> listed on the official website of <b style="color:var(--text)">${esc(j.institute)}</b>.`:`No doctor list found on the official website of ${esc(j.institute)}.`} ${esc(j.note||'')} ${j.website?`<a class="teal" target="_blank" rel="noopener" href="${esc(j.website)}">Official website ↗</a>`:''}`;
+    $('#uniRes').innerHTML=j.doctors.map(d=>`<div class="uni-doc"><div class="lc-av" style="--avh:${hash(d.name)%360};flex-basis:40px;height:40px">${esc(initials(d.name))}</div><div style="min-width:0">
+      <b>${esc(d.name)}</b><span>${esc([d.designation,d.department].filter(Boolean).join(' · '))}</span>
+      <a target="_blank" rel="noopener" href="${esc(d.source_url)}">Source: ${esc((()=>{try{return new URL(d.source_url).hostname}catch{return 'official page'}})())} ↗</a></div></div>`).join('');
+  }catch(err){if(tok===uniTok)$('#uniStatus').textContent='⚠️ '+err.message}}
+(()=>{$('#uniChips').innerHTML=UNI_CHIPS.map(c=>`<button class="chip" type="button" data-uq="${esc(c)}">${esc(c)}</button>`).join('');
+  $('#uniForm').onsubmit=e=>{e.preventDefault();uniSearch()};
+  $('#uniChips').onclick=e=>{const b=e.target.closest('[data-uq]');if(b){$('#uniQ').value=b.dataset.uq;uniSearch()}}})();
+
+/* ================= ACCOUNTS: patients & doctors ================= */
+let MEM={me:null,favs:[],threads:[],listing:null},openThread=null,acctMode='signup',signKind='patient',threadTimer=null;
+async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
+  if(!r)throw new Error('Could not reach the server. Is it running?');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
+  if(!r.ok||j.error)throw new Error(j.error||'Server error');
+  if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();return j}
+function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
+  const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0)}
+async function toggleFollow(id){if(!MEM.me){go('account');acctNotice('Log in or create a free account to follow doctors.');return}
+  try{await mapi('fav',{listing_id:id,on:!MEM.favs.includes(id)});if(dirInit)renderDir();if(nearInit)renderPlaces()}catch(e){alert(e.message)}}
+function messageListing(id){const l=regs().find(x=>x.id===id);if(!MEM.me){go('account');acctNotice('Log in or create a free account to message doctors.');return}
+  if(!l||!l.owner)return;go('account');openConv(l.owner,id)}
+let pendingNotice='';function acctNotice(t){pendingNotice=t;renderAccount()}
+function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
+  if(!me){box.innerHTML=`${pendingNotice?`<div class="card" style="padding:14px 18px;margin-bottom:14px;border-color:var(--teal)">${esc(pendingNotice)}</div>`:''}
+    <div class="acct-grid"><form class="card form" id="sgForm"><h3>Create a free account</h3><p style="margin-bottom:12px">It takes 30 seconds.</p>
+      <div class="seg2"><button type="button" data-k="patient" class="${signKind==='patient'?'on':''}">I'm a patient</button><button type="button" data-k="doctor" class="${signKind==='doctor'?'on':''}">I'm a doctor</button></div>
+      <label>FULL NAME</label><input id="sgName" required maxlength="80" placeholder="${signKind==='doctor'?'Dr. Jane Smith':'Your name'}">
+      <label>EMAIL</label><input id="sgEmail" type="email" required placeholder="you@example.com">
+      <label>PASSWORD (AT LEAST 10 CHARACTERS)</label><input id="sgPw" type="password" required minlength="10" autocomplete="new-password">
+      <label>CITY</label><input id="sgCity" placeholder="e.g. Delhi" value="${esc(window.__myCity||'')}">
+      <label class="chk"><input type="checkbox" id="sgAgree" required> I agree to the terms and to keep my messages respectful. Clinora is not for emergencies.</label>
+      <button class="btn primary" type="submit">Create account</button><div id="sgMsg"></div></form>
+    <form class="card form" id="liForm"><h3>Log in</h3><p style="margin-bottom:12px">Welcome back.</p>
+      <label>EMAIL</label><input id="liEmail" type="email" required autocomplete="username"><label>PASSWORD</label><input id="liPw" type="password" required autocomplete="current-password">
+      <button class="btn primary" type="submit">Log in</button><div id="liMsg"></div>
+      <p style="font-size:12.5px;margin-top:14px;color:var(--mute)">Clinic staff use the <a class="teal" href="#dashboard" data-go="dashboard">Clinic Dashboard</a> login instead.</p></form></div>`;
+    $$('#sgForm .seg2 button').forEach(b=>b.onclick=()=>{signKind=b.dataset.k;renderAccount()});
+    $('#sgForm').onsubmit=async e=>{e.preventDefault();$('#sgMsg').textContent='Creating your account…';
+      try{await mapi('signup',{kind:signKind,name:$('#sgName').value.trim(),email:$('#sgEmail').value.trim(),password:$('#sgPw').value,city:$('#sgCity').value.trim(),agree:$('#sgAgree').checked});pendingNotice='';renderAccount()}
+      catch(err){$('#sgMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+    $('#liForm').onsubmit=async e=>{e.preventDefault();$('#liMsg').textContent='Logging in…';
+      try{await mapi('login',{email:$('#liEmail').value.trim(),password:$('#liPw').value});pendingNotice='';renderAccount()}catch(err){$('#liMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+    return}
+  const doc=me.kind==='doctor',L=MEM.listing,soc=(L&&L.social)||{};
+  const favs=(MEM.favs||[]).map(id=>regs().find(x=>x.id===id)).filter(Boolean).map(regToPlace);
+  box.innerHTML=`<div class="acct-head"><div class="lc-av" style="--avh:${hash(me.name)%360}">${esc(initials(me.name))}</div><div><h3>${esc(me.name)}</h3><div style="color:var(--mute);font-size:14px">${doc?'Doctor account':'Patient account'} · ${esc(me.email)}</div></div>
+      <button class="btn ghost sm" id="loBtn" style="margin-left:auto">Log out</button></div>
+    ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':'You are offline'}</b><div style="font-size:13px;color:var(--mute)">${L?'Patients see a green "Online now" badge on your profile while this is on and this page is open.':'Fill in your public profile below first.'}</div></div></div>
+      <form class="card form" id="dpForm" style="padding:22px;margin-bottom:18px"><h3>${L?'Your public profile':'Create your public profile'}</h3><p style="margin-bottom:10px">Shown in the World Directory and on the Nearby map. ${L&&L.followers?`${L.followers} people follow you.`:''}</p>
+        <div class="two"><div><label>TYPE</label><select id="dpType">${['doctors','clinic','hospital','dentist'].map(t=>`<option value="${t}" ${L&&L.type===t?'selected':''}>${TYPELABEL[t]}</option>`).join('')}</select></div><div><label>SPECIALTY</label><input id="dpSpec" value="${esc(L?L.spec||'':'')}" placeholder="e.g. Cardiology"></div></div>
+        <label>NAME SHOWN TO PATIENTS *</label><input id="dpName" required value="${esc(L?L.name:me.name)}">
+        <div class="two"><div><label>PHONE (WITH COUNTRY CODE) *</label><input id="dpPhone" required value="${esc(L?L.phone:'')}"></div><div><label>PUBLIC EMAIL</label><input id="dpEmail" type="email" value="${esc(L?L.email||'':'')}"></div></div>
+        <label>WEBSITE</label><input id="dpWeb" value="${esc(L?L.web||'':'')}" placeholder="https://…">
+        <label>ADDRESS *</label><input id="dpAddr" required value="${esc(L?L.addr:'')}">
+        <div class="two"><div><label>CITY *</label><input id="dpCity" required value="${esc(L?L.city:me.city||'')}"></div><div><label>COUNTRY *</label><input id="dpCountry" required list="countryList" value="${esc(L?L.country:countryName())}"></div></div>
+        <div class="two"><div><label>INSTAGRAM</label><input id="dpIg" value="${esc(soc.instagram||'')}" placeholder="@handle"></div><div><label>TELEGRAM</label><input id="dpTg" value="${esc(soc.telegram||'')}" placeholder="@handle"></div></div>
+        <div class="two"><div><label>FACEBOOK</label><input id="dpFb" value="${esc(soc.facebook||'')}"></div><div><label>WHATSAPP NUMBER</label><input id="dpWa" value="${esc(soc.whatsapp||'')}" placeholder="+91…"></div></div>
+        <div class="two"><div><label>YOUTUBE</label><input id="dpYt" value="${esc(soc.youtube||'')}"></div><div><label>LINKEDIN</label><input id="dpLi" value="${esc(soc.linkedin||'')}"></div></div>
+        <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
+        <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>`
+    :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
+    <h3 style="margin-bottom:10px">Messages</h3>
+    <div class="inbox"><div class="threads" id="thrList">${(MEM.threads||[]).length?MEM.threads.map(t=>`<div class="thr ${openThread===t.with?'on':''}" data-thr="${t.with}"><div class="lc-av" style="--avh:${hash(t.name)%360}">${esc(initials(t.name))}</div><div style="min-width:0"><b>${esc(t.name)}</b><small>${t.mine?'You: ':''}${esc(t.last)}</small></div>${t.unread?`<em>${t.unread}</em>`:''}</div>`).join('')
+      :`<div class="empty-note">${doc?'When patients message you, they appear here.':'Message a doctor from their card to start a chat.'}</div>`}</div>
+      <div class="conv" id="conv"><div class="empty-note" style="margin:auto">Pick a conversation.</div></div></div>`;
+  $('#loBtn').onclick=async()=>{await mapi('logout').catch(()=>{});MEM={me:null,favs:[],threads:[],listing:null};openThread=null;updateAcctBtn();renderAccount()};
+  $$('#thrList [data-thr]').forEach(t=>t.onclick=()=>openConv(+t.dataset.thr));
+  if(doc){$('#onSw').onclick=async()=>{if(!MEM.listing){$('#dpMsg').innerHTML='<span class="red">Save your profile first.</span>';return}try{await mapi('status',{online:!me.online});renderAccount()}catch(e){alert(e.message)}};
+    $('#dpForm').onsubmit=async e=>{e.preventDefault();const v=id=>$(id).value.trim();$('#dpMsg').textContent='📍 Finding your address on the map…';
+      let lat,lon;try{const j=await nominatim(`${v('#dpAddr')}, ${v('#dpCity')}, ${v('#dpCountry')}`);const k=j.length?j:await nominatim(`${v('#dpCity')}, ${v('#dpCountry')}`);if(k.length){lat=+k[0].lat;lon=+k[0].lon}}catch{}
+      if(lat==null){$('#dpMsg').innerHTML='<span class="red">Could not find that address on the map. Check the city and country.</span>';return}
+      try{await mapi('profile',{name:v('#dpName'),type:$('#dpType').value,spec:v('#dpSpec'),phone:v('#dpPhone'),email:v('#dpEmail'),web:v('#dpWeb'),addr:v('#dpAddr'),city:v('#dpCity'),country:v('#dpCountry'),cc:nameToCC(v('#dpCountry')),
+        video:$('#dpVideo').checked,lat,lon,social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
+        renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
+  if(openThread)openConv(openThread);
+}
+async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
+  const c=$('#conv');if(!c)return;let th;
+  try{th=(await mapi('thread',{with:withId})).result}catch(e){if(listingId){th={with:{id:withId,name:(regs().find(x=>x.id===listingId)||{}).name||'Doctor',kind:'doctor',online:null},messages:[]}}else{c.innerHTML='<div class="empty-note">'+esc(e.message)+'</div>';return}}
+  const w=th.with;c.innerHTML=`<div class="conv-h">${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}</div>
+    <div class="conv-m" id="convM">${th.messages.length?th.messages.map(m=>`<div class="bub ${m.from_id===MEM.me.id?'me':''}">${esc(m.body)}<small>${new Date(m.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></div>`).join(''):'<div class="empty-note">Say hello 👋 Don’t share emergencies here: call your local emergency number.</div>'}</div>
+    <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;
+  const M=$('#convM');M.scrollTop=M.scrollHeight;
+  $('#convF').onsubmit=async e=>{e.preventDefault();const t=$('#convIn').value.trim();if(!t)return;$('#convIn').value='';
+    try{await mapi('send',listingId&&!th.messages.length?{listing_id:listingId,body:t}:{to:withId,body:t});listingId=null;openConv(withId)}catch(err){alert(err.message)}};
+  clearInterval(threadTimer);threadTimer=setInterval(()=>{if(!$('#v-account').classList.contains('active')||openThread!==withId||document.activeElement===$('#convIn')&&$('#convIn').value){return}
+    mapi('thread',{with:withId}).then(j=>{const n=j.result.messages.length;if(n!==th.messages.length){th=j.result;openConv(withId)}}).catch(()=>{})},8000);
+}
+mapi('me').then(()=>{if($('#v-account').classList.contains('active'))renderAccount()}).catch(()=>{});
+setInterval(()=>{if(MEM.me)mapi('me').catch(()=>{})},45000);
+
+/* ================= BOOKWORM: free books ================= */
+const SHELF=[['🫀','Anatomy & Physiology','OpenStax · free textbook','https://openstax.org/details/books/anatomy-and-physiology-2e'],
+ ['🦠','Microbiology','OpenStax · free textbook','https://openstax.org/details/books/microbiology'],
+ ['🧬','Biology','OpenStax · free textbook','https://openstax.org/details/books/biology-2e'],
+ ['🧠','Psychology','OpenStax · free textbook','https://openstax.org/details/books/psychology-2e'],
+ ['⚗️','Chemistry','OpenStax · free textbook','https://openstax.org/details/books/chemistry-2e'],
+ ['📚','StatPearls (thousands of topics)','NCBI Bookshelf · free','https://www.ncbi.nlm.nih.gov/books/NBK430685/'],
+ ['🏥','NCBI Bookshelf','US National Library of Medicine · free books','https://www.ncbi.nlm.nih.gov/books/'],
+ ['🌍','Where There Is No Doctor','Hesperian · free health guide','https://en.hesperian.org/hhg/Where_There_Is_No_Doctor'],
+ ['📖','MSD Manual (patients)','Merck · free online','https://www.msdmanuals.com/home'],
+ ['🩺','MSD Manual (professionals)','Merck · free online','https://www.msdmanuals.com/professional'],
+ ['🔬','LibreTexts Medicine','Free open textbooks','https://med.libretexts.org/'],
+ ['🎓','Open Textbook Library: Medicine','University of Minnesota · free','https://open.umn.edu/opentextbooks/subjects/medicine'],
+ ['💊','MedlinePlus','US National Library of Medicine · free','https://medlineplus.gov/'],
+ ['🌐','WHO publications (IRIS)','World Health Organization · free','https://iris.who.int/'],
+ ['▶️','Health & Medicine courses','Khan Academy · free','https://www.khanacademy.org/science/health-and-medicine'],
+ ['🏛️','Classic medical books','Project Gutenberg · public domain','https://www.gutenberg.org/ebooks/search/?query=medicine']];
+const BOOK_CHIPS=['Anatomy','Physiology','Pharmacology','Pathology','Cardiology','Nursing','First aid','Mental health','Nutrition','Pediatrics','Surgery','Public health'];
+let booksInit=false,bookTok=0;
+function initBooks(){if(booksInit)return;booksInit=true;
+  $('#shelf').innerHTML=SHELF.map(([e,t,s,u])=>`<a target="_blank" rel="noopener" href="${u}"><span class="e">${e}</span><span><b>${esc(t)}</b><span>${esc(s)}</span></span></a>`).join('');
+  $('#bookChips').innerHTML=BOOK_CHIPS.map(c=>`<button class="chip" type="button" data-bq="${c}">${c}</button>`).join('');
+  $('#bookChips').onclick=e=>{const b=e.target.closest('[data-bq]');if(b){$('#bookQ').value=b.dataset.bq;bookSearch()}};
+  $('#bookForm').onsubmit=e=>{e.preventDefault();bookSearch()};
+  $('#bookQ').value='Anatomy';bookSearch()}
+async function bookSearch(){const q=$('#bookQ').value.trim();if(!q)return;const tok=++bookTok;$('#bookStatus').textContent=`📚 Finding free books about "${q}"…`;$('#bookRes').innerHTML='';
+  const out=[];const tget=(u,ms=9000)=>{const ac=new AbortController();const t=setTimeout(()=>ac.abort(),ms);return fetch(u,{signal:ac.signal}).then(r=>r.ok?r.json():{}).finally(()=>clearTimeout(t))};
+  const ol=qq=>tget(`https://openlibrary.org/search.json?q=${encodeURIComponent(qq+' ebook_access:public')}&limit=30&fields=title,author_name,first_publish_year,cover_i,ia,ebook_access`).then(j=>(j.docs||[]).filter(d=>d.ebook_access==='public'&&d.ia&&d.ia.length).forEach(d=>{
+    out.push({t:d.title,a:(d.author_name||[]).slice(0,2).join(', '),y:d.first_publish_year||'',img:d.cover_i?`https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg`:'',u:'https://archive.org/details/'+d.ia[0],src:'Open Library'})})).catch(()=>{});
+  const g=tget(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q+' medicine')}&filter=free-ebooks&maxResults=20&printType=books`).then(j=>(j.items||[]).forEach(it=>{const v=it.volumeInfo||{},a=it.accessInfo||{};
+    out.push({t:v.title,a:(v.authors||[]).slice(0,2).join(', '),y:(v.publishedDate||'').slice(0,4),img:((v.imageLinks||{}).thumbnail||'').replace('http://','https://'),u:a.webReaderLink||v.previewLink||v.infoLink,src:'Google Books'})})).catch(()=>{});
+  await Promise.all([ol(q+' subject:medicine'),g]);if(tok!==bookTok)return;
+  if(out.length<8){await ol(q);if(tok!==bookTok)return}
+  const seen=new Set();const list=out.filter(b=>b.t&&b.u&&safeUrl(b.u)&&!seen.has(b.t.toLowerCase())&&seen.add(b.t.toLowerCase()));
+  $('#bookStatus').textContent=list.length?`${list.length} free books about "${q}" you can read online.`:`No free books found for "${q}" right now. Try a broader word, or open a shelf below.`;
+  $('#bookRes').innerHTML=list.slice(0,30).map(b=>`<a class="book" target="_blank" rel="noopener" href="${esc(b.u)}"><div class="cv" style="--avh:${hash(b.t)%360}">${b.img?`<img loading="lazy" src="${esc(b.img)}" alt="" onerror="this.remove()">`:'📕'}</div>
+    <b>${esc(b.t)}</b><span>${esc([b.a,b.y].filter(Boolean).join(' · '))}</span><span>${b.src}</span><span class="rd">Read free ↗</span></a>`).join('');
+}
+
 loadDB();setInterval(loadDB,8000);
+go(location.hash.slice(1)||'home');
 </script>
 </body>
 </html>

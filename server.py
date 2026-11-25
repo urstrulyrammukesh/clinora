@@ -225,9 +225,16 @@ How to book:
 Never invent doctors, times, prices, booking IDs or addresses: use only what the tools return.
 Quote fees exactly as list_doctors gives them in "fee" (already in the patient's local currency); never convert currencies yourself.
 
+Health questions (any time of day or night, often private ones):
+- Answer general health, sexual-health and self-care questions clearly, kindly and without judgement, like a well-trained nurse on a helpline. This includes contraception and protection (condoms, the pill, emergency contraception and how soon it must be taken), safer sex, STI testing, consent, periods and pregnancy questions, colds, fever, stomach upsets, and when something needs a doctor today.
+- Give practical, evidence-based general information and say clearly when they should see a doctor, a pharmacist or a sexual-health clinic, and how urgently. Offer to find one nearby or book a video consultation.
+- If the person sounds low, anxious, lonely or upset, listen first: reflect what they said, be warm, and ask one gentle question at a time. Never lecture. Offer helplines (get_helplines) and a doctor or counsellor, but keep talking with them for as long as they want.
+- If someone mentions harassment, abuse or violence, believe them, check that they are safe right now, and give the matching helpline numbers from get_helplines.
+- If someone mentions suicide or self-harm: stay with them, take it seriously, ask if they are safe right now, give the crisis line and emergency number from get_helplines, and encourage them to contact someone they trust. Keep the conversation going.
+
 Safety:
-- You are not a doctor. Do not diagnose, prescribe, or give dosage advice. You may suggest which kind of specialist fits the symptoms and help book them.
-- If the message suggests an emergency (chest pain, trouble breathing, stroke signs, heavy bleeding, unconsciousness, severe allergic reaction, suicidal thoughts, poisoning, serious injury), first call get_emergency_numbers and alert_clinic_staff, then tell them to call the local emergency number now, before anything else.
+- You are not a doctor. Do not diagnose, prescribe prescription medicines, or give personal dosage advice beyond what a package leaflet says. You may suggest which kind of specialist fits the symptoms and help book them.
+- If the message suggests an emergency (chest pain, trouble breathing, stroke signs, heavy bleeding, unconsciousness, severe allergic reaction, a suicide attempt or immediate danger, poisoning, serious injury), first call get_emergency_numbers and alert_clinic_staff, then tell them to call the local emergency number now, before anything else.
 - After booking, give the patient the pay_link from the tool result so they can pay online (in-clinic visits may also pay at the clinic). For video bookings, payment is needed before joining: give both the pay_link and the call_link, and tell them to open the call link at the appointment time.
 - After an in-clinic booking, offer to open ride options (show_ride_options) so they can book a cab to the clinic. In an emergency, never suggest a cab: tell them to call the ambulance number.
 - Ask only for the details needed for a booking (name and phone). Do not ask for ID numbers, insurance numbers or payment card details.
@@ -281,6 +288,7 @@ TOOLS = [
         {"booking_id": {"type": "string", "description": "e.g. A105"}, "phone": {"type": "string"}},
     ),
     tool("get_emergency_numbers", "Emergency phone numbers for the patient's current country.", {}),
+    tool("get_helplines", "Free helpline numbers for the patient's country: emergency, women / harassment / domestic abuse, suicide and emotional-support crisis lines, child helpline, plus a link to find more helplines. Also shows them on screen.", {}),
     tool(
         "alert_clinic_staff",
         "Send an urgent alert to clinic staff, e.g. for a possible emergency.",
@@ -298,7 +306,7 @@ TOOLS = [
     tool(
         "show_page",
         "Open a page of the website for the patient.",
-        {"page": {"type": "string", "enum": ["home", "nearby", "directory", "dashboard"]}},
+        {"page": {"type": "string", "enum": ["home", "nearby", "directory", "dashboard", "books", "account"]}},
     ),
 ]
 
@@ -337,6 +345,16 @@ CREATE TABLE IF NOT EXISTS payment_events(
   id INTEGER PRIMARY KEY AUTOINCREMENT, appt_id TEXT, event TEXT NOT NULL, provider TEXT, ref TEXT,
   amount INTEGER, currency TEXT, detail TEXT, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS members(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,
+  pw TEXT NOT NULL, created INTEGER NOT NULL, city TEXT, online INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS member_sessions(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS favs(member_id INTEGER NOT NULL, listing_id INTEGER NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY(member_id, listing_id));
+CREATE TABLE IF NOT EXISTS messages(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, from_id INTEGER NOT NULL, to_id INTEGER NOT NULL, body TEXT NOT NULL,
+  ts INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS msg_pair ON messages(from_id, to_id, id);
+CREATE TABLE IF NOT EXISTS unidocs_cache(q TEXT PRIMARY KEY, result TEXT NOT NULL, ts INTEGER NOT NULL);
 """
 
 
@@ -400,6 +418,10 @@ def init_db():
                           ("pay_method", "TEXT"), ("pay_currency", "TEXT"), ("pay_amount", "INTEGER")]:
             if col not in cols:
                 conn.execute(f"ALTER TABLE appointments ADD COLUMN {col} {kind}")
+        lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
+        for col, kind in [("owner", "INTEGER"), ("social", "TEXT")]:
+            if col not in lcols:
+                conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {kind}")
         if conn.execute("SELECT COUNT(*) FROM live").fetchone()[0] == 0:
             seed(conn)
         backfill_tokens(conn)
@@ -556,7 +578,7 @@ def snapshot(conn, user=None):
         "me": user,
         "setup_needed": conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0,
         "live": {r["key"]: bool(r["value"]) for r in conn.execute("SELECT * FROM live")},
-        "listings": [dict(r, video=bool(r["video"])) for r in conn.execute("SELECT * FROM listings ORDER BY ts")],
+        "listings": public_listings(conn),
         # public: which slots are taken, without any patient details
         "taken": [dict(r) for r in conn.execute(
             "SELECT doc, date, time FROM appointments WHERE status != 'Cancelled' AND date >= date('now','-1 day')")],
@@ -678,10 +700,10 @@ def add_listing(conn, d, user=None):
     if not d.get("consent"):
         raise InputError("Consent is required to publish a listing")
     conn.execute(
-        "INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,ts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,ts,social) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (text(d, "name", 100), one_of(d, "type", LIST_TYPES), text(d, "spec", 80, False), phone_of(d),
          text(d, "email", 120, False), web, text(d, "addr", 160), text(d, "city", 80), text(d, "country", 80),
-         text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, now_ms()))
+         text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, now_ms(), json.dumps(clean_social(d.get("social")))))
 
 
 def delete_listing(conn, d, user=None):
@@ -694,6 +716,259 @@ def reset_demo(conn, d, user=None):
     conn.executescript("DELETE FROM appointments; DELETE FROM alerts; DELETE FROM live; DELETE FROM stats;")
     seed(conn)
 
+
+
+# ---------------------------------------------------------------- community: patient & doctor accounts
+# Separate from the clinic staff logins above. Anyone can sign up as a patient or as a doctor.
+# Doctors own one public listing (their profile), can go online/offline, and receive messages.
+# Patients can follow doctors and message them.
+MEMBER_KINDS = {"patient", "doctor"}
+SOCIAL_KEYS = ("instagram", "facebook", "telegram", "whatsapp", "youtube", "linkedin", "x")
+ONLINE_WINDOW_MS = 3 * 60 * 1000
+
+
+def clean_social(raw):
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for k in SOCIAL_KEYS:
+        v = str(raw.get(k) or "").strip()[:150]
+        if not v:
+            continue
+        if v.lower().startswith(("javascript:", "data:")) or any(c in v for c in '<>"'):
+            raise InputError(f"The {k} link looks wrong")
+        out[k] = v
+    return out
+
+
+def public_listings(conn):
+    cutoff = now_ms() - ONLINE_WINDOW_MS
+    rows = conn.execute(
+        "SELECT l.*, m.online AS m_online, m.last_seen AS m_seen, "
+        "(SELECT COUNT(*) FROM favs f WHERE f.listing_id = l.id) AS followers "
+        "FROM listings l LEFT JOIN members m ON m.id = l.owner ORDER BY l.ts")
+    out = []
+    for r in rows:
+        d = dict(r)
+        seen = d.pop("m_seen")
+        d["online"] = bool(d.pop("m_online")) and (seen or 0) > cutoff
+        d["last_seen"] = seen or None
+        d["video"] = bool(d["video"])
+        try:
+            d["social"] = json.loads(d.get("social") or "{}")
+        except ValueError:
+            d["social"] = {}
+        out.append(d)
+    return out
+
+
+def member_for_token(conn, token):
+    if not token:
+        return None
+    row = conn.execute(
+        "SELECT m.id, m.email, m.name, m.kind, m.city, m.online FROM member_sessions s JOIN members m ON m.id = s.member_id "
+        "WHERE s.token = ? AND s.expires > ?", (token_hash(token), now_ms())).fetchone()
+    if not row:
+        return None
+    conn.execute("UPDATE members SET last_seen=? WHERE id=?", (now_ms(), row["id"]))
+    return dict(row)
+
+
+def new_member_session(conn, member_id):
+    token = secrets.token_urlsafe(32)
+    conn.execute("DELETE FROM member_sessions WHERE expires < ?", (now_ms(),))
+    conn.execute("INSERT INTO member_sessions VALUES(?,?,?)", (token_hash(token), member_id, now_ms() + 30 * 86_400_000))
+    return token
+
+
+def need_member(me, kind=None):
+    if not me:
+        raise AuthError("Please log in first.", 401)
+    if kind and me["kind"] != kind:
+        raise AuthError("Only doctor accounts can do this." if kind == "doctor" else "Only patient accounts can do this.")
+
+
+def my_listing(conn, me):
+    return conn.execute("SELECT * FROM listings WHERE owner=?", (me["id"],)).fetchone()
+
+
+def member_state(conn, me):
+    if not me:
+        return {"me": None}
+    lst = my_listing(conn, me)
+    fav_ids = [r["listing_id"] for r in conn.execute("SELECT listing_id FROM favs WHERE member_id=? ORDER BY ts DESC", (me["id"],))]
+    threads = []
+    for r in conn.execute(
+            "SELECT other, MAX(id) AS last_id FROM (SELECT to_id AS other, id FROM messages WHERE from_id=:me "
+            "UNION ALL SELECT from_id AS other, id FROM messages WHERE to_id=:me) GROUP BY other ORDER BY last_id DESC LIMIT 50",
+            {"me": me["id"]}):
+        other = conn.execute("SELECT id, name, kind FROM members WHERE id=?", (r["other"],)).fetchone()
+        last = conn.execute("SELECT body, ts, from_id FROM messages WHERE id=?", (r["last_id"],)).fetchone()
+        unread = conn.execute("SELECT COUNT(*) FROM messages WHERE from_id=? AND to_id=? AND seen=0", (r["other"], me["id"])).fetchone()[0]
+        if other:
+            threads.append({"with": other["id"], "name": other["name"], "kind": other["kind"], "last": last["body"][:80],
+                            "ts": last["ts"], "mine": last["from_id"] == me["id"], "unread": unread})
+    return {"me": dict(me, listing_id=lst["id"] if lst else None), "favs": fav_ids, "threads": threads,
+            "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
+
+
+def m_signup(conn, d, me, ip):
+    if too_many("signup", ip, 10, 3600):
+        raise AuthError("Too many new accounts from this network. Try again later.", 429)
+    kind = one_of(d, "kind", MEMBER_KINDS)
+    email = valid_email(d)
+    if conn.execute("SELECT 1 FROM members WHERE email=?", (email,)).fetchone():
+        raise InputError("An account with this email already exists. Please log in.")
+    if not d.get("agree"):
+        raise InputError("Please accept the terms to create an account")
+    cur = conn.execute("INSERT INTO members(email,name,kind,pw,created,city,last_seen) VALUES(?,?,?,?,?,?,?)",
+                       (email, text(d, "name", 80), kind, hash_password(valid_password(d)), now_ms(),
+                        text(d, "city", 80, False), now_ms()))
+    return cur.lastrowid
+
+
+def m_login(conn, d, me, ip):
+    if too_many_failures(ip):
+        raise AuthError("Too many failed attempts. Try again in 15 minutes.", 429)
+    row = conn.execute("SELECT id, pw FROM members WHERE email=?", (str(d.get("email") or "").strip().lower(),)).fetchone()
+    if not row or not check_password(str(d.get("password") or ""), row["pw"]):
+        FAILED_LOGINS.setdefault(ip, []).append(time.time())
+        raise AuthError("Wrong email or password.", 401)
+    return row["id"]
+
+
+def m_profile(conn, d, me):
+    """A doctor creates or updates their own public listing."""
+    need_member(me, "doctor")
+    web = text(d, "web", 200, required=False)
+    if web and not web.lower().startswith(("https://", "http://")):
+        raise InputError("Website must start with https://")
+    try:
+        lat, lon = float(d.get("lat")), float(d.get("lon"))
+    except (TypeError, ValueError):
+        raise InputError("Address location missing")
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise InputError("Address location invalid")
+    vals = (text(d, "name", 100), one_of(d, "type", LIST_TYPES), text(d, "spec", 80, False), phone_of(d),
+            text(d, "email", 120, False), web, text(d, "addr", 160), text(d, "city", 80), text(d, "country", 80),
+            text(d, "cc", 2, False).upper(), 1 if d.get("video") else 0, lat, lon, json.dumps(clean_social(d.get("social"))))
+    lst = my_listing(conn, me)
+    if lst:
+        conn.execute("UPDATE listings SET name=?,type=?,spec=?,phone=?,email=?,web=?,addr=?,city=?,country=?,cc=?,video=?,lat=?,lon=?,social=? "
+                     "WHERE id=?", vals + (lst["id"],))
+    else:
+        conn.execute("INSERT INTO listings(name,type,spec,phone,email,web,addr,city,country,cc,video,lat,lon,social,ts,owner) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals + (now_ms(), me["id"]))
+
+
+def m_status(conn, d, me):
+    need_member(me, "doctor")
+    conn.execute("UPDATE members SET online=?, last_seen=? WHERE id=?", (1 if d.get("online") else 0, now_ms(), me["id"]))
+
+
+def m_fav(conn, d, me):
+    need_member(me)
+    lid = int(d.get("listing_id") or 0)
+    if not conn.execute("SELECT 1 FROM listings WHERE id=?", (lid,)).fetchone():
+        raise InputError("This doctor is no longer listed")
+    if d.get("on"):
+        conn.execute("INSERT OR IGNORE INTO favs VALUES(?,?,?)", (me["id"], lid, now_ms()))
+    else:
+        conn.execute("DELETE FROM favs WHERE member_id=? AND listing_id=?", (me["id"], lid))
+
+
+def m_send(conn, d, me):
+    need_member(me)
+    to = int(d.get("to") or 0)
+    if d.get("listing_id"):
+        row = conn.execute("SELECT owner FROM listings WHERE id=?", (int(d["listing_id"]),)).fetchone()
+        if not row or not row["owner"]:
+            raise InputError("This doctor hasn't set up messaging yet")
+        to = row["owner"]
+    if to == me["id"] or not conn.execute("SELECT 1 FROM members WHERE id=?", (to,)).fetchone():
+        raise InputError("Can't send to this person")
+    # patients can message doctors; doctors can reply to anyone who wrote to them
+    other_kind = conn.execute("SELECT kind FROM members WHERE id=?", (to,)).fetchone()["kind"]
+    if me["kind"] == "patient" and other_kind != "doctor":
+        raise AuthError("Patients can message doctors only.")
+    if me["kind"] == "doctor" and other_kind == "patient" and not conn.execute(
+            "SELECT 1 FROM messages WHERE from_id=? AND to_id=?", (to, me["id"])).fetchone():
+        raise AuthError("You can reply once this patient has written to you.")
+    if too_many("msg", str(me["id"]), 60, 3600):
+        raise AuthError("You are sending messages too quickly. Please wait a little.", 429)
+    body = text(d, "body", 2000)
+    conn.execute("INSERT INTO messages(from_id,to_id,body,ts) VALUES(?,?,?,?)", (me["id"], to, body, now_ms()))
+    return {"to": to}
+
+
+def m_thread(conn, d, me):
+    need_member(me)
+    other = int(d.get("with") or 0)
+    o = conn.execute("SELECT id, name, kind, online, last_seen FROM members WHERE id=?", (other,)).fetchone()
+    if not o:
+        raise InputError("Conversation not found")
+    conn.execute("UPDATE messages SET seen=1 WHERE from_id=? AND to_id=?", (other, me["id"]))
+    msgs = [dict(r) for r in conn.execute(
+        "SELECT id, from_id, body, ts FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) ORDER BY id DESC LIMIT 200",
+        (me["id"], other, other, me["id"]))][::-1]
+    online = bool(o["online"]) and o["last_seen"] > now_ms() - ONLINE_WINDOW_MS if o["kind"] == "doctor" else None
+    return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online}, "messages": msgs}
+
+
+MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
+                 "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread}
+
+
+# ---------------------------------------------------------------- doctors on university & institute websites (AI + web search)
+UNI_SYSTEM = """You find medical doctors listed on the official websites of universities, medical colleges, institutes and their hospitals or health centres (for example AIIMS, PGIMER, JIPMER, CMC Vellore, IIT and NIT hospitals / health centres, university medical schools anywhere in the world).
+
+Use web search. Only list people whose name appears on an official page of that institute (its own domain, such as *.ac.in, *.edu, *.edu.in, aiims.edu, or the institute hospital's own site). Never invent or guess names, and never use directory or review sites as the source.
+
+Reply with JSON only, no other text, in exactly this shape:
+{"institute": "official name", "website": "https://... or null", "doctors": [{"name": "Dr ...", "designation": "e.g. Professor / Medical Officer", "department": "e.g. Cardiology", "source_url": "https://official page where the name appears"}], "note": "one short sentence for the patient"}
+List at most 40 doctors. If the request names a department, prefer that department. If you find no official list, return an empty doctors list and say so in note."""
+
+
+def uni_doctors(conn_unused, d, ip):
+    q = text(d, "institute", 120)
+    dept = text(d, "department", 60, False)
+    key = (q + "|" + dept).lower().strip()
+    with DB_LOCK, connect() as conn:
+        row = conn.execute("SELECT result, ts FROM unidocs_cache WHERE q=?", (key,)).fetchone()
+        if row and row["ts"] > now_ms() - 7 * 86_400_000:
+            return dict(json.loads(row["result"]), cached=True)
+    if client is None:
+        raise InputError("The AI search is off: add ANTHROPIC_API_KEY to .env")
+    if too_many("uni", ip, 10, 3600):
+        raise AuthError("Too many searches. Please try again in a little while.", 429)
+    messages = [{"role": "user", "content": f"Institute: {q}" + (f"\nDepartment: {dept}" if dept else "")}]
+    response = None
+    for _ in range(4):
+        response = client.beta.messages.create(
+            model=MODEL, max_tokens=16000, system=UNI_SYSTEM, messages=messages,
+            tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}],
+            output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        if response.stop_reason != "pause_turn":
+            break
+        messages = messages + [{"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in response.content]}]
+    if response is None or response.stop_reason == "refusal":
+        raise InputError("The search could not be completed. Try another name.")
+    raw = "\n".join(b.text for b in response.content if getattr(b, "type", "") == "text")
+    try:
+        data = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+    except ValueError:
+        raise InputError("The search did not return a clear list. Try a more exact name, e.g. 'AIIMS New Delhi'.")
+    safe = lambda u: u if isinstance(u, str) and u.startswith(("https://", "http://")) and len(u) < 500 else None
+    docs = []
+    for x in (data.get("doctors") or [])[:40]:
+        if not isinstance(x, dict) or not str(x.get("name") or "").strip() or not safe(x.get("source_url")):
+            continue
+        docs.append({k: str(x.get(k) or "")[:120] for k in ("name", "designation", "department")} | {"source_url": safe(x.get("source_url"))})
+    result = {"institute": str(data.get("institute") or q)[:150], "website": safe(data.get("website")),
+              "doctors": docs, "note": str(data.get("note") or "")[:300]}
+    with DB_LOCK, connect() as conn:
+        conn.execute("INSERT OR REPLACE INTO unidocs_cache VALUES(?,?,?)", (key, json.dumps(result), now_ms()))
+    return result
 
 # ---------------------------------------------------------------- video calls (WebRTC signaling)
 # The video itself goes directly between the two browsers. This server only passes the short
@@ -1305,6 +1580,21 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(415, {"error": "JSON required"})
         if path in ("/api/auth/login", "/api/auth/setup", "/api/auth/logout"):
             return self.auth(path)
+        if path.startswith("/api/m/"):
+            return self.member(path)
+        if path == "/api/unidocs":
+            try:
+                data = self.read_json(2_000)
+                if not isinstance(data, dict):
+                    raise InputError("Bad request")
+                return self.send_json(200, uni_doctors(None, data, self.client_address[0]))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+            except Exception as e:
+                print("University search error:", repr(e)[:300])
+                return self.send_json(502, {"error": "The search service is busy. Please try again."})
         if path in CALL_ROUTES:
             try:
                 data = self.read_json(40_000)
@@ -1360,6 +1650,45 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(502, {"error": f"AI service error ({e.status_code}). Please try again."})
         except anthropic.APIConnectionError:
             return self.send_json(502, {"error": "Could not reach the AI service. Check the internet connection."})
+
+    def member_token(self):
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "cl_member":
+                return v
+        return ""
+
+    def member_cookie(self, token, max_age):
+        secure = "; Secure" if (self.headers.get("X-Forwarded-Proto") == "https" or PUBLIC_URL.startswith("https://")) else ""
+        return f"cl_member={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age}{secure}"
+
+    def member(self, path):
+        ip = self.client_address[0]
+        try:
+            data = self.read_json(10_000)
+            if not isinstance(data, dict):
+                raise InputError("Bad request")
+            with DB_LOCK, connect() as conn:
+                if path == "/api/m/logout":
+                    conn.execute("DELETE FROM member_sessions WHERE token=?", (token_hash(self.member_token()),))
+                    return self.send_json(200, {"me": None}, cookie=self.member_cookie("", 0))
+                if path in ("/api/m/signup", "/api/m/login"):
+                    mid = (m_signup if path.endswith("signup") else m_login)(conn, data, None, ip)
+                    token = new_member_session(conn, mid)
+                    me = member_for_token(conn, token)
+                    return self.send_json(200, member_state(conn, me), cookie=self.member_cookie(token, 30 * 86_400))
+                if path not in MEMBER_ROUTES:
+                    return self.send_json(404, {"error": "not found"})
+                me = member_for_token(conn, self.member_token())
+                extra = MEMBER_ROUTES[path](conn, data, me) or {}
+                out = member_state(conn, me)
+                out["result"] = extra
+                out["listings"] = public_listings(conn)
+                return self.send_json(200, out)
+        except InputError as e:
+            return self.send_json(400, {"error": str(e)})
+        except AuthError as e:
+            return self.send_json(e.status, {"error": str(e)})
 
     def auth(self, path):
         try:
