@@ -860,6 +860,27 @@ html{overflow-x:clip}
 #lightbox{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.92);display:none;place-items:center;padding:20px;cursor:zoom-out}
 .rv-card [hidden]{display:none!important}
 #lightbox.on{display:grid}#lightbox img{max-width:100%;max-height:82vh;border-radius:12px}#lightbox p{color:#ddd;text-align:center;margin-top:10px}
+
+/* ===== GUIDED TOUR ===== */
+#tourShade{position:fixed;inset:0;z-index:140;pointer-events:auto;background:transparent}
+#tourSpot{position:fixed;z-index:141;border-radius:14px;box-shadow:0 0 0 9999px rgba(2,4,8,.72),0 0 0 3px var(--teal),0 0 30px hsla(var(--h),78%,50%,.6);
+  transition:left .35s cubic-bezier(.2,.8,.2,1),top .35s cubic-bezier(.2,.8,.2,1),width .35s,height .35s;pointer-events:none}
+#tourSpot.none{width:0!important;height:0!important;left:50%!important;top:50%!important;box-shadow:0 0 0 9999px rgba(2,4,8,.72)}
+#tourCard{font-family:var(--sys);color:var(--text);position:fixed;z-index:142;width:min(340px,calc(100vw - 24px));background:var(--panel);border:1px solid hsla(var(--h),78%,50%,.5);border-radius:16px;padding:18px 18px 14px;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);transition:left .35s cubic-bezier(.2,.8,.2,1),top .35s cubic-bezier(.2,.8,.2,1);animation:tourIn .3s ease}
+@keyframes tourIn{from{opacity:0;transform:translateY(8px)}}
+#tourCard .t-step{font-size:11.5px;color:var(--teal);font-weight:700;letter-spacing:.8px}
+#tourCard h4{font-size:18px;margin:4px 0 6px}
+#tourCard p{font-size:14.5px;color:#c3ccd5;line-height:1.5}
+#tourCard .t-dots{display:flex;gap:5px;margin:14px 0 12px}
+#tourCard .t-dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}#tourCard .t-dots i.on{background:var(--teal);width:18px;border-radius:99px}
+#tourCard .t-btns{display:flex;gap:8px;align-items:center}
+#tourCard .t-btns .skip{margin-right:auto;font-size:13px;color:var(--mute)}#tourCard .t-btns .skip:hover{color:var(--text)}
+#tourCard .t-x{position:absolute;top:10px;right:10px;width:28px;height:28px;border-radius:50%;background:var(--panel2);font-size:13px}
+#tourCard .t-never{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mute);margin-top:10px}
+#tourCard.center{left:50%!important;top:50%!important;transform:translate(-50%,-50%)}
+#tourCard.center{animation:none}
+@media (prefers-reduced-motion: reduce){#tourSpot,#tourCard{transition:none}}
 </style>
 </head>
 <body>
@@ -1401,6 +1422,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(v==='nearby') initNearby();
   if(v==='directory') initDirectory();
   if(v==='books') initBooks();
+  if(typeof maybePageTour==='function') maybePageTour(v);
   if(v==='food') initFood(); else if(typeof fsStopCam==='function') fsStopCam();
   if(v==='account') renderAccount();
   if(v!=='nearby') stopMoveWatch();
@@ -2945,6 +2967,92 @@ if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostnam
   addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}
 (()=>{const dr=$('#navDrawer');if(!dr)return;const f=document.createElement('div');f.style.cssText='margin-top:22px;font-size:13px;color:var(--mute);display:flex;gap:14px;flex-wrap:wrap;padding:0 4px';
   f.innerHTML='<a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/delete-account">Delete account</a>';dr.appendChild(f)})();
+
+
+/* ================= GUIDED TOUR (instruction mode): welcome tour + a short tour of each page ================= */
+const TOURS={
+  welcome:[
+    {t:'Welcome to Clinora 👋',d:'Want a quick tour? It shows you where everything is and takes about a minute. You can stop at any time.',welcome:true},
+    {el:'#menuBtn',t:'The ☰ menu',d:'Everything is in here: your account, the red Emergency button, all pages, language and style. Tap it any time.'},
+    {el:'#chatFab',t:'Ask AI, 24×7',d:'Tap here to chat with the AI assistant about any health question, book a doctor, or just talk if you feel low. It understands your language.'},
+    {el:'.tab[data-go="nearby"]',t:'Nearby doctors',d:'See hospitals, clinics and doctors around you on a live map, and who is open right now.'},
+    {el:'.tab[data-go="directory"]',t:'World directory',d:'Search doctors anywhere in the world by city, country or PIN code, and read reviews.'},
+    {el:'.tab[data-go="food"]',t:'Food Scan',d:'Not sure if a food is OK for you? Take a photo and the AI tells you, with calories and allergy warnings.'},
+    {el:'.tab[data-go="books"]',t:'Free medical books',d:'Read free health and medical books from around the world.'},
+    {el:'#menuBtn',t:'Your free account',d:'Open ☰ and tap "Log in or sign up" to follow doctors, message them and video call them. Doctors can create their own profile.'},
+    {el:'#menuBtn',t:'Emergency help',d:'In an emergency, open ☰ and tap the big red Emergency button for the ambulance and helpline numbers in your country.'},
+    {t:'You are all set! 🎉',d:'Each page shows a short guide the first time you open it. Replay the tour or turn guides off any time from ☰ → Guided tour.'}],
+  nearby:[
+    {el:'#gpsBtn',t:'Use your location',d:'Tap to find doctors near you. Your browser asks for permission first. Or type any city, area or PIN code next to it.'},
+    {el:'#chips',t:'Filters',d:'Show only hospitals, dentists, labs, local doctors, or only places that are open now.'},
+    {el:'#map',t:'Live 3D map',d:'You appear as a little person that walks or runs as you move. Tap a pin to see a place.'},
+    {el:'.emerg',t:'Emergency numbers',d:'The right ambulance and emergency numbers for the country you are in. Tap a number to call.'}],
+  directory:[
+    {el:'#dirForm',t:'Search the world',d:'Type a name (optional), a city, country or PIN code, pick a type, then tap Search.'},
+    {el:'#dirResults',t:'Results',d:'Tap Call, Directions or Profile. Doctors who joined Clinora have ★ reviews, Follow, Message and Video call buttons.'},
+    {el:'#uniBox',t:'University doctors',d:'Find doctors listed on official university and medical college websites, like AIIMS or IIT hospitals.'},
+    {el:'#regForm',t:'Are you a doctor?',d:'Add your clinic for free here, or create a doctor account to manage your profile, hours and reviews.'}],
+  food:[
+    {el:'#fsCam',t:'Take a photo',d:'Open the camera and snap your food, or tap "Upload photo" to pick one from your gallery.'},
+    {el:'.fs-prof',t:'Your health profile',d:'Optional: tap your allergies, health conditions and diet. Every scan is then checked for you. It stays on your device.'},
+    {el:'#fsGo',t:'Check it',d:'The AI tells you if it is OK to eat, with calories, warnings and a healthier swap.'}],
+  books:[
+    {el:'#bookForm',t:'Search free books',d:'Type a topic like "anatomy" or "first aid" and tap Search. Everything shown is free to read.'},
+    {el:'#shelf',t:'Hand-picked shelves',d:'Trusted free textbooks and guides from OpenStax, WHO, NCBI and more.'}],
+  account:[
+    {el:'#acctBox',t:'Your account',d:'Choose "I’m a patient" or "I’m a doctor", fill in your name, email and a password, and you are in. Already have one? Use Log in.'}],
+  dashboard:[
+    {el:'#v-dashboard .page-title',t:'For clinic staff',d:'This page is for the clinic’s own staff to see bookings and alerts. Patients don’t need it.'}]};
+const TOURPREF=(()=>{try{return JSON.parse(localStorage.getItem('sd_tour'))||{}}catch{return {}}})();
+TOURPREF.seen=TOURPREF.seen||{};if(TOURPREF.tips===undefined)TOURPREF.tips=true;
+const saveTour=()=>{try{localStorage.setItem('sd_tour',JSON.stringify(TOURPREF))}catch{}};
+let TOUR=null;
+function tourVisible(el){if(!el)return false;const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(el).visibility!=='hidden'}
+function startTour(name,force){const steps=TOURS[name];if(!steps||TOUR)return;if(!force&&(!TOURPREF.tips||TOURPREF.seen[name]))return;
+  if($('#navDrawer.on')){$('#navShade').click()}
+  TOUR={name,steps,i:0};
+  const sh=document.createElement('div');sh.id='tourShade';const sp=document.createElement('div');sp.id='tourSpot';const cd=document.createElement('div');cd.id='tourCard';cd.setAttribute('role','dialog');cd.setAttribute('aria-live','polite');
+  document.documentElement.append(sh,sp,cd);sh.onclick=e=>e.stopPropagation();showStep()}  // outside <body> so the text-size zoom doesn't shift it
+function endTour(markSeen=true){if(!TOUR)return;if(markSeen){TOURPREF.seen[TOUR.name]=1;saveTour()}TOUR=null;['#tourShade','#tourSpot','#tourCard'].forEach(s=>{const e=$(s);if(e)e.remove()})}
+async function showStep(){if(!TOUR)return;const st=TOUR.steps[TOUR.i],n=TOUR.steps.length;let el=st.el?$(st.el):null;
+  if(el&&el.closest('.tabs'))el.scrollIntoView({block:'nearest',inline:'center',behavior:'smooth'});
+  else if(el){const r=el.getBoundingClientRect();if(r.top<70||r.bottom>innerHeight-20)el.scrollIntoView({block:r.height>innerHeight*.6?'start':'center',behavior:'smooth'})}
+  if(el)await new Promise(r=>setTimeout(r,380));if(!TOUR)return;
+  if(el&&!tourVisible(el))el=null;
+  const sp=$('#tourSpot'),cd=$('#tourCard');
+  cd.innerHTML=`<button class="t-x" type="button" aria-label="Close guide">✕</button>${st.welcome?'':`<div class="t-step">STEP ${TOUR.i+(TOUR.name==='welcome'?0:1)} OF ${n-(TOUR.name==='welcome'?1:0)}</div>`}<h4>${esc(st.t)}</h4><p>${esc(st.d)}</p>
+    ${st.welcome?'':`<div class="t-dots">${TOUR.steps.slice(TOUR.name==='welcome'?1:0).map((_,k)=>`<i class="${k===TOUR.i-(TOUR.name==='welcome'?1:0)?'on':''}"></i>`).join('')}</div>`}
+    <div class="t-btns">${st.welcome?'<button class="skip" type="button" data-t="skip">No thanks</button><button class="btn primary sm" type="button" data-t="next">Start the tour</button>'
+      :`<button class="skip" type="button" data-t="skip">Skip guide</button>${TOUR.i>(TOUR.name==='welcome'?1:0)?'<button class="btn ghost sm" type="button" data-t="back">Back</button>':''}<button class="btn primary sm" type="button" data-t="next">${TOUR.i===n-1?'Done':'Next'}</button>`}</div>
+    ${st.welcome||TOUR.i===n-1?`<label class="t-never"><input type="checkbox" id="tourNever" ${TOURPREF.tips?'':'checked'}> Don’t show guides again</label>`:''}`;
+  cd.querySelector('.t-x').onclick=()=>endTour();
+  cd.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{const a=b.dataset.t;const nv=$('#tourNever');if(nv){TOURPREF.tips=!nv.checked;saveTour()}
+    if(a==='skip')return endTour();if(a==='back'){TOUR.i--;return showStep()}if(TOUR.i>=n-1)return endTour();TOUR.i++;showStep()});
+  place(el);cd.querySelector('[data-t="next"]').focus({preventScroll:true})}
+function place(el){const sp=$('#tourSpot'),cd=$('#tourCard');if(!sp)return;
+  if(!el){sp.className='none';cd.classList.add('center');cd.style.left=cd.style.top='';return}
+  sp.className='';cd.classList.remove('center');const r=el.getBoundingClientRect(),pad=8;
+  const top=Math.max(4,r.top-pad),h=Math.min(r.height+pad*2,innerHeight-top-4);
+  Object.assign(sp.style,{left:(r.left-pad)+'px',top:top+'px',width:(r.width+pad*2)+'px',height:h+'px'});
+  const cw=cd.offsetWidth,ch=cd.offsetHeight;let y=top+h+12;if(y+ch>innerHeight-10)y=top-ch-12;if(y<10)y=Math.min(innerHeight-ch-10,Math.max(10,top+20));
+  let x=r.left+r.width/2-cw/2;x=Math.max(12,Math.min(innerWidth-cw-12,x));cd.style.left=x+'px';cd.style.top=y+'px'}
+addEventListener('resize',()=>{if(TOUR){const st=TOUR.steps[TOUR.i];place(st.el?$(st.el):null)}});
+addEventListener('scroll',()=>{if(TOUR){const st=TOUR.steps[TOUR.i];const el=st.el?$(st.el):null;if(el&&tourVisible(el))place(el)}},{passive:true});
+document.addEventListener('keydown',e=>{if(!TOUR)return;if(e.key==='Escape')endTour();else if(e.key==='ArrowRight')$('#tourCard [data-t="next"]')?.click();else if(e.key==='ArrowLeft')$('#tourCard [data-t="back"]')?.click()},true);
+// first visit: welcome tour; first time on a page: that page's tour
+function maybePageTour(v){if(TOUR||!TOURPREF.tips)return;if(!TOURPREF.seen.welcome)return;setTimeout(()=>{if(!TOUR&&(($('.view.active')||{}).id||'').slice(2)===v)startTour(v)},900)}
+setTimeout(()=>{if(TOURPREF.tips&&!TOURPREF.seen.welcome&&!location.hash.startsWith('#call/')&&!location.hash.startsWith('#pay/'))startTour('welcome');else maybePageTour((($('.view.active')||{}).id||'v-home').slice(2))},1800);
+// ☰ menu: replay the tour, tour of this page, guides on/off
+(()=>{const dr=$('#navDrawer');if(!dr)return;const h=document.createElement('div');h.className='nd-h';h.textContent='HELP';
+  const box=document.createElement('div');box.className='nd-links';
+  box.innerHTML=`<button type="button" id="ndTour"><em>🧭</em>Guided tour of Clinora</button><button type="button" id="ndPageTour"><em>💡</em>Explain this page</button>
+    <button type="button" id="ndTips"><em>🔔</em><span id="ndTipsTxt"></span></button>`;
+  $('#ndLang').previousElementSibling.before(h,box);  // right under the page links
+  const sync=()=>{$('#ndTipsTxt').textContent=TOURPREF.tips?'Page guides: On (tap to turn off)':'Page guides: Off (tap to turn on)'};sync();
+  const close=()=>{if($('#navDrawer.on'))$('#navShade').click()};
+  $('#ndTour').onclick=()=>{close();setTimeout(()=>{if(TOUR)endTour(false);TOURS.welcome&&(TOUR=null,startTour('welcome',true))},350)};
+  $('#ndPageTour').onclick=()=>{close();const v=(($('.view.active')||{}).id||'v-home').slice(2);setTimeout(()=>startTour(TOURS[v]?v:'welcome',true),350)};
+  $('#ndTips').onclick=()=>{TOURPREF.tips=!TOURPREF.tips;if(TOURPREF.tips){TOURPREF.seen={welcome:1}}saveTour();sync()};})();
 
 /* ================= BOOKWORM: free books ================= */
 const SHELF=[['🫀','Anatomy & Physiology','OpenStax · free textbook','https://openstax.org/details/books/anatomy-and-physiology-2e'],
