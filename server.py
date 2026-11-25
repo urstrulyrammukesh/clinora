@@ -88,7 +88,7 @@ REQUIRE_VIDEO_PAYMENT = os.environ.get("REQUIRE_VIDEO_PAYMENT", "1") != "0"
 DOCTOR_FEES = {"d1": 40, "d2": 50, "d3": 70, "d4": 55}  # in CURRENCY, whole units
 DOCTOR_NAMES = {"d1": "Dr. Sarah Collins", "d2": "Dr. Rohan Mehta", "d3": "Dr. Priya Nair", "d4": "Dr. Daniel Okafor"}
 PAY_STATUSES = {"unpaid", "paid", "refund_due", "refunded"}
-CLINIC_NAME = "Sunrise Medical Center"
+CLINIC_NAME = "Clinora Medical Center"
 
 # The clinic's own fixed prices in some currencies (used instead of converting).
 LOCAL_PRICES = {"inr": {"d1": 500, "d2": 600, "d3": 800, "d4": 700}}
@@ -209,7 +209,7 @@ elif not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_
 else:
     client = anthropic.Anthropic()
 
-SYSTEM_PROMPT = """You are the AI receptionist for Sunrise Medical Center, shown in a chat panel on the Clinora website. Patients can reach you from any country and time zone.
+SYSTEM_PROMPT = """You are the AI receptionist for Clinora Medical Center, shown in a chat panel on the Clinora website. Patients can reach you from any country and time zone.
 
 What you do:
 - Answer questions about the clinic: doctors, fees, opening hours, address, payment, video consultations.
@@ -1100,7 +1100,7 @@ TRANSLATE_SYSTEM = """You translate the user interface of Clinora, a website whe
 Translate every item into {name}. Rules:
 - Natural, simple, friendly wording that an ordinary patient understands. Use the script normally used for this language.
 - Medical and emergency text must be accurate and clear.
-- Keep unchanged: emojis, numbers, symbols such as // → · * … ★ ⚡, phone numbers, \\n line breaks, and these names: Clinora, Sunrise Medical Center, WhatsApp, OpenStreetMap, Google, Stripe.
+- Keep unchanged: emojis, numbers, symbols such as // → · * … ★ ⚡, phone numbers, \\n line breaks, and these names: Clinora, Clinora Medical Center, WhatsApp, OpenStreetMap, Google, Stripe.
 - Keep every HTML tag and attribute exactly as in the source (only translate the visible text between tags).
 - Items written in CAPITALS stay in capitals if the script has capital letters.
 - Item "__ask" asks the visitor whether to view the site in {name}; item "__yes" is the short button to accept.
@@ -1379,7 +1379,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(e.status, {"error": str(e)})
 
     def log_message(self, fmt, *args):
-        if "/api/" in (args[0] if args else "") and "/api/call/poll" not in (args[0] if args else ""):
+        first = str(args[0]) if args else ""
+        if "/api/" in first and "/api/call/poll" not in first:
             super().log_message(fmt, *args)
 
 
