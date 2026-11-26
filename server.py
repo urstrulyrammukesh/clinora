@@ -490,6 +490,8 @@ def init_db():
             conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE members SET email_ok=1")
         conn.executescript(EXTRA_SCHEMA)
+        if "track" not in {r["name"] for r in conn.execute("PRAGMA table_info(queue_items)")}:
+            conn.execute("ALTER TABLE queue_items ADD COLUMN track TEXT")
         bcols = {r["name"] for r in conn.execute("PRAGMA table_info(dbookings)")}
         for col, kind in [("pay_status", "TEXT NOT NULL DEFAULT 'none'"), ("pay_ref", "TEXT"), ("pay_amount", "INTEGER"), ("hold_until", "INTEGER")]:
             if col not in bcols:
@@ -3289,10 +3291,12 @@ def queue_view(conn, lst, me=None):
         for i in items:
             if i["patient_id"] == me["id"]:
                 ahead = sum(1 for w in waiting if w["token"] < i["token"]) + (1 if now and i["status"] == "waiting" else 0)
-                mine.append({"id": i["id"], "token": i["token"], "status": i["status"], "ahead": ahead, "wait_min": ahead * mins, "name": i["name"]})
+                mine.append({"id": i["id"], "token": i["token"], "status": i["status"], "ahead": ahead, "wait_min": ahead * mins, "name": i["name"],
+                             "track": f"{PUBLIC_URL}/t/{i['track']}" if i.get("track") else None})
         pub["mine"] = mine
         if lst["owner"] == me["id"]:
-            pub["items"] = [{k: i[k] for k in ("id", "token", "name", "status", "booking_id")} for i in items]
+            pub["items"] = [dict({k: i[k] for k in ("id", "token", "name", "status", "booking_id")},
+                                 track=f"{PUBLIC_URL}/t/{i['track']}" if i.get("track") else None) for i in items]
     return pub
 
 
@@ -3312,8 +3316,8 @@ def m_queue_checkin(conn, d, me):
     if b["date"] != day:
         raise InputError("You can check in on the day of your visit")
     if not conn.execute("SELECT 1 FROM queue_items WHERE booking_id=?", (b["id"],)).fetchone():
-        conn.execute("INSERT INTO queue_items(listing_id,day,token,name,patient_id,booking_id,status,ts) VALUES(?,?,?,?,?,?,?,?)",
-                     (lst["id"], day, _next_token(conn, lst["id"], day), b["for_name"], me["id"], b["id"], "waiting", now_ms()))
+        conn.execute("INSERT INTO queue_items(listing_id,day,token,name,patient_id,booking_id,status,ts,track) VALUES(?,?,?,?,?,?,?,?,?)",
+                     (lst["id"], day, _next_token(conn, lst["id"], day), b["for_name"], me["id"], b["id"], "waiting", now_ms(), secrets.token_urlsafe(9)))
         notify(conn, lst["owner"], "booking", f"🎫 {b['for_name']} is at the clinic", f"Visit at {b['time']}", "account")
     return queue_view(conn, lst, me)
 
@@ -3337,8 +3341,8 @@ def m_queue_walkin(conn, d, me):
     lst = _my_queue_listing(conn, me)
     name = text(d, "name", QUEUE_NAME_MAX)
     day = _queue_day(lst)
-    conn.execute("INSERT INTO queue_items(listing_id,day,token,name,status,ts) VALUES(?,?,?,?,?,?)",
-                 (lst["id"], day, _next_token(conn, lst["id"], day), name, "waiting", now_ms()))
+    conn.execute("INSERT INTO queue_items(listing_id,day,token,name,status,ts,track) VALUES(?,?,?,?,?,?,?)",
+                 (lst["id"], day, _next_token(conn, lst["id"], day), name, "waiting", now_ms(), secrets.token_urlsafe(9)))
     return queue_view(conn, lst, me)
 
 
@@ -3650,7 +3654,7 @@ def m_doc_stats(conn, d, me):
         "followers": one("SELECT COUNT(*) FROM favs WHERE listing_id=?", lid),
         "prescriptions": one("SELECT COUNT(*) FROM prescriptions WHERE doctor_id=?", me["id"]),
         "patients": one("SELECT COUNT(DISTINCT patient_id) FROM dbookings WHERE listing_id=? AND status!='cancelled'", lid),
-        "weekly": weekly, "fee_pct": PLATFORM_FEE_PCT,
+        "weekly": weekly, "fee_pct": PLATFORM_FEE_PCT, "peak": peak_hours(conn, lid),
     }
 
 
@@ -3662,6 +3666,45 @@ def m_invite_link(conn, d, me):
         conn.execute("UPDATE members SET ref_code=? WHERE id=?", (code, me["id"]))
     joined = conn.execute("SELECT kind, COUNT(*) AS n FROM members WHERE referred_by=? GROUP BY kind", (me["id"],)).fetchall()
     return {"url": f"{PUBLIC_URL}/#join/{code}" + ("/d" if me["kind"] == "doctor" else ""), "joined": {r["kind"]: r["n"] for r in joined}}
+
+
+def track_page(conn, code):
+    """Public, no-login page for one queue token: "Token #7 · now serving #4 · about 20 min". Refreshes itself."""
+    if not re.fullmatch(r"[\w-]{8,20}", code or ""):
+        return None
+    q = conn.execute("SELECT * FROM queue_items WHERE track=?", (code,)).fetchone()
+    if not q:
+        return None
+    lst = conn.execute("SELECT * FROM listings WHERE id=?", (q["listing_id"],)).fetchone()
+    v = queue_view(conn, lst)
+    ahead = conn.execute("SELECT COUNT(*) FROM queue_items WHERE listing_id=? AND day=? AND status='waiting' AND token<?",
+                         (q["listing_id"], q["day"], q["token"])).fetchone()[0] + (1 if v["now"] and q["status"] == "waiting" else 0)
+    e = html.escape
+    msg = {"called": "🔔 It's your turn. Please go in now.", "done": "✅ Your visit is done. Get well soon!",
+           "skipped": "⏭ You were skipped. Please talk to the front desk."}.get(q["status"]) or \
+        (f"{ahead} ahead of you · about {ahead * v['mins']} min" if ahead else "You're next! Please stay close.")
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="15"><meta name="robots" content="noindex"><title>Token #{q['token']} · {e(lst['name'])}</title>
+<style>body{{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#04201c;color:#ecfeff;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center}}
+.c{{padding:24px}}.k{{letter-spacing:.25em;color:#5eead4;font-size:13px}}.t{{font-size:84px;font-weight:900;line-height:1.05}}.m{{font-size:20px;margin:12px 0}}
+.s{{color:#99f6e4;font-size:15px}}.f{{color:#5eead4;font-size:12px;margin-top:26px}}</style></head><body><div class="c">
+<div class="k">YOUR TOKEN</div><div class="t">#{q['token']}</div><div class="m">{e(msg)}</div>
+<div class="s">Now serving: {('#' + str(v['now'])) if v['now'] else '–'} · {e(lst['name'])}</div>
+<div class="f">Updates by itself every 15 seconds · Clinora</div></div></body></html>"""
+
+
+def peak_hours(conn, lid):
+    """Visits by weekday and hour over the last 60 days, for the doctor's "busiest times" chart."""
+    since = now_ms() - 60 * 86_400_000
+    lst = conn.execute("SELECT * FROM listings WHERE id=?", (lid,)).fetchone()
+    zone = _zone((booking_cfg(lst) or {}).get("tz") or lst["tz"] or "Asia/Kolkata")
+    hours, days = [0] * 24, [0] * 7
+    for (ms,) in conn.execute("SELECT at FROM dbookings WHERE listing_id=? AND status!='cancelled' AND at>? UNION ALL "
+                              "SELECT ts FROM queue_items WHERE listing_id=? AND booking_id IS NULL AND ts>?", (lid, since, lid, since)):
+        dt = datetime.datetime.fromtimestamp(ms / 1000, zone)
+        hours[dt.hour] += 1
+        days[dt.weekday()] += 1
+    return {"hours": hours, "days": days}
 
 
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
@@ -4656,6 +4699,13 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        m = re.fullmatch(r"/t/([\w-]{8,20})", path_only)
+        if m:
+            with connect() as conn:
+                page = track_page(conn, m.group(1))
+            if not page:
+                return self.send_text(404, "<!DOCTYPE html><title>Not found</title><p>This token link has expired.</p>", "text/html; charset=utf-8")
+            return self.send_text(200, page, "text/html; charset=utf-8")
         m = re.fullmatch(r"/queue/(\d+)", path_only)
         if m:
             with connect() as conn:

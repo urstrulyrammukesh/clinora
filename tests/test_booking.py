@@ -250,3 +250,20 @@ def test_doctor_dashboard_and_invites(server, doctor, uniq):
     assert s == 200
     assert doc.post("/api/m/invite")[1]["result"]["joined"] == {"doctor": 1}
     assert any("joined Clinora from your invite" in n["title"] for n in doc.post("/api/m/notifs")[1]["notifs"])
+
+
+def test_queue_tracking_link_and_peak_hours(server, uniq):
+    doc = server.client()
+    doc.signup("doctor", "Dr Track", uniq())
+    doc.profile("Track Clinic")
+    q = doc.post("/api/m/queue/walkin", {"name": "Walk-in Sita"})[1]["result"]
+    link = q["items"][0]["track"]
+    assert "/t/" in link
+    path = "/t/" + link.split("/t/")[1]
+    s, body, _ = server.client().get(path)  # no login needed
+    assert s == 200 and b"#1" in body and b"Track Clinic" in body and b"Sita" not in body  # no names on the public page
+    assert server.client().get("/t/doesnotexist1")[0] == 404
+    doc.post("/api/m/queue/next")
+    assert b"your turn" in server.client().get(path)[1]
+    s, j = doc.post("/api/m/doc/stats")
+    assert len(j["result"]["peak"]["hours"]) == 24 and sum(j["result"]["peak"]["hours"]) >= 1

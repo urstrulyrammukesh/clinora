@@ -3533,7 +3533,8 @@ function wirePhone(){const f=$('#phForm');if(!f)return;const msg=t=>$('#phMsg').
 function qShow(box,q){const m=(q.mine||[]).find(x=>x.status!=='done'&&x.status!=='skipped')||(q.mine||[])[0];if(!m||!box)return;
   box.innerHTML=`<div class="visit" style="border-color:var(--teal);margin:6px 0"><b style="font-size:22px">🎫 Token #${m.token}</b>
     <small>${m.status==='called'?'🔔 <b>It’s your turn. Please go in now.</b>':m.status==='waiting'?`Now serving #${q.now??'–'} · ${m.ahead} ahead of you · about ${m.wait_min} min`:m.status==='done'?'✅ Done':'Skipped: please tell the front desk'}</small>
-    <small>We’ll alert you when 2 people are ahead and when it’s your turn.</small></div>`}
+    <small>We’ll alert you when 2 people are ahead and when it’s your turn.</small>
+    ${m.track?`<div class="acts"><a class="btn ghost sm" href="${esc(m.track)}" target="_blank" rel="noopener">📍 Live tracking page</a><a class="btn ghost sm" href="https://wa.me/?text=${encodeURIComponent('My Clinora token #'+m.token+': '+m.track)}" target="_blank" rel="noopener">Share on WhatsApp</a></div>`:''}</div>`}
 async function docQueue(){const box=$('#qBody');if(!box||!MEM.listing)return;let q;
   try{q=(await mapi('queue/state',{listing_id:MEM.listing.id})).result}catch(e){box.textContent=e.message;return}
   const items=q.items||[];const st={waiting:'⏳',called:'🔔',done:'✅',skipped:'⏭'};
@@ -3541,7 +3542,7 @@ async function docQueue(){const box=$('#qBody');if(!box||!MEM.listing)return;let
       <button class="btn primary sm" type="button" id="qNext">▶ Call next</button><a class="btn ghost sm" href="/queue/${q.listing_id}" target="_blank" rel="noopener">📺 Waiting-room screen</a></div>
     <form id="qWalk" style="display:flex;gap:6px;margin:10px 0"><input id="qName" maxlength="60" placeholder="Walk-in patient's name" aria-label="Walk-in patient's name" style="flex:1"><button class="btn ghost sm" type="submit">+ Give token</button></form>
     ${items.length?items.map(i=>`<div class="fam" style="margin-bottom:4px"><b>#${i.token}</b> ${esc(i.name)} <span style="color:var(--mute)">${st[i.status]||''} ${i.status}${i.booking_id?' · booked':''}</span>
-      <div class="acts">${i.status==='waiting'?`<button class="rv-mini" type="button" data-qskip="${i.id}">Skip</button>`:i.status==='skipped'?`<button class="rv-mini" type="button" data-qback="${i.id}">Back in line</button>`:''}</div></div>`).join('')
+      <div class="acts">${i.track&&i.status==='waiting'?`<a class="rv-mini" href="https://wa.me/?text=${encodeURIComponent('Your token at '+(MEM.listing||{}).name+' is #'+i.token+'. Track your turn live: '+i.track)}" target="_blank" rel="noopener" title="Send the live tracking link on WhatsApp">📲 Send link</a>`:''}${i.status==='waiting'?`<button class="rv-mini" type="button" data-qskip="${i.id}">Skip</button>`:i.status==='skipped'?`<button class="rv-mini" type="button" data-qback="${i.id}">Back in line</button>`:''}</div></div>`).join('')
       :'<p style="color:var(--mute);font-size:13px">No tokens yet today. Patients with a booked in-clinic visit tap “I’m at the clinic” on their phone; add walk-ins here.</p>'}`;
   const run=async(path,body)=>{try{await mapi(path,body);docQueue()}catch(e){alert(e.message)}};
   $('#qNext').onclick=()=>run('queue/next',{});$('#qWalk').onsubmit=e=>{e.preventDefault();const n=$('#qName').value.trim();if(n)run('queue/walkin',{name:n})};
@@ -3620,6 +3621,8 @@ async function docDash(){const box=$('#dashBody');if(!box)return;let s;try{s=(aw
       ${tile(s.no_show_rate==null?'–':s.no_show_rate+'%','no-show rate')}${tile(s.cancelled,'cancelled')}${tile('₹'+Number(s.earned_month).toLocaleString('en-IN'),'earned this month (online)')}${tile('₹'+Number(s.earned_all).toLocaleString('en-IN'),'earned in total (online)')}
       ${tile(s.rating?s.rating+'★':'–',s.reviews+' reviews')}${tile(s.followers,'followers')}${tile(s.prescriptions,'prescriptions written')}</div>
     <div class="st-chart"><h5>📅 Visits per week · last 8 weeks + this week</h5>${stBars(s.weekly,'Visits')}</div>
+    <div class="st-charts" style="margin-top:8px"><div class="st-chart"><h5>⏰ Busiest hours (last 60 days)</h5>${stBars(s.peak.hours.slice(7,22),'Visits by hour, 7 am to 9 pm')}<small style="color:var(--mute)">7 am → 9 pm</small></div>
+      <div class="st-chart"><h5>📆 Busiest days</h5>${stBars(s.peak.days,'Visits by weekday, Monday to Sunday')}<small style="color:var(--mute)">Mon → Sun</small></div></div>
     <p style="font-size:12px;color:var(--mute);margin-top:6px">Earnings count online payments after Clinora's ${s.fee_pct}% fee. Fees paid at the clinic aren't counted.${s.no_show_rate>20?' Tip: many no-shows? Turn on “Patients pay online when booking”.':''}</p>`}
 
 /* ================= INVITE LINK ================= */
