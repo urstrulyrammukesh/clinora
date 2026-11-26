@@ -389,6 +389,7 @@ CREATE TABLE IF NOT EXISTS dbookings(id INTEGER PRIMARY KEY AUTOINCREMENT, listi
   status TEXT NOT NULL, fee INTEGER, cur TEXT, cancel_by TEXT, cancel_reason TEXT, ts INTEGER NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS dbook_slot ON dbookings(listing_id, date, time) WHERE status='booked';
 CREATE INDEX IF NOT EXISTS dbook_patient ON dbookings(patient_id, at);
+CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, member_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -910,7 +911,7 @@ def member_state(conn, me):
     ver = conn.execute("SELECT reg_no, council, reg_year, qualification, cert, status, reason, submitted, reviewed FROM verifications "
                        "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
-            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me),
+            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY,
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"]),
                             booking=json.loads(lst["booking"] or "null")) if lst else None}
@@ -1368,6 +1369,7 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
     for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
                                            "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
         notify(conn, owner, "booking", "❌ A patient cancelled", f"{when} · the patient deleted their account", "account")
@@ -1409,6 +1411,8 @@ def notify(conn, member_id, kind, title, body="", link=""):
     # keep the newest 100 per person
     conn.execute("DELETE FROM notifs WHERE member_id=? AND id NOT IN (SELECT id FROM notifs WHERE member_id=? ORDER BY id DESC LIMIT 100)",
                  (member_id, member_id))
+    if kind not in PUSH_SKIP:
+        push_to(conn, member_id, str(title)[:120], str(body or "")[:200], str(link or ""))
 
 
 def welcome(conn, member_id, kind):
@@ -2122,6 +2126,8 @@ def make_backup(reason="auto"):
                                "videos": BACKUP_VIDEOS}, indent=1).encode()
         with tarfile.open(part, "w:gz") as tar:
             tar.add(snap, arcname=DB_PATH.name)
+            if VAPID_FILE.exists():
+                tar.add(VAPID_FILE, arcname=VAPID_FILE.name)
             info = tarfile.TarInfo("manifest.json")
             info.size, info.mtime = len(manifest), time.time()
             import io
@@ -2198,7 +2204,7 @@ def restore_backup(path):
             sys.exit(f"Clinora is still running on port {PORT}. Stop it first (Ctrl+C in its window), then run this again.")
     except OSError:
         pass
-    allowed = (DB_PATH.name, "manifest.json")
+    allowed = (DB_PATH.name, "manifest.json", "vapid_private.pem")
     with tarfile.open(src, "r:gz") as tar:
         members = tar.getmembers()
         for m in members:
@@ -2486,6 +2492,86 @@ def has_booking(conn, a, b):
                              "((x.patient_id=? AND l.owner=?) OR (x.patient_id=? AND l.owner=?)) LIMIT 1", (a, b, b, a)).fetchone())
 
 
+# ---------------------------------------------------------------- phone / computer notifications (Web Push)
+# Bell alerts (messages, bookings, reminders...) also pop up on the person's phone or computer, even when
+# Clinora is closed. The browser's push service delivers them; our VAPID key proves they come from us.
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:
+    webpush = None
+VAPID_FILE = DATA_DIR / "vapid_private.pem"
+PUSH_SKIP = {"welcome"}
+
+
+def vapid_public_key():
+    """Creates the key pair once (kept in the data folder) and returns the public part browsers need."""
+    if not webpush:
+        return None
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    import base64
+    if not VAPID_FILE.exists():
+        VAPID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        key = ec.generate_private_key(ec.SECP256R1())
+        VAPID_FILE.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+        os.chmod(VAPID_FILE, 0o600)
+    key = serialization.load_pem_private_key(VAPID_FILE.read_bytes(), None)
+    raw = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+PUSH_KEY = None
+
+
+def m_push_subscribe(conn, d, me):
+    need_member(me)
+    endpoint = str(d.get("endpoint") or "")
+    keys = d.get("keys") or {}
+    if not endpoint.startswith("https://") or len(endpoint) > 800 or not isinstance(keys, dict):
+        raise InputError("This browser's notification details look wrong")
+    p256, auth = str(keys.get("p256dh") or ""), str(keys.get("auth") or "")
+    if not (20 < len(p256) < 200 and 8 < len(auth) < 60):
+        raise InputError("This browser's notification details look wrong")
+    if conn.execute("SELECT COUNT(*) FROM push_subs WHERE member_id=?", (me["id"],)).fetchone()[0] >= 10:
+        conn.execute("DELETE FROM push_subs WHERE endpoint IN (SELECT endpoint FROM push_subs WHERE member_id=? ORDER BY ts LIMIT 1)", (me["id"],))
+    conn.execute("INSERT OR REPLACE INTO push_subs VALUES(?,?,?,?,?)", (endpoint, me["id"], p256, auth, now_ms()))
+    return {"on": True}
+
+
+def m_push_unsubscribe(conn, d, me):
+    need_member(me)
+    conn.execute("DELETE FROM push_subs WHERE member_id=? AND endpoint=?", (me["id"], str(d.get("endpoint") or "")))
+    return {"on": False}
+
+
+def push_to(conn, member_id, title, body, link):
+    if not webpush or not VAPID_FILE.exists():
+        return
+    subs = [dict(r) for r in conn.execute("SELECT endpoint, p256dh, auth FROM push_subs WHERE member_id=?", (member_id,))]
+    if not subs:
+        return
+    payload = json.dumps({"title": title, "body": body, "link": link or "account"})
+    claims = {"sub": "mailto:" + (SUPPORT_EMAIL or "support@clinora.invalid")}
+
+    def run():
+        gone = []
+        for s in subs:
+            try:
+                webpush({"endpoint": s["endpoint"], "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}}, payload,
+                        vapid_private_key=str(VAPID_FILE), vapid_claims=dict(claims), ttl=86400, timeout=10)
+            except WebPushException as e:
+                if e.response is not None and e.response.status_code in (404, 410):
+                    gone.append(s["endpoint"])  # the person turned notifications off or reinstalled the browser
+                else:
+                    print(f"[push] failed: {e}", flush=True)
+            except Exception as e:
+                print(f"[push] failed: {type(e).__name__}: {e}", flush=True)
+        if gone:
+            with DB_LOCK, connect() as c2:
+                c2.executemany("DELETE FROM push_subs WHERE endpoint=?", [(g,) for g in gone])
+    threading.Thread(target=run, daemon=True).start()
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2495,7 +2581,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete,
                  "/api/m/report": m_report, "/api/m/block": m_block, "/api/m/confirm/resend": m_confirm_resend,
                  "/api/m/booking/settings": m_booking_settings, "/api/m/book": m_book, "/api/m/booking/cancel": m_booking_cancel,
-                 "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots}
+                 "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots,
+                 "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe}
 
 
 
@@ -3442,6 +3529,8 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if not self.is_public_file():
             return self.send_json(404, {"error": "not found"})
+        if path_only == "/sw.js":  # the service worker runs under its own policy: it only talks to our own site
+            self._csp = "default-src 'self'"
         if path_only.startswith("/assets/"):  # images, icons, GIFs: cache a week (change the ?v= to refresh)
             self._cache = "public, max-age=604800"
         else:
@@ -3852,6 +3941,11 @@ if __name__ == "__main__":
           else "DEMO mode (no money moves). Add provider keys to .env for real payments."))
     if PRODUCTION and not PUBLIC_URL.startswith("https://"):
         print("WARNING: APP_ENV=production but PUBLIC_URL is not https://. Real payments must only run over HTTPS.")
+    try:
+        PUSH_KEY = vapid_public_key()
+    except Exception as e:
+        print("Push notifications OFF:", e)
+    print("Push notifications:", "ON" if PUSH_KEY else "OFF (pip install pywebpush)")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=backup_loop, daemon=True).start()
     print("Backups:", f"every {BACKUP_EVERY_H:g} h, keeping {BACKUP_KEEP}, in {BACKUP_DIR}" + (" + cloud copy" if S3_ON else " (this computer/disk only)"))

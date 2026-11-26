@@ -2862,6 +2862,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <label>REPEAT NEW PASSWORD</label><input id="pwNew2" type="password" required minlength="10" autocomplete="new-password">
         <button class="btn primary sm" type="submit">${me.has_password?'Update password':'Set password'}</button><div id="pwMsg" style="font-size:13px;margin-top:8px"></div>
         <p style="font-size:12px;color:var(--mute);margin-top:8px">For your safety, this logs you out on your other phones and computers.</p></form></details>
+    <div class="card" id="pushCard" style="padding:14px 18px;margin-bottom:18px;display:none"></div>
     ${myVisitsCard()}
     ${remCard()}
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
@@ -2907,7 +2908,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  wireReminders();wireBookings();
+  wireReminders();wireBookings();wirePush();
   if(doc&&MEM.listing){renderGallery();wireVerify()}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3252,6 +3253,26 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-print],[da
   if(t.dataset.profbook){$('#prof').classList.remove('on');user('Book an appointment with '+t.dataset.profbook)}
   if(t.dataset.clickid){const x=document.getElementById(t.dataset.clickid);if(x)x.click()}});
 document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.hasAttribute('data-rmerr'))t.remove()},true);
+
+/* ================= PHONE / COMPUTER NOTIFICATIONS (Web Push) ================= */
+const pushOK=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window&&(location.protocol==='https:'||/^(localhost|127\.0\.0\.1)$/.test(location.hostname));
+function b64uBytes(s){const p='='.repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+async function pushSubNow(){const reg=await navigator.serviceWorker.ready;return reg.pushManager.getSubscription()}
+async function wirePush(){const box=$('#pushCard');if(!box)return;
+  if(!pushOK()||!MEM.push_key){box.style.display='none';return}
+  let sub=null;try{sub=await Promise.race([pushSubNow(),new Promise(r=>setTimeout(()=>r('wait'),3000))])}catch{}
+  if(sub==='wait'){box.style.display='none';return}
+  const blocked=Notification.permission==='denied';box.style.display='';
+  box.innerHTML=sub?`🔔 <b>Notifications are on</b> for this device: messages, bookings and reminders pop up even when Clinora is closed. <button class="btn ghost sm" type="button" id="pushBtn" style="margin-left:6px">Turn off</button>`
+    :blocked?`🔕 Notifications are blocked in this browser. To get alerts, allow notifications for this site in your browser settings.`
+    :`🔔 <b>Get alerts on this phone or computer</b>, even when Clinora is closed: new messages, bookings and reminders. <button class="btn primary sm" type="button" id="pushBtn" style="margin-left:6px">Turn on</button>`;
+  const b=$('#pushBtn');if(!b)return;
+  b.onclick=async()=>{b.disabled=true;try{
+      if(sub){await mapi('push/unsubscribe',{endpoint:sub.endpoint});await sub.unsubscribe()}
+      else{if(await Notification.requestPermission()!=='granted')throw new Error('You chose not to allow notifications.');
+        const reg=await navigator.serviceWorker.ready;const s=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(MEM.push_key)});
+        await mapi('push/subscribe',s.toJSON())}
+      wirePush()}catch(e){alert(e.message);b.disabled=false}}}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}

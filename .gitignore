@@ -30,3 +30,4 @@ data/verify/
 data/videos/
 data/backups/
 data/before-restore-*/
+data/vapid_private.pem

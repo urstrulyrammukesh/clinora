@@ -3,7 +3,8 @@
 cd "$(dirname "$0")"
 if [ ! -d .venv ]; then
   echo "First run: setting up (one time)..."
-  python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
+  python3 -m venv .venv
 fi
+.venv/bin/pip install -q -r requirements.txt  # quick when nothing changed; adds new parts after an update
 ( sleep 2; open "http://localhost:8765" ) &
 .venv/bin/python server.py
