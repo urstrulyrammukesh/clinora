@@ -394,6 +394,7 @@ CREATE TABLE IF NOT EXISTS family(id INTEGER PRIMARY KEY AUTOINCREMENT, member_i
   year INTEGER, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS prescriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, booking_id INTEGER UNIQUE NOT NULL, doctor_id INTEGER NOT NULL,
   patient_id INTEGER NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS wa_threads(phone TEXT PRIMARY KEY, history TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -3013,6 +3014,124 @@ def payout_set(conn, d, user):
     return payout_list(conn, d, user)
 
 
+# ---------------------------------------------------------------- WhatsApp: Clinora's assistant on the WhatsApp Business Cloud API
+# Patients message Clinora's WhatsApp number. The assistant answers in their language and finds real Clinora doctors
+# with a one-tap booking link. Turn on with WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET.
+WA_TOKEN = os.environ.get("WHATSAPP_TOKEN", "").strip()
+WA_PHONE_ID = os.environ.get("WHATSAPP_PHONE_ID", "").strip()
+WA_VERIFY = os.environ.get("WHATSAPP_VERIFY_TOKEN", "").strip()
+WA_SECRET = os.environ.get("WHATSAPP_APP_SECRET", "").strip()
+WA_API = os.environ.get("WHATSAPP_API_BASE", "https://graph.facebook.com/v21.0").rstrip("/")
+WA_ON = bool(WA_TOKEN and WA_PHONE_ID and WA_VERIFY and WA_SECRET)
+WA_SEEN = {}  # message id -> time, so a message Meta re-sends is answered only once
+
+WA_SYSTEM = """You are Clinora's assistant on WhatsApp. Clinora helps people find and book real doctors.
+- Reply in the same language the person writes in (Hindi, Hinglish, English, Urdu, Tamil...). Keep replies short: 1 to 5 lines, WhatsApp style, a few emojis at most.
+- To find doctors use the find_doctors tool, then list up to 3 with name, specialty, fee and the booking link exactly as given. Never invent doctors or links.
+- You don't give diagnoses or prescriptions. For medicines or symptoms give simple general guidance and suggest seeing a doctor.
+- Emergencies (chest pain, trouble breathing, stroke signs, heavy bleeding, suicide thoughts): tell them to call 112 (India) or their local emergency number right now.
+- You can't see bookings or accounts here. For their visits, reminders and prescriptions they open the Clinora website."""
+WA_TOOLS = [{"name": "find_doctors", "description": "Search doctors and clinics registered on Clinora by city and/or specialty.",
+             "input_schema": {"type": "object", "properties": {"city": {"type": "string"}, "specialty": {"type": "string"}}, "additionalProperties": False}}]
+
+
+def find_doctors(conn, city="", specialty=""):
+    city, spec = str(city or "").strip().lower(), str(specialty or "").strip().lower()
+    out = []
+    for d in public_listings(conn):
+        hay = f"{d['name']} {d.get('spec') or ''} {d['type']}".lower()
+        if city and city not in f"{d['city']} {d['country']}".lower():
+            continue
+        if spec and spec not in hay:
+            continue
+        b = d.get("booking")
+        out.append({"name": d["name"], "specialty": d.get("spec") or d["type"], "city": d["city"], "verified": d["verified"],
+                    "rating": d.get("rating"), "fee": f"{b['fee']} {b['cur']}" if b else None,
+                    "book": f"{PUBLIC_URL}/#book/{d['id']}" if b else f"{PUBLIC_URL}{d['page']}", "online_booking": bool(b)})
+    out.sort(key=lambda x: (not x["online_booking"], not x["verified"], -(x["rating"] or 0)))
+    return out[:5]
+
+
+def wa_menu_reply(conn, text_in):
+    """Used when the AI is off: a simple keyword assistant."""
+    t = text_in.strip().lower()
+    if re.search(r"\b(chest pain|can'?t breathe|breathing|unconscious|suicid|bleeding|stroke|heart attack)\b", t):
+        return "🚨 This sounds urgent. Call 112 (India) or your local emergency number right now."
+    m = re.match(r"^(doctor|dr|doc|find)\s+(.+)$", t)
+    if m:
+        words = m.group(2).split()
+        found = find_doctors(conn, city=words[-1], specialty=" ".join(words[:-1]))
+        if not found:
+            found = find_doctors(conn, specialty=" ".join(words))
+        if not found:
+            return f"😕 No Clinora doctors found for “{m.group(2)}” yet. Try: doctor dentist Srinagar\nOr search the map: {PUBLIC_URL}/#nearby"
+        return "👨‍⚕️ Doctors on Clinora:\n" + "\n".join(
+            f"• {d['name']} ({d['specialty']}, {d['city']}){' ✓' if d['verified'] else ''}{' · ' + d['fee'] if d['fee'] else ''}\n  {d['book']}" for d in found[:3])
+    return (f"👋 Hi! I'm Clinora on WhatsApp.\n• Find a doctor: send *doctor dentist Srinagar*\n• Book, reminders, prescriptions: {PUBLIC_URL}\n"
+            "• Emergency: call 112")
+
+
+def wa_ai_reply(conn, phone, text_in):
+    row = conn.execute("SELECT history FROM wa_threads WHERE phone=?", (phone,)).fetchone()
+    hist = json.loads(row["history"]) if row else []
+    msgs = hist[-16:] + [{"role": "user", "content": text_in[:2000]}]
+    for _ in range(3):
+        r = client.beta.messages.create(model=MODEL, max_tokens=1200, system=WA_SYSTEM, tools=WA_TOOLS, messages=msgs,
+                                        output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        content = [b.model_dump(exclude_none=True) for b in r.content]
+        msgs.append({"role": "assistant", "content": content})
+        uses = [b for b in content if b.get("type") == "tool_use"]
+        if r.stop_reason != "tool_use" or not uses:
+            break
+        msgs.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": u["id"],
+                                                  "content": json.dumps(find_doctors(conn, **{k: v for k, v in (u.get("input") or {}).items() if k in ("city", "specialty")}))}
+                                                 for u in uses]})
+    reply = "\n".join(b.get("text", "") for b in msgs[-1]["content"] if b.get("type") == "text").strip() if msgs[-1]["role"] == "assistant" else ""
+    keep = [m for m in msgs if isinstance(m["content"], str)] + ([{"role": "assistant", "content": reply}] if reply else [])
+    conn.execute("INSERT OR REPLACE INTO wa_threads VALUES(?,?,?)", (phone, json.dumps(keep[-16:]), now_ms()))
+    return reply or wa_menu_reply(conn, text_in)
+
+
+def wa_send(phone, body):
+    http_json("POST", f"{WA_API}/{WA_PHONE_ID}/messages",
+              {"messaging_product": "whatsapp", "to": phone, "type": "text", "text": {"preview_url": True, "body": body[:4000]}}, bearer=WA_TOKEN)
+
+
+def wa_handle(payload):
+    """Runs in the background so Meta gets its 200 at once."""
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return
+    for entry in data.get("entry") or []:
+        for ch in entry.get("changes") or []:
+            for msg in (ch.get("value") or {}).get("messages") or []:
+                mid, phone = str(msg.get("id") or ""), re.sub(r"\D", "", str(msg.get("from") or ""))
+                if not phone or mid in WA_SEEN:
+                    continue
+                WA_SEEN[mid] = time.time()
+                if too_many("wa", phone, 30, 3600):
+                    continue
+                text_in = ((msg.get("text") or {}).get("body") or "").strip() if msg.get("type") == "text" else ""
+                try:
+                    with DB_LOCK, connect() as conn:
+                        conn.execute("DELETE FROM wa_threads WHERE ts < ?", (now_ms() - 7 * 86_400_000,))
+                        if not text_in:
+                            reply = "🙏 I can read text messages only. Please type your question."
+                        elif client is not None:
+                            reply = None
+                        else:
+                            reply = wa_menu_reply(conn, text_in)
+                    if reply is None:  # AI call outside the database lock
+                        with connect() as conn:
+                            reply = wa_ai_reply(conn, phone, text_in)
+                    wa_send(phone, reply)
+                except Exception as e:
+                    print(f"[whatsapp] reply failed: {type(e).__name__}: {e}", flush=True)
+    for k in [k for k, v in WA_SEEN.items() if v < time.time() - 86400]:
+        WA_SEEN.pop(k, None)
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3976,6 +4095,11 @@ class Handler(SimpleHTTPRequestHandler):
             page = page.replace("{{SUPPORT_EMAIL}}", SUPPORT_EMAIL or "the email address shown in the Clinora app")
             page = page.replace("{{SITE_URL}}", site).replace("{{UPDATED}}", "25 November 2026")
             return self.send_text(200, page, "text/html; charset=utf-8")
+        if path_only == "/api/whatsapp/webhook":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            if WA_ON and q.get("hub.mode", [""])[0] == "subscribe" and hmac.compare_digest(q.get("hub.verify_token", [""])[0], WA_VERIFY):
+                return self.send_text(200, q.get("hub.challenge", [""])[0][:200], "text/plain")
+            return self.send_text(403, "forbidden", "text/plain")
         m = re.fullmatch(r"/rx/(\d+)", path_only)
         if m:
             with connect() as conn:
@@ -4130,6 +4254,16 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         self._cache = self._csp = None
         path = self.path.split("?")[0]
+        if path == "/api/whatsapp/webhook":
+            length = int(self.headers.get("Content-Length") or 0)
+            if not WA_ON or length > 1_000_000:
+                return self.send_json(404, {"error": "not found"})
+            payload = self.rfile.read(length)
+            sig = (self.headers.get("X-Hub-Signature-256") or "").removeprefix("sha256=")
+            if not hmac.compare_digest(hmac.new(WA_SECRET.encode(), payload, hashlib.sha256).hexdigest(), sig):
+                return self.send_json(403, {"error": "bad signature"})
+            threading.Thread(target=wa_handle, args=(payload,), daemon=True).start()
+            return self.send_json(200, {"ok": True})
         if path in ("/api/pay/razorpay-webhook", "/api/pay/paypal-webhook"):
             length = int(self.headers.get("Content-Length") or 0)
             payload = self.rfile.read(min(length, 1_000_000))
