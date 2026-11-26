@@ -29,6 +29,9 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 - 🍔 **Food Scan**: photograph any food or packet label and the AI says if it's OK for you (allergies, conditions, diet), with calories and a healthier swap
 - 📚 **Bookworm**: free medical books (Open Library, Google Books, OpenStax, NCBI, WHO and more)
 
+## Put it live
+Step-by-step: **[docs/go-live.md](docs/go-live.md)** (Render + your own domain, about 1–2 hours). Check readiness any time with `python server.py --check`.
+
 ## Run it on your computer (macOS)
 1. Double-click **`start.command`**. The first run sets everything up.
 2. Open **http://localhost:8765**

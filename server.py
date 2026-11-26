@@ -403,6 +403,11 @@ def now_ms():
 
 
 def seed(conn):
+    if PRODUCTION:  # live site: start clean, no sample patients
+        for key in ("clinic", "d1", "d2", "d3", "d4"):
+            conn.execute("INSERT OR REPLACE INTO live VALUES(?,?)", (key, 1))
+        conn.execute("INSERT OR REPLACE INTO stats VALUES('chats', 0)")
+        return
     today = datetime.date.today()
     t, k = today.isoformat(), (today + datetime.timedelta(days=1)).isoformat()
     rows = [
@@ -560,9 +565,18 @@ def too_many_failures(ip):
     return len(recent) >= 8
 
 
+ADMIN_SETUP_CODE = os.environ.get("ADMIN_SETUP_CODE", "").strip()
+
+
 def setup_admin(conn, d):
     if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
         raise AuthError("Setup is already done. Please log in.")
+    # On the live site the first visitor must not become admin: creating it needs the code from the server settings.
+    if PRODUCTION or ADMIN_SETUP_CODE:
+        if not ADMIN_SETUP_CODE:
+            raise AuthError("Admin setup is locked. Set ADMIN_SETUP_CODE in the server settings, restart, then try again.", 403)
+        if not hmac.compare_digest(str(d.get("code") or "").strip().encode(), ADMIN_SETUP_CODE.encode()):
+            raise AuthError("Wrong setup code.", 403)
     name = text(d, "name", 80)
     cur = conn.execute("INSERT INTO users(email,name,role,doctor_id,pw,created) VALUES(?,?,?,?,?,?)",
                        (valid_email(d), name, "admin", None, hash_password(valid_password(d)), now_ms()))
@@ -616,6 +630,7 @@ def snapshot(conn, user=None):
     data = {
         "me": user,
         "setup_needed": conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0,
+        "setup_code": PRODUCTION or bool(ADMIN_SETUP_CODE), "production": PRODUCTION,
         "live": {r["key"]: bool(r["value"]) for r in conn.execute("SELECT * FROM live")},
         "listings": public_listings(conn),
         # public: which slots are taken, without any patient details
@@ -754,6 +769,8 @@ def delete_listing(conn, d, user=None):
 
 def reset_demo(conn, d, user=None):
     need_admin(user)
+    if PRODUCTION:
+        raise AuthError("Reset is turned off on the live site, so real bookings can never be deleted by mistake.")
     conn.executescript("DELETE FROM appointments; DELETE FROM alerts; DELETE FROM live; DELETE FROM stats;")
     seed(conn)
 
@@ -2132,6 +2149,55 @@ def restore_backup(path):
     print("Now start Clinora again.")
 
 
+# ---------------------------------------------------------------- launch check:  python server.py --check
+def launch_check():
+    """Prints what is ready for a live launch and what is still missing. Never prints secret values."""
+    rows, bad = [], 0
+    def line(level, what, tip=""):
+        nonlocal bad
+        bad += level == "❌"
+        rows.append(f"{level} {what}" + (f"\n     → {tip}" if tip else ""))
+    line("✅" if PRODUCTION else "❌", "APP_ENV=production" if PRODUCTION else "APP_ENV is not 'production'",
+         "" if PRODUCTION else "Set APP_ENV=production on the live server (turns off demo payments and demo data).")
+    line("✅" if PUBLIC_URL.startswith("https://") and "localhost" not in PUBLIC_URL else "❌", f"PUBLIC_URL = {PUBLIC_URL}",
+         "" if PUBLIC_URL.startswith("https://") else "Your real address with https, e.g. https://clinora.in")
+    line("✅" if ADMIN_SETUP_CODE else ("❌" if PRODUCTION else "⚠️"), "ADMIN_SETUP_CODE is set" if ADMIN_SETUP_CODE else "ADMIN_SETUP_CODE missing",
+         "" if ADMIN_SETUP_CODE else "A secret code needed to create the first admin account, so nobody else can take the dashboard.")
+    line("✅" if SUPPORT_EMAIL else "❌", "SUPPORT_EMAIL is set" if SUPPORT_EMAIL else "SUPPORT_EMAIL missing",
+         "" if SUPPORT_EMAIL else "Shown on the Privacy, Terms and Delete-account pages (legally needed).")
+    line("✅" if TRUST_PROXY else "⚠️", "TRUST_PROXY=1" if TRUST_PROXY else "TRUST_PROXY not set", "" if TRUST_PROXY else "Needed on Render, so rate limits see real visitor addresses.")
+    line("✅" if client else "❌", "AI (Claude) key works" if client else "AI is off: " + AI_REASON,
+         "" if client else "Add ANTHROPIC_API_KEY and credits at https://console.anthropic.com")
+    line("✅" if SMTP_HOST else "❌", "Email (SMTP) is set" if SMTP_HOST else "Email is off", "" if SMTP_HOST else "Forgot-password and reminder emails need it. See docs/email-setup.md")
+    pays = [n for n, on in (("Razorpay", RAZORPAY_ON), ("Stripe", STRIPE_ON), ("PayPal", PAYPAL_ON)) if on]
+    line("✅" if pays else "⚠️", "Payments: " + (", ".join(pays) if pays else "none (patients pay at the clinic)"))
+    if STRIPE_ON and STRIPE_KEY.startswith("sk_test_"):
+        line("⚠️", "Stripe is in TEST mode (sk_test_ key)", "Use the live key (sk_live_) when you are ready for real money.")
+    if RAZORPAY_ON and RAZORPAY_KEY_ID.startswith("rzp_test_"):
+        line("⚠️", "Razorpay is in TEST mode (rzp_test_ key)", "Use the live key when you are ready for real money.")
+    if PAYPAL_ON and "sandbox" in PAYPAL_API:
+        line("⚠️", "PayPal is in sandbox mode", "Set PAYPAL_ENV=live for real money.")
+    for name, on, sec in (("Stripe", STRIPE_ON, STRIPE_WEBHOOK_SECRET), ("Razorpay", RAZORPAY_ON, RAZORPAY_WEBHOOK_SECRET), ("PayPal", PAYPAL_ON, PAYPAL_WEBHOOK_ID)):
+        if on and not sec:
+            line("❌", f"{name} webhook secret missing", "Without it, payments can't be confirmed safely.")
+    social = [n for n, on in (("Google", GOOGLE_CLIENT_ID), ("Facebook", FACEBOOK_APP_ID), ("X", X_CLIENT_ID)) if on]
+    line("✅" if social else "⚠️", "Social login: " + (", ".join(social) if social else "off (email login works)"), "" if social else "Optional. See docs/social-login.md")
+    line("✅" if S3_ON else "⚠️", "Cloud copy of backups is on" if S3_ON else "Backups stay on the server disk only", "" if S3_ON else "Strongly recommended. See docs/backups.md")
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        probe = DATA_DIR / ".write-test"
+        probe.write_text("ok")
+        probe.unlink()
+        free = __import__("shutil").disk_usage(DATA_DIR).free
+        line("✅" if free > 300_000_000 else "⚠️", f"Data folder {DATA_DIR} is writable, {free // 1_000_000} MB free",
+             "" if free > 300_000_000 else "Low space: give the disk more GB (videos and backups need room).")
+    except Exception as e:
+        line("❌", f"Data folder {DATA_DIR} is not writable: {e}")
+    print("\nClinora launch check\n" + "\n".join(rows))
+    print("\n" + ("✅ Ready to go live." if not bad else f"❌ {bad} thing(s) to fix before going live.") + "  (⚠️ = recommended, not required)\n")
+    return bad
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3399,6 +3465,8 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--check":
+        sys.exit(1 if launch_check() else 0)
     if len(sys.argv) > 2 and sys.argv[1] == "--restore":
         restore_backup(sys.argv[2])
         sys.exit(0)

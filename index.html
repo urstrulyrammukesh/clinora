@@ -1768,6 +1768,7 @@ function authForm(mode){
     <label>EMAIL</label><input id="aEmail" type="email" required autocomplete="email">
     <label>PASSWORD (AT LEAST 10 CHARACTERS)</label><input id="aPw" type="password" required minlength="10" autocomplete="new-password">
     <label>REPEAT PASSWORD</label><input id="aPw2" type="password" required minlength="10" autocomplete="new-password">
+    ${DB.setup_code?'<label>SETUP CODE</label><input id="aCode" required autocomplete="off" placeholder="ADMIN_SETUP_CODE from the server settings">':''}
     <button class="btn primary" type="submit">Create admin account</button><div class="msgline" id="aMsg"></div></form>`;
   return `<form class="form card auth" id="authForm"><h3>🔒 Clinic login</h3>
     <p>For clinic staff and doctors. Patients don't need an account: they book through 💬 Ask AI.</p>
@@ -1782,11 +1783,12 @@ function renderAuth(){
     $('#authBox').innerHTML=authForm(mode);
     $('#authForm').onsubmit=async e=>{e.preventDefault();const msg=$('#aMsg');msg.textContent='Please wait…';
       try{if(mode==='setup'){if($('#aPw').value!==$('#aPw2').value)throw new Error('The two passwords are different');
-          await api('/api/auth/setup',{name:$('#aName').value,email:$('#aEmail').value,password:$('#aPw').value})}
+          await api('/api/auth/setup',{name:$('#aName').value,email:$('#aEmail').value,password:$('#aPw').value,code:($('#aCode')||{}).value||''})}
         else await api('/api/auth/login',{email:$('#aEmail').value,password:$('#aPw').value});
         authMode=''}catch(err){msg.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
     return}
   authMode='';
+  const ds=$('#demoSec');if(ds)ds.style.display=DB.production?'none':'';
   if(acctFor!==me.id){acctFor=me.id;
     $('#acctBar').innerHTML=`<div class="who"><div class="pav">${esc(initials(me.name)||'?')}</div><div><b>${esc(me.name)}</b><small>${esc(roleLabel(me))} · ${esc(me.email)}</small></div></div>
       <button class="btn ghost sm" id="pwBtn">🔑 Change password</button><button class="btn ghost sm" id="logoutBtn">Log out</button>
