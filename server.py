@@ -16,6 +16,7 @@ import datetime
 import sys
 import hashlib
 import hmac
+import html
 import secrets
 import json
 import os
@@ -374,6 +375,10 @@ CREATE INDEX IF NOT EXISTS video_listing ON videos(listing_id, status);
 CREATE TABLE IF NOT EXISTS verifications(member_id INTEGER PRIMARY KEY, listing_id INTEGER, reg_no TEXT NOT NULL, council TEXT NOT NULL,
   reg_year INTEGER NOT NULL, qualification TEXT NOT NULL, cert INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, reason TEXT,
   submitted INTEGER NOT NULL, reviewed INTEGER, reviewer TEXT);
+CREATE TABLE IF NOT EXISTS reminders(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, kind TEXT NOT NULL,
+  title TEXT NOT NULL, note TEXT, at TEXT NOT NULL, days INTEGER NOT NULL DEFAULT 0, date TEXT, tz TEXT NOT NULL, lead INTEGER NOT NULL DEFAULT 0,
+  email INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, next_at INTEGER, last_sent INTEGER, created INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS reminder_due ON reminders(active, next_at);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
 
@@ -861,7 +866,7 @@ def member_state(conn, me):
     ver = conn.execute("SELECT reg_no, council, reg_year, qualification, cert, status, reason, submitted, reviewed FROM verifications "
                        "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
-            "verification": dict(ver) if ver else None,
+            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]),
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
 
@@ -1139,6 +1144,151 @@ def m_gallery_delete(conn, d, me):
 def m_reviews(conn, d, me):
     return listing_reviews(conn, int(d.get("listing_id") or 0), me)
 
+# ---------------------------------------------------------------- reminders (medicine, appointments, check-ups...)
+# Each reminder fires at a local time in the person's own time zone: once on a date, or on chosen weekdays.
+# A background thread puts due ones in the 🔔 bell (the open page also shows a pop-up) and emails them if asked.
+REMINDER_KINDS = {"medicine": "💊", "appointment": "📅", "checkup": "🩺", "water": "💧", "exercise": "🧘", "other": "⏰"}
+REMINDER_MAX = 30
+HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _zone(tz):
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tz)
+    except Exception:
+        return datetime.timezone.utc
+
+
+def reminder_next(r, after_ms):
+    """The next time (ms) this reminder should fire after after_ms, or None when it never will again."""
+    zone = _zone(r["tz"])
+    h, m = map(int, r["at"].split(":"))
+    lead = datetime.timedelta(minutes=int(r["lead"] or 0))
+    if not r["days"]:
+        try:
+            day = datetime.date.fromisoformat(r["date"] or "")
+        except ValueError:
+            return None
+        ms = int((datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=zone) - lead).timestamp() * 1000)
+        return ms if ms > after_ms else None
+    start = datetime.datetime.fromtimestamp(after_ms / 1000, zone).date() - datetime.timedelta(days=1)
+    for i in range(10):
+        day = start + datetime.timedelta(days=i)
+        if r["days"] & (1 << day.weekday()):  # bit 0 = Monday … bit 6 = Sunday
+            ms = int((datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=zone) - lead).timestamp() * 1000)
+            if ms > after_ms:
+                return ms
+    return None
+
+
+def reminder_list(conn, mid):
+    return [dict(r) for r in conn.execute("SELECT id, kind, title, note, at, days, date, tz, lead, email, active, next_at, last_sent "
+                                          "FROM reminders WHERE member_id=? ORDER BY active DESC, COALESCE(next_at, 9e15), id", (mid,))]
+
+
+def m_reminder_save(conn, d, me):
+    need_member(me)
+    if too_many("reminder", str(me["id"]), 60, 3600):
+        raise AuthError("Too many changes. Please wait a little.", 429)
+    rid = int(d.get("id") or 0)
+    if rid and not conn.execute("SELECT 1 FROM reminders WHERE id=? AND member_id=?", (rid, me["id"])).fetchone():
+        raise InputError("Reminder not found")
+    if not rid and conn.execute("SELECT COUNT(*) FROM reminders WHERE member_id=?", (me["id"],)).fetchone()[0] >= REMINDER_MAX:
+        raise InputError(f"You can keep up to {REMINDER_MAX} reminders. Delete an old one first.")
+    kind = one_of(d, "kind", set(REMINDER_KINDS))
+    title = text(d, "title", 80)
+    at = str(d.get("at") or "")
+    if not HHMM_RE.match(at):
+        raise InputError("Pick a time")
+    try:
+        days = int(d.get("days") or 0)
+    except (TypeError, ValueError):
+        days = -1
+    if not 0 <= days <= 127:
+        raise InputError("Pick the days again")
+    date = None
+    if not days:
+        date = str(d.get("date") or "")
+        if not DATE_RE.match(date):
+            raise InputError("Pick a date, or choose days to repeat")
+    tz = str(d.get("tz") or "UTC").strip()[:64]
+    if not TZ_RE.match(tz) or _zone(tz) is datetime.timezone.utc:
+        tz = "UTC"
+    lead = int(d.get("lead") or 0)
+    if not 0 <= lead <= 7 * 1440:
+        raise InputError("Reminder can be at most a week before")
+    r = {"at": at, "days": days, "date": date, "tz": tz, "lead": lead}
+    nxt = reminder_next(r, now_ms())
+    if nxt is None:
+        raise InputError("That time has already passed. Pick a time in the future.")
+    vals = (kind, title, text(d, "note", 200, False), at, days, date, tz, lead, 1 if d.get("email") else 0, nxt)
+    if rid:
+        conn.execute("UPDATE reminders SET kind=?,title=?,note=?,at=?,days=?,date=?,tz=?,lead=?,email=?,next_at=?,active=1 WHERE id=?", vals + (rid,))
+    else:
+        rid = conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,member_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                           vals + (me["id"], now_ms())).lastrowid
+    return {"id": rid, "next_at": nxt}
+
+
+def m_reminder_toggle(conn, d, me):
+    need_member(me)
+    r = conn.execute("SELECT * FROM reminders WHERE id=? AND member_id=?", (int(d.get("id") or 0), me["id"])).fetchone()
+    if not r:
+        raise InputError("Reminder not found")
+    if d.get("on"):
+        nxt = reminder_next(r, now_ms())
+        if nxt is None:
+            raise InputError("That time has already passed. Edit the reminder to pick a new time.")
+        conn.execute("UPDATE reminders SET active=1, next_at=? WHERE id=?", (nxt, r["id"]))
+    else:
+        conn.execute("UPDATE reminders SET active=0 WHERE id=?", (r["id"],))
+
+
+def m_reminder_delete(conn, d, me):
+    need_member(me)
+    conn.execute("DELETE FROM reminders WHERE id=? AND member_id=?", (int(d.get("id") or 0), me["id"]))
+
+
+def _when_text(lead):
+    if not lead:
+        return "now"
+    return f"in {lead // 1440} day{'s' if lead >= 2880 else ''}" if lead % 1440 == 0 else \
+        f"in {lead // 60} hour{'s' if lead >= 120 else ''}" if lead % 60 == 0 else f"in {lead} minutes"
+
+
+def fire_due_reminders(conn, now=None):
+    """Sends every reminder that is due. Ones missed while the server was off by more than 6 hours are skipped, not sent late."""
+    now = now or now_ms()
+    sent = 0
+    for r in conn.execute("SELECT r.*, m.email AS m_email, m.name AS m_name FROM reminders r JOIN members m ON m.id=r.member_id "
+                          "WHERE r.active=1 AND r.next_at<=? LIMIT 500", (now,)).fetchall():
+        if now - r["next_at"] < 6 * 3600_000:
+            icon = REMINDER_KINDS.get(r["kind"], "⏰")
+            title = f"{icon} {r['title']}" + ("" if not r["lead"] else f" ({_when_text(r['lead'])} at {r['at']})")
+            notify(conn, r["member_id"], "reminder", title, r["note"] or ("Time for your reminder." if not r["lead"] else ""), "reminders")
+            if r["email"] and r["m_email"]:
+                link = f"{PUBLIC_URL.rstrip('/')}/#reminders"
+                body = f"Hi {r['m_name']},\n\n{title}\n{r['note'] or ''}\n\nManage your reminders: {link}\n\nClinora"
+                html_body = (f"<p>Hi {html.escape(r['m_name'])},</p><p style='font-size:18px'><b>{html.escape(title)}</b></p>"
+                             f"<p>{html.escape(r['note'] or '')}</p><p><a href='{html.escape(link)}'>Manage your reminders</a></p><p>Clinora</p>")
+                send_email(r["m_email"], f"Reminder: {r['title']}", body, html_body)
+            sent += 1
+        nxt = reminder_next(r, max(now, r["next_at"]))
+        conn.execute("UPDATE reminders SET last_sent=?, next_at=?, active=? WHERE id=?", (now, nxt, 1 if nxt else 0, r["id"]))
+    return sent
+
+
+def reminder_loop():
+    while True:
+        try:
+            with DB_LOCK, connect() as conn:
+                fire_due_reminders(conn)
+        except Exception as e:
+            print(f"[reminders] {type(e).__name__}: {e}", flush=True)
+        time.sleep(20)
+
+
 def m_delete_account(conn, d, me, ip):
     """Permanently removes the account and everything it created: profile, photos, work photos, reviews,
     messages, follows and sessions. Needs the password again, so nobody can do it from an unlocked phone by accident."""
@@ -1159,6 +1309,7 @@ def m_delete_account(conn, d, me, ip):
         conn.execute("DELETE FROM videos WHERE id=?", (v["id"],))
     conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
     (VERIFY_DIR / f"{mid}.jpg").unlink(missing_ok=True)
     for (lid,) in conn.execute("SELECT id FROM listings WHERE owner=?", (mid,)).fetchall():
         for (gid,) in conn.execute("SELECT id FROM gallery WHERE listing_id=?", (lid,)).fetchall():
@@ -1179,7 +1330,7 @@ def m_delete_account(conn, d, me, ip):
 
 
 # ---------------------------------------------------------------- notifications (the bell)
-NOTIF_KINDS = {"welcome", "message", "review", "reply", "call", "video", "security"}
+NOTIF_KINDS = {"welcome", "message", "review", "reply", "call", "video", "security", "reminder"}
 
 
 def notify(conn, member_id, kind, title, body="", link=""):
@@ -1606,7 +1757,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
                  "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete,
                  "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete,
-                 "/api/m/verify/submit": m_verify_submit}
+                 "/api/m/verify/submit": m_verify_submit, "/api/m/reminder/save": m_reminder_save,
+                 "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete}
 
 
 
@@ -2864,4 +3016,5 @@ if __name__ == "__main__":
           else "DEMO mode (no money moves). Add provider keys to .env for real payments."))
     if PRODUCTION and not PUBLIC_URL.startswith("https://"):
         print("WARNING: APP_ENV=production but PUBLIC_URL is not https://. Real payments must only run over HTTPS.")
+    threading.Thread(target=reminder_loop, daemon=True).start()
     ThreadingHTTPServer((os.environ.get("HOST", "127.0.0.1"), PORT), Handler).serve_forever()
