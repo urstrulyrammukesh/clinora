@@ -113,3 +113,17 @@ def test_anonymous_visitor_stats(server, admin):
     rows = server.db().execute("SELECT * FROM visits").fetchall()
     assert not any("10." in str(tuple(r)) for r in rows)  # no IP addresses stored
     assert server.client().post("/api/stats/overview")[0] in (401, 403)
+
+
+def test_visitor_panel_is_translated():
+    """Issue #4: every label of the admin's visitor statistics has all 8 hand-written translations."""
+    from conftest import ROOT
+    i18n = (ROOT / "i18n.js").read_text(encoding="utf-8")
+    labels = ["🌍 Visitors", "(anonymous: no cookies, no IP addresses kept)", "visitors today", "last 7 days", "last 30 days",
+              "page views · 30 days", "app opens · 30 days", "app installs · 30 days", "👥 Visitors · per day (14 days)",
+              "Countries · 30 days", "Came from", "Devices", "No visits yet", "Direct / app / WhatsApp", "Unknown"]
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    for label in labels:
+        line = next((l for l in i18n.splitlines() if l.strip().startswith(json.dumps(label, ensure_ascii=False) + ":")), "")
+        assert all(f"{lang}:" in line for lang in ("hi", "es", "fr", "ar", "pt", "de", "zh", "ru")), label
+        assert label.split(" ", 1)[-1] in page or label == "Unknown", label

@@ -3432,14 +3432,14 @@ function rxShow(out){const box=$('#rxBox');if(!box)return;
 function stBars(arr,label){const max=Math.max(1,...arr),w=200/arr.length;
   return `<svg viewBox="0 0 200 70" role="img" aria-label="${esc(label)} per week, last 8 weeks: ${arr.join(', ')}">${arr.map((v,i)=>`<rect x="${i*w+3}" y="${58-50*v/max}" width="${w-6}" height="${Math.max(1,50*v/max)}" rx="2"><title>${v}</title></rect><text x="${i*w+w/2}" y="68" text-anchor="middle">${v}</text>`).join('')}</svg>`}
 function stVisitors(v){if(!v)return'';const tile=(n,l)=>`<div class="st-tile"><b>${n}</b><span>${l}</span></div>`;
-  let dn;try{dn=new Intl.DisplayNames([navigator.language||'en'],{type:'region'})}catch{}
+  let dn;try{dn=new Intl.DisplayNames([(typeof LANG!=='undefined'&&LANG)||navigator.language||'en','en'],{type:'region'})}catch{}
   const flag=c=>/^[A-Z]{2}$/.test(c)?String.fromCodePoint(...[...c].map(x=>127397+x.charCodeAt(0))):'🌐';
   const name=c=>c==='??'?'Unknown':(dn&&dn.of(c))||c;
-  const list=(rows,fmt)=>rows.length?rows.map(r=>`<div>${fmt(r)} <span style="color:var(--mute)">· ${r.n}</span></div>`).join(''):'<div style="color:var(--mute)">No visits yet</div>';
+  const list=(rows,fmt)=>rows.length?rows.map(r=>`<div><span>${fmt(r)}</span> <span style="color:var(--mute)">· ${r.n}</span></div>`).join(''):'<div style="color:var(--mute)">No visits yet</div>';
   return `<h5 style="margin:12px 0 6px">🌍 Visitors <span style="font-weight:400;color:var(--mute)">(anonymous: no cookies, no IP addresses kept)</span></h5>
     <div class="st-tiles">${tile(v.today,'visitors today')}${tile(v.d7,'last 7 days')}${tile(v.d30,'last 30 days')}${tile(v.views30,'page views · 30 days')}${tile(v.app_opens30,'app opens · 30 days')}${tile(v.installs30,'app installs · 30 days')}</div>
     <div class="st-charts"><div class="st-chart"><h5>👥 Visitors · per day (14 days)</h5>${stBars(v.daily,'Visitors')}</div></div>
-    <div class="two" style="margin-top:8px;font-size:13px"><div><b>Countries · 30 days</b>${list(v.countries,r=>flag(r.key)+' '+esc(name(r.key)))}</div>
+    <div class="two" style="margin-top:8px;font-size:13px"><div><b>Countries · 30 days</b>${list(v.countries,r=>flag(r.key)+' <span>'+esc(name(r.key))+'</span>')}</div>
       <div><b>Came from</b>${list(v.sources,r=>esc(r.key==='direct'?'Direct / app / WhatsApp':r.key))}<br><b>Devices</b>${list(v.devices,r=>({phone:'📱',tablet:'📟',computer:'💻'}[r.key]||'')+' '+esc(r.key))}</div></div>`}
 async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
   let s;try{s=(await api('/api/stats/overview')).created}catch(e){sec.innerHTML='<h4>📊 STATISTICS</h4><p class="red">'+esc(e.message)+'</p>';return}
