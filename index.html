@@ -931,6 +931,11 @@ html{overflow-x:clip}
 .soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
 .pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
 .pw-card form{padding:0 20px 20px}
+.bk-days{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px}.bk-days button{flex:0 0 auto;border:1px solid var(--line);background:none;color:inherit;border-radius:12px;padding:6px 10px;cursor:pointer;text-align:center;font-size:12.5px;line-height:1.3}
+.bk-days button b{display:block;font-size:16px}.bk-days button.on,.bk-times button.on{background:var(--teal,#14b8a6);color:#fff;border-color:transparent}
+.bk-times{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin:4px 0 10px}.bk-times button{border:1px solid var(--line);background:none;color:inherit;border-radius:9px;padding:7px 4px;cursor:pointer;font-size:13.5px}
+.visit{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2);font-size:13.5px}.visit b{font-size:14.5px}.visit small{color:var(--mute);display:block}
+.visit .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.visit.past{opacity:.6}.visit-list{display:flex;flex-direction:column;gap:8px;padding:0 20px 14px}
 .rp-ov{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
 .rp-box{background:var(--panel,#fff);color:inherit;border:1px solid var(--line);border-radius:18px;max-width:440px;width:100%;max-height:90vh;overflow:auto;padding:20px 20px 16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .rp-box h3{margin:0 0 4px}.rp-box .why{display:flex;flex-direction:column;gap:6px;margin:12px 0}
@@ -1997,7 +2002,7 @@ async function nominatim(q,extra=''){
   if(!r.ok)throw new Error('nominatim');return r.json();
 }
 const HEALTH=/^(hospital|clinic|doctors|doctor|dentist|pharmacy|laboratory|university|college)$/;
-function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,verified:!!r.verified,
+function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,verified:!!r.verified,booking:r.booking||null,
   hours:r.hours,tz:r.tz,live:!!(r.online||(hs&&hs.open)),hoursRaw:r.hours||'',
   id:r.id,owner:r.owner,photo:r.owner_photo,rating:r.rating,reviews:r.reviews||0,photos:r.photos||0,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
   tags:Object.assign({website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},r.social||{}),cc:r.cc}}
@@ -2560,7 +2565,7 @@ function lcard(p,i,ctx){
   const fav=p.reg&&MEM.favs&&MEM.favs.includes(p.id);
   const sub=[typeLabel(p),p.spec,near&&p.d!=null?fmtD(p.d)+' away':''].filter(Boolean).map(esc).join(' · ');
   const pills=[p.verified?'<span class="lc-pill ok" title="Registration checked by Clinora">✓ Verified</span>':'',p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.live?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${p.hours?'Offline':agoText(p.last_seen)}</span>`):'',
-    p.sample?'<span class="lc-pill">Sample</span>':'',p.video?'<span class="lc-pill">Video visits</span>':''].join('');
+    p.sample?'<span class="lc-pill">Sample</span>':'',p.video?'<span class="lc-pill">Video visits</span>':'',p.booking?`<span class="lc-pill live">📅 Book online${p.booking.fee?' · '+bkMoney(p.booking.fee,p.booking.cur):''}</span>`:''].join('');
   const prof=near?`data-prof="${i}"`:`data-dprof="${i}"`,ride=near?`data-ride="${i}"`:`data-dride="${i}"`,mapb=near?`data-fly="${i}"`:`data-dmap="${i}"`;
   return `<article class="lc ${near?'place':''} ${p.partner||p.reg?'hl':''}" ${near?`data-i="${i}"`:''}>
     <div class="lc-av" style="--avh:${hash(p.name||'x')%360}">${edu?ico('cap',20):esc(initials(p.name||'')||'+')}${p.reg?avImg(p.owner,p.photo):''}${p.reg?`<span class="dot ${p.live?'on':''}"></span>`:''}</div>
@@ -2577,6 +2582,7 @@ function lcard(p,i,ctx){
         <a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>
         ${p.reg?`<button class="fav ${fav?'on':''}" data-follow="${p.id}">${ico('heart',14)}${fav?'Following':'Follow'}</button>`:''}
         ${p.reg?`<button data-rev="${p.id}">★ ${p.reviews?'Reviews':'Review'}${p.photos?` · ${p.photos} photo${p.photos>1?'s':''}`:''}</button>`:''}
+        ${p.reg&&p.booking?`<button class="pri" data-book="${p.id}">📅 Book visit</button>`:''}
         ${p.reg&&p.owner?`<button data-msg="${p.id}">${ico('msg',14)}Message</button>`:''}
         ${p.reg&&p.owner&&p.live?`<button class="pri" data-vcallm="${p.owner}">${ico('video',14)}Video call</button>`:''}
         ${edu?`<button data-unidocs="${esc(p.name)}">${ico('steth',14)}Doctors on website</button><a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(p.name+' UG PG courses admission')}">${ico('cap',14)}Courses</a>`:''}
@@ -2855,6 +2861,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <label>REPEAT NEW PASSWORD</label><input id="pwNew2" type="password" required minlength="10" autocomplete="new-password">
         <button class="btn primary sm" type="submit">${me.has_password?'Update password':'Set password'}</button><div id="pwMsg" style="font-size:13px;margin-top:8px"></div>
         <p style="font-size:12px;color:var(--mute);margin-top:8px">For your safety, this logs you out on your other phones and computers.</p></form></details>
+    ${myVisitsCard()}
     ${remCard()}
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
     ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
@@ -2873,6 +2880,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
       ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
       ${L?verifyCard(MEM.verification):''}
+      ${L?bookSettingsCard(L)+doctorVisitsCard():''}
       ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
     <h3 style="margin-bottom:10px">Messages</h3>
@@ -2898,7 +2906,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  wireReminders();
+  wireReminders();wireBookings();
   if(doc&&MEM.listing){renderGallery();wireVerify()}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3235,6 +3243,85 @@ window.remAlert=n=>{const t=document.createElement('div');t.className='rem-toast
   try{const a=new (window.AudioContext||window.webkitAudioContext)();[0,.25].forEach(s=>{const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.setValueAtTime(.15,a.currentTime+s);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+s+.22);o.connect(g).connect(a.destination);o.start(a.currentTime+s);o.stop(a.currentTime+s+.25)})}catch{}
   try{if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body||'',icon:'/assets/icons/icon-192.png',tag:'rem'+n.id})}catch{}};
 
+
+/* ================= BOOK REAL DOCTORS ================= */
+const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
+function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
+function bkDay(ds,opt){return new Date(ds+'T00:00').toLocaleDateString([],opt||{weekday:'short',day:'numeric',month:'short'})}
+function bkLocal(v){// the visit time in the viewer's own zone, when it differs from the doctor's
+  const loc=new Date(v.at);const same=String(loc.getHours()).padStart(2,'0')+':'+String(loc.getMinutes()).padStart(2,'0')===v.time&&ymd(loc)===v.date;
+  return same?'':` · your time ${loc.toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`}
+const BK_ST={booked:['🟢','Booked'],done:['✅','Done'],no_show:['⚪','No-show'],cancelled:['❌','Cancelled']};
+function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''];const doc=v.side==='doctor';
+  return `<div class="visit ${past||v.status==='cancelled'?'past':''}"><b>${st[0]} ${bkDay(v.date)} · ${esc(v.time)}</b> <span style="color:var(--mute);font-size:12px">(${esc(v.tz)}${bkLocal(v)})</span>
+    <small>${doc?`👤 ${esc(v.patient)}${v.patient!==v.account?` (booked by ${esc(v.account)})`:''}`:`👨‍⚕️ ${esc(v.doctor)}${v.patient!==MEM.me.name?` · for ${esc(v.patient)}`:''}`} · ${v.mode==='video'?'📹 Video visit':'🏥 In clinic'}${v.fee?' · '+bkMoney(v.fee,v.cur):''}</small>
+    ${!doc&&v.mode!=='video'&&v.addr?`<small>📍 ${esc(v.addr)}</small>`:''}${v.reason?`<small>📝 ${esc(v.reason)}</small>`:''}
+    ${v.status==='cancelled'?`<small>Cancelled${v.cancel_reason?': '+esc(v.cancel_reason):''}</small>`:''}
+    <div class="acts">${v.status!=='cancelled'?`<button class="btn ghost sm" type="button" data-vmsg="${doc?v.patient_id:v.doctor_id}" data-vlid="${doc?'':v.listing_id}">💬 Message${v.mode==='video'?' / 📹 call':''}</button>`:''}
+      ${v.status==='booked'&&!past?`<button class="btn ghost sm" type="button" data-vcancel="${v.id}">Cancel visit</button>`:''}
+      ${doc&&v.status!=='cancelled'&&past?`<button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="done">✅ Done</button><button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="no_show">No-show</button>`:''}</div></div>`}
+function myVisitsCard(){const V=(MEM.bookings||{}).as_patient||[];if(!V.length&&MEM.me.kind==='doctor')return '';
+  const up=V.filter(v=>v.status==='booked'&&v.at>Date.now());
+  return `<details class="card pw-card" id="visitsCard" ${up.length?'open':''}><summary>📅 My visits <span style="font-weight:400;color:var(--mute);font-size:13px">${up.length?`· ${up.length} upcoming`:'· book a doctor from the World Directory or Nearby'}</span></summary>
+    <div class="visit-list">${V.length?V.map(visitRow).join(''):'<p style="font-size:13.5px;color:var(--mute);margin:0">No visits yet. Look for doctors with <b>📅 Book visit</b>.</p>'}</div></details>`}
+function doctorVisitsCard(){const V=(MEM.bookings||{}).as_doctor||[];const up=V.filter(v=>v.status==='booked'&&v.at>Date.now());
+  return `<details class="card pw-card" id="docVisits" ${up.length?'open':''}><summary>🗓 Your appointments <span style="font-weight:400;color:var(--mute);font-size:13px">· ${up.length} upcoming</span></summary>
+    <div class="visit-list">${V.length?V.map(visitRow).join(''):'<p style="font-size:13.5px;color:var(--mute);margin:0">No bookings yet. Turn on online booking below so patients can book you.</p>'}</div></details>`}
+function bookSettingsCard(L){const b=L.booking||{};const on=!!b.on;const days=b.days??31;const tzNow=(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch{return 'UTC'}})();
+  return `<details class="card pw-card" id="bkSet" ${on?'':'open'}><summary>📅 Online booking <span style="font-weight:400;color:var(--mute);font-size:13px">· ${on?'ON: patients can book you':'OFF'}</span></summary>
+    <form class="form" id="bkForm"><label class="chk"><input type="checkbox" id="bkOn" ${on?'checked':''}> Let patients book visits with me online</label>
+      <label>DAYS</label><div class="day-chips" id="bkDays">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i)=>`<button type="button" data-bit="${i}" class="${days&(1<<i)?'on':''}">${d}</button>`).join('')}</div>
+      <div class="two"><div><label>FROM</label><input type="time" id="bkStart" value="${esc(b.start||'09:00')}"></div><div><label>TO</label><input type="time" id="bkEnd" value="${esc(b.end||'17:00')}"></div></div>
+      <label class="chk"><input type="checkbox" id="bkBrkOn" ${b.brk?'checked':''}> Lunch break</label>
+      <div class="two" id="bkBrk" ${b.brk?'':'hidden'}><div><label>BREAK FROM</label><input type="time" id="bkB1" value="${esc((b.brk||[])[0]||'13:00')}"></div><div><label>BREAK TO</label><input type="time" id="bkB2" value="${esc((b.brk||[])[1]||'14:00')}"></div></div>
+      <div class="two"><div><label>EACH VISIT</label><select id="bkSlot">${[10,15,20,30,45,60].map(m=>`<option value="${m}" ${(b.slot||20)===m?'selected':''}>${m} minutes</option>`).join('')}</select></div>
+        <div><label>VISIT TYPES</label><label class="chk" style="margin:6px 0 0"><input type="checkbox" id="bkClinic" ${!b.modes||b.modes.includes('clinic')?'checked':''}> 🏥 In clinic</label><label class="chk" style="margin:4px 0 0"><input type="checkbox" id="bkVideo" ${b.modes&&b.modes.includes('video')?'checked':''}> 📹 Video</label></div></div>
+      <div class="two"><div><label>FEE (0 = FREE)</label><input type="number" id="bkFee" min="0" value="${b.fee??500}"></div><div><label>CURRENCY</label><select id="bkCur">${BK_CUR.map(c=>`<option ${(b.cur||'INR')===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+      <label>NOTE FOR PATIENTS (OPTIONAL)</label><input id="bkNote" maxlength="200" value="${esc(b.note||'')}" placeholder="e.g. Bring old reports. Fee paid at the clinic.">
+      <p style="font-size:12px;color:var(--mute);margin:6px 0">Times are in your time zone: <b>${esc(b.tz||tzNow)}</b>. Patients need at least 1 hour notice. The fee is paid to you directly (at the clinic or as you tell them).</p>
+      <button class="btn primary sm" type="submit">Save booking settings</button><div id="bkMsg" style="font-size:13px;margin-top:8px"></div></form></details>`}
+function wireBookings(){
+  $$('[data-vmsg]').forEach(b=>b.onclick=()=>{openConv(+b.dataset.vmsg,b.dataset.vlid?+b.dataset.vlid:undefined);const c=$('#conv');if(c)c.scrollIntoView({block:'center'})});
+  $$('[data-vcancel]').forEach(b=>b.onclick=async()=>{const r=prompt('Cancel this visit? You can add a short reason (optional):','');if(r===null)return;
+    try{await mapi('booking/cancel',{id:+b.dataset.vcancel,reason:r});renderAccount()}catch(e){alert(e.message)}});
+  $$('[data-vmark]').forEach(b=>b.onclick=async()=>{try{await mapi('booking/mark',{id:+b.dataset.vmark,status:b.dataset.st});renderAccount();const d=$('#docVisits');if(d)d.open=true}catch(e){alert(e.message)}});
+  const f=$('#bkForm');if(!f)return;let days=0;$$('#bkDays button').forEach(x=>{if(x.classList.contains('on'))days|=1<<+x.dataset.bit;x.onclick=()=>{days^=1<<+x.dataset.bit;x.classList.toggle('on')}});
+  $('#bkBrkOn').onchange=()=>{$('#bkBrk').hidden=!$('#bkBrkOn').checked};
+  f.onsubmit=async e=>{e.preventDefault();const m=$('#bkMsg');m.textContent='Saving…';
+    try{await mapi('booking/settings',{on:$('#bkOn').checked,days,start:$('#bkStart').value,end:$('#bkEnd').value,brk:$('#bkBrkOn').checked?[$('#bkB1').value,$('#bkB2').value]:null,
+        slot:+$('#bkSlot').value,modes:[$('#bkClinic').checked&&'clinic',$('#bkVideo').checked&&'video'].filter(Boolean),fee:+$('#bkFee').value||0,cur:$('#bkCur').value,
+        note:$('#bkNote').value.trim(),tz:(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch{return 'UTC'}})()});
+      renderAccount();const s=$('#bkSet');if(s){s.open=true;$('#bkMsg').innerHTML='<span class="teal">✅ Saved. '+($('#bkOn').checked?'Patients can now book you.':'Online booking is off.')+'</span>'}}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
+// the booking window patients use
+async function openBooking(lid){
+  if(!MEM.me){go('account');acctNotice('Log in or create a free account to book a visit.');return}
+  const ov=document.createElement('div');ov.className='rp-ov';ov.innerHTML='<div class="rp-box" role="dialog" aria-modal="true" aria-label="Book a visit"><p>Loading free times…</p></div>';document.body.appendChild(ov);
+  const close=()=>ov.remove();ov.onclick=e=>{if(e.target===ov)close()};ov.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}});
+  let S;try{S=(await mapi('slots',{listing_id:lid})).result}catch(e){ov.firstChild.innerHTML=`<p class="red">${esc(e.message)}</p><div style="text-align:right"><button class="btn ghost sm" type="button" id="bkX">Close</button></div>`;$('#bkX').onclick=close;return}
+  const c=S.cfg;let mode=c.modes[0],day=S.days[0]&&S.days[0].date,time=null;const fam=(MEM.family||[]);
+  const draw=()=>{const D=S.days.find(x=>x.date===day);
+    ov.firstChild.innerHTML=`<h3>📅 Book a visit</h3><p style="font-weight:700;margin:2px 0">${esc(S.name)}</p><p style="color:var(--mute);font-size:13px;margin:0">${bkMoney(c.fee,c.cur)} · ${c.slot} min · times in ${esc(c.tz)}${c.note?`<br>ℹ️ ${esc(c.note)}`:''}</p>
+      ${c.modes.length>1?`<div class="day-chips" style="margin-top:10px">${c.modes.map(m=>`<button type="button" data-mode="${m}" class="${m===mode?'on':''}">${m==='video'?'📹 Video':'🏥 In clinic'}</button>`).join('')}</div>`:`<p style="font-size:13.5px;margin:8px 0 0">${mode==='video'?'📹 Video visit':'🏥 In-clinic visit'}</p>`}
+      ${S.days.length?`<label style="display:block;font-size:12px;color:var(--mute);margin-top:10px">DAY</label><div class="bk-days">${S.days.map(x=>`<button type="button" data-day="${x.date}" class="${x.date===day?'on':''}">${bkDay(x.date,{weekday:'short'})}<b>${bkDay(x.date,{day:'numeric'})}</b>${bkDay(x.date,{month:'short'})}</button>`).join('')}</div>
+        <label style="display:block;font-size:12px;color:var(--mute)">TIME</label><div class="bk-times">${D.times.map(h=>`<button type="button" data-time="${h}" class="${h===time?'on':''}">${fmtHM(h)}</button>`).join('')}</div>
+        <label style="display:block;font-size:12px;color:var(--mute)">WHO IS THE VISIT FOR?</label><select id="bkFor" style="width:100%;margin:4px 0 8px"><option value="">Me (${esc(MEM.me.name)})</option>${fam.map(f=>`<option>${esc(f.name)}</option>`).join('')}</select>
+        <textarea id="bkWhy" maxlength="300" placeholder="Reason for the visit (optional), e.g. fever for 3 days"></textarea>`
+        :'<p style="margin:12px 0">No free times in the next 3 weeks. Please send the doctor a message.</p>'}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn ghost sm" type="button" id="bkX">Cancel</button>${S.days.length?`<button class="btn primary sm" type="button" id="bkGo" ${time?'':'disabled'}>Confirm ${time?fmtHM(time):''}</button>`:''}</div>
+      <div id="bkM" style="font-size:13px;margin-top:8px"></div>`;
+    $('#bkX').onclick=close;
+    ov.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;draw()});
+    ov.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{day=b.dataset.day;time=null;draw()});
+    ov.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{const w=$('#bkWhy')?.value,f=$('#bkFor')?.value;time=b.dataset.time;draw();if(w)$('#bkWhy').value=w;if(f)$('#bkFor').value=f});
+    const go2=$('#bkGo');if(go2)go2.onclick=async()=>{go2.disabled=true;$('#bkM').textContent='Booking…';
+      try{const j=await mapi('book',{listing_id:lid,date:day,time,mode,reason:$('#bkWhy').value.trim(),for_name:$('#bkFor').value});
+        ov.firstChild.innerHTML=`<h3>✅ Booked!</h3><p style="font-size:14px;margin:8px 0">${esc(S.name)} · ${esc(j.result.when)} (${esc(c.tz)})<br>${mode==='video'?'📹 Video visit: message or call the doctor from <b>My visits</b> at the time.':'🏥 In clinic.'}</p>
+          <p style="font-size:13px;color:var(--mute)">⏰ We’ll remind you a day before and an hour before. The doctor was notified.</p><div style="text-align:right"><button class="btn primary sm" type="button" id="bkOk">See my visits</button></div>`;
+        $('#bkOk').onclick=()=>{close();if(window.closeReviews)closeReviews();go('account');setTimeout(()=>{const v=$('#visitsCard');if(v){v.open=true;v.scrollIntoView({block:'start'})}},120)}}
+      catch(e){$('#bkM').innerHTML='<span class="red">'+esc(e.message)+'</span>';go2.disabled=false;if(/taken|no longer free/.test(e.message)){try{S=(await mapi('slots',{listing_id:lid})).result;time=null;draw()}catch{}}}}};
+  draw()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-book]');if(!b)return;e.preventDefault();e.stopPropagation();openBooking(+b.dataset.book)},true);
 /* ================= REPORTS ================= */
 const REPORT_WHY=[['fake','Fake or pretending to be someone'],['spam','Spam or advertising'],['abuse','Rude, hateful or harassing'],['unsafe','Dangerous medical advice'],
   ['sexual','Sexual or inappropriate'],['privacy','Shares private information'],['wrong','Wrong details (address, phone…)'],['other','Something else']];

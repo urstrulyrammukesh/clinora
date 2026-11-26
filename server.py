@@ -384,6 +384,11 @@ CREATE TABLE IF NOT EXISTS reports(id INTEGER PRIMARY KEY AUTOINCREMENT, reporte
   action TEXT, ts INTEGER NOT NULL, reviewed INTEGER, reviewer TEXT);
 CREATE INDEX IF NOT EXISTS report_target ON reports(target_type, target_id, status);
 CREATE TABLE IF NOT EXISTS blocks(member_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY(member_id, blocked_id));
+CREATE TABLE IF NOT EXISTS dbookings(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, patient_id INTEGER NOT NULL,
+  for_name TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, tz TEXT NOT NULL, at INTEGER NOT NULL, mode TEXT NOT NULL, reason TEXT,
+  status TEXT NOT NULL, fee INTEGER, cur TEXT, cancel_by TEXT, cancel_reason TEXT, ts INTEGER NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS dbook_slot ON dbookings(listing_id, date, time) WHERE status='booked';
+CREATE INDEX IF NOT EXISTS dbook_patient ON dbookings(patient_id, at);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -466,8 +471,10 @@ def init_db():
             conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE members SET email_ok=1")
         conn.executescript(EXTRA_SCHEMA)
+        if "ref" not in {r["name"] for r in conn.execute("PRAGMA table_info(reminders)")}:
+            conn.execute("ALTER TABLE reminders ADD COLUMN ref TEXT")
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
-        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0")]:
+        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0"), ("booking", "TEXT")]:
             if col not in lcols:
                 conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {kind}")
         if conn.execute("SELECT COUNT(*) FROM live").fetchone()[0] == 0:
@@ -836,6 +843,8 @@ def public_listings(conn):
         d["last_seen"] = seen or None
         d["video"] = bool(d["video"])
         d["verified"] = bool(d.get("verified"))
+        cfg = booking_cfg(d)
+        d["booking"] = {k: cfg[k] for k in ("fee", "cur", "modes", "slot")} if cfg else None
         try:
             d["social"] = json.loads(d.get("social") or "{}")
         except ValueError:
@@ -901,9 +910,10 @@ def member_state(conn, me):
     ver = conn.execute("SELECT reg_no, council, reg_year, qualification, cert, status, reason, submitted, reviewed FROM verifications "
                        "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
-            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]),
+            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me),
             "favs": fav_ids, "threads": threads,
-            "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
+            "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"]),
+                            booking=json.loads(lst["booking"] or "null")) if lst else None}
 
 
 def m_signup(conn, d, me, ip):
@@ -995,7 +1005,7 @@ def m_send(conn, d, me):
         raise AuthError("You can't message this person.")
     if me["kind"] == "patient" and other_kind != "doctor":
         raise AuthError("Patients can message doctors only.")
-    if me["kind"] == "doctor" and other_kind == "patient" and not conn.execute(
+    if me["kind"] == "doctor" and other_kind == "patient" and not has_booking(conn, me["id"], to) and not conn.execute(
             "SELECT 1 FROM messages WHERE from_id=? AND to_id=?", (to, me["id"])).fetchone():
         raise AuthError("You can reply once this patient has written to you.")
     if too_many("msg", str(me["id"]), 60, 3600):
@@ -1358,6 +1368,14 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
+    for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
+                                           "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
+        notify(conn, owner, "booking", "❌ A patient cancelled", f"{when} · the patient deleted their account", "account")
+    for (pid, when, lname) in conn.execute("SELECT b.patient_id, b.date || ' ' || b.time, l.name FROM dbookings b JOIN listings l ON l.id=b.listing_id "
+                                           "WHERE l.owner=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
+        notify(conn, pid, "booking", f"❌ {lname} cancelled your visit", f"{when} · the doctor left Clinora. Please book someone else.", "account")
+        conn.execute("DELETE FROM reminders WHERE member_id=? AND ref LIKE 'dbook:%' AND title LIKE ?", (pid, lname + "%"))
+    conn.execute("DELETE FROM dbookings WHERE patient_id=? OR listing_id IN (SELECT id FROM listings WHERE owner=?)", (mid, mid))
     conn.execute("DELETE FROM reports WHERE reporter_id=?", (mid,))
     conn.execute("DELETE FROM blocks WHERE member_id=? OR blocked_id=?", (mid, mid))
     (VERIFY_DIR / f"{mid}.jpg").unlink(missing_ok=True)
@@ -1380,7 +1398,7 @@ def m_delete_account(conn, d, me, ip):
 
 
 # ---------------------------------------------------------------- notifications (the bell)
-NOTIF_KINDS = {"welcome", "message", "review", "reply", "call", "video", "security", "reminder"}
+NOTIF_KINDS = {"welcome", "message", "review", "reply", "call", "video", "security", "reminder", "booking"}
 
 
 def notify(conn, member_id, kind, title, body="", link=""):
@@ -2260,6 +2278,214 @@ def launch_check():
     return bad
 
 
+# ---------------------------------------------------------------- booking real doctors
+# A doctor turns on online booking and sets days, hours, an optional break, slot length, visit types and fee.
+# Patients pick a free slot (shown in the doctor's time zone). Both get bell alerts; the patient gets reminders.
+BOOK_CURRENCIES = {"INR", "USD", "EUR", "GBP", "AED", "SAR", "PKR", "BDT", "NPR", "LKR", "NGN", "KES", "CAD", "AUD", "SGD", "MYR", "IDR", "PHP"}
+BOOK_DAYS_AHEAD = 21
+BOOK_STATUSES = {"booked", "done", "no_show", "cancelled"}
+
+
+def booking_cfg(lst):
+    try:
+        c = json.loads(lst["booking"] or "{}") if lst else {}
+    except (ValueError, TypeError):
+        c = {}
+    return c if c.get("on") else None
+
+
+def _mins(hm):
+    h, m = hm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def m_booking_settings(conn, d, me):
+    need_member(me, "doctor")
+    need_confirmed(me)
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    if not d.get("on"):
+        old = json.loads(lst["booking"] or "{}") if lst["booking"] else {}
+        old["on"] = 0
+        conn.execute("UPDATE listings SET booking=? WHERE id=?", (json.dumps(old), lst["id"]))
+        return {"on": False}
+    days = int(d.get("days") or 0)
+    start, end = str(d.get("start") or ""), str(d.get("end") or "")
+    if not 1 <= days <= 127:
+        raise InputError("Pick at least one day")
+    if not HHMM_RE.match(start) or not HHMM_RE.match(end) or _mins(end) - _mins(start) < 15:
+        raise InputError("Check your start and end time")
+    brk = d.get("brk") or None
+    if brk:
+        if not (isinstance(brk, list) and len(brk) == 2 and all(HHMM_RE.match(str(x)) for x in brk) and _mins(brk[0]) < _mins(brk[1])):
+            raise InputError("Check your break time")
+        brk = [str(brk[0]), str(brk[1])]
+    slot = int(d.get("slot") or 0)
+    if slot not in (10, 15, 20, 30, 45, 60):
+        raise InputError("Pick a visit length")
+    modes = [m for m in ("clinic", "video") if m in (d.get("modes") or [])]
+    if not modes:
+        raise InputError("Pick in-clinic, video, or both")
+    try:
+        fee = int(d.get("fee") or 0)
+    except (TypeError, ValueError):
+        fee = -1
+    if not 0 <= fee <= 1_000_000:
+        raise InputError("Check the fee")
+    cur = str(d.get("cur") or "INR").upper()
+    if cur not in BOOK_CURRENCIES:
+        raise InputError("Pick a currency")
+    tz = str(d.get("tz") or lst["tz"] or "UTC")[:64]
+    if not TZ_RE.match(tz) or _zone(tz) is datetime.timezone.utc:
+        tz = "UTC"
+    cfg = {"on": 1, "days": days, "start": start, "end": end, "brk": brk, "slot": slot, "modes": modes, "fee": fee, "cur": cur, "tz": tz,
+           "note": text(d, "note", 200, False)}
+    conn.execute("UPDATE listings SET booking=? WHERE id=?", (json.dumps(cfg), lst["id"]))
+    return {"on": True}
+
+
+def free_slots(conn, lst, cfg, days=BOOK_DAYS_AHEAD):
+    zone = _zone(cfg["tz"])
+    now = datetime.datetime.now(zone)
+    soonest = now + datetime.timedelta(minutes=60)  # at least 1 hour notice
+    taken = {(r["date"], r["time"]) for r in conn.execute(
+        "SELECT date, time FROM dbookings WHERE listing_id=? AND status='booked' AND date>=?", (lst["id"], now.date().isoformat()))}
+    out = []
+    s, e, step = _mins(cfg["start"]), _mins(cfg["end"]), cfg["slot"]
+    b = (_mins(cfg["brk"][0]), _mins(cfg["brk"][1])) if cfg.get("brk") else None
+    for i in range(days):
+        day = now.date() + datetime.timedelta(days=i)
+        if not cfg["days"] & (1 << day.weekday()):
+            continue
+        times = []
+        t = s
+        while t + step <= e:
+            if not (b and t < b[1] and t + step > b[0]):
+                hm = f"{t // 60:02d}:{t % 60:02d}"
+                at = datetime.datetime(day.year, day.month, day.day, t // 60, t % 60, tzinfo=zone)
+                if at >= soonest and (day.isoformat(), hm) not in taken:
+                    times.append(hm)
+            t += step
+        if times:
+            out.append({"date": day.isoformat(), "times": times})
+    return out
+
+
+def m_slots(conn, d, me):
+    lst = conn.execute("SELECT * FROM listings WHERE id=? AND hidden=0", (int(d.get("listing_id") or 0),)).fetchone()
+    cfg = booking_cfg(lst)
+    if not cfg:
+        raise InputError("This doctor doesn't take online bookings yet. Send a message instead.")
+    pub = {k: cfg[k] for k in ("slot", "modes", "fee", "cur", "tz", "note")}
+    return {"listing_id": lst["id"], "name": lst["name"], "cfg": pub, "days": free_slots(conn, lst, cfg)}
+
+
+def _booking_view(r, side):
+    return {"id": r["id"], "listing_id": r["listing_id"], "doctor": r["doctor_name"], "doctor_id": r["doctor_id"], "patient": r["for_name"],
+            "patient_id": r["patient_id"], "account": r["patient_name"], "date": r["date"], "time": r["time"], "tz": r["tz"], "mode": r["mode"],
+            "reason": r["reason"], "status": r["status"], "fee": r["fee"], "cur": r["cur"], "at": r["at"], "side": side,
+            "cancel_reason": r["cancel_reason"], "addr": r["addr"]}
+
+
+def my_bookings(conn, me):
+    q = ("SELECT b.*, l.name AS doctor_name, l.addr || ', ' || l.city AS addr, l.owner AS doctor_id, m.name AS patient_name FROM dbookings b "
+         "JOIN listings l ON l.id=b.listing_id JOIN members m ON m.id=b.patient_id WHERE {} AND b.at > ? ORDER BY b.at LIMIT 60")
+    since = now_ms() - 7 * 86_400_000
+    mine = [_booking_view(r, "patient") for r in conn.execute(q.format("b.patient_id=?"), (me["id"], since))]
+    lst = my_listing(conn, me) if me["kind"] == "doctor" else None
+    theirs = [_booking_view(r, "doctor") for r in conn.execute(q.format("b.listing_id=?"), (lst["id"], since))] if lst else []
+    return {"as_patient": mine, "as_doctor": theirs}
+
+
+def m_book(conn, d, me):
+    need_member(me)
+    need_confirmed(me)
+    if too_many("book", str(me["id"]), 10, 86400):
+        raise AuthError("You made many bookings today. Please try again tomorrow.", 429)
+    lst = conn.execute("SELECT * FROM listings WHERE id=? AND hidden=0", (int(d.get("listing_id") or 0),)).fetchone()
+    cfg = booking_cfg(lst)
+    if not cfg:
+        raise InputError("This doctor doesn't take online bookings right now.")
+    if lst["owner"] == me["id"]:
+        raise InputError("You can't book yourself")
+    if conn.execute("SELECT 1 FROM blocks WHERE member_id=? AND blocked_id=?", (lst["owner"], me["id"])).fetchone():
+        raise AuthError("You can't book this doctor.")
+    date, tm = str(d.get("date") or ""), str(d.get("time") or "")
+    mode = str(d.get("mode") or "")
+    if mode not in cfg["modes"]:
+        raise InputError("Pick in-clinic or video")
+    if not any(x["date"] == date and tm in x["times"] for x in free_slots(conn, lst, cfg)):
+        raise InputError("That time was just taken or is no longer free. Please pick another time.")
+    upcoming = conn.execute("SELECT COUNT(*) FROM dbookings WHERE listing_id=? AND patient_id=? AND status='booked' AND at>?",
+                            (lst["id"], me["id"], now_ms())).fetchone()[0]
+    if upcoming >= 3:
+        raise InputError("You already have 3 upcoming visits with this doctor. Cancel one first.")
+    for_name = text(d, "for_name", 80, False) or me["name"]
+    reason = text(d, "reason", 300, False)
+    zone = _zone(cfg["tz"])
+    day = datetime.date.fromisoformat(date)
+    at = int(datetime.datetime(day.year, day.month, day.day, *map(int, tm.split(":")), tzinfo=zone).timestamp() * 1000)
+    try:
+        bid = conn.execute("INSERT INTO dbookings(listing_id,patient_id,for_name,date,time,tz,at,mode,reason,status,fee,cur,ts) "
+                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (lst["id"], me["id"], for_name, date, tm, cfg["tz"], at, mode, reason,
+                                                                "booked", cfg["fee"], cfg["cur"], now_ms())).lastrowid
+    except sqlite3.IntegrityError:
+        raise InputError("That time was just taken. Please pick another time.")
+    nice = f"{day.strftime('%a %d %b')} at {tm}"
+    who = for_name if for_name == me["name"] else f"{for_name} (booked by {me['name']})"
+    notify(conn, lst["owner"], "booking", f"📅 New booking: {who}", f"{nice} · {'Video' if mode == 'video' else 'In clinic'}"
+           + (f" · {reason[:80]}" if reason else ""), "account")
+    for lead in (1440, 60):
+        r = {"at": tm, "days": 0, "date": date, "tz": cfg["tz"], "lead": lead}
+        nxt = reminder_next(r, now_ms())
+        if nxt:
+            conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,member_id,created,ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         ("appointment", f"{lst['name']}" + (f" · {for_name}" if for_name != me["name"] else ""),
+                          ("Video visit: open Clinora and message or call the doctor." if mode == "video" else f"In clinic: {lst['addr']}, {lst['city']}")[:200],
+                          tm, 0, date, cfg["tz"], lead, 1, nxt, me["id"], now_ms(), f"dbook:{bid}"))
+    return {"id": bid, "when": nice}
+
+
+def m_booking_cancel(conn, d, me):
+    need_member(me)
+    r = conn.execute("SELECT b.*, l.owner, l.name AS lname FROM dbookings b JOIN listings l ON l.id=b.listing_id WHERE b.id=?",
+                     (int(d.get("id") or 0),)).fetchone()
+    if not r or me["id"] not in (r["patient_id"], r["owner"]):
+        raise InputError("Booking not found")
+    if r["status"] != "booked":
+        raise InputError("This visit is not active any more")
+    if r["at"] < now_ms():
+        raise InputError("This visit has already started or passed")
+    reason = text(d, "reason", 200, False)
+    by_doctor = me["id"] == r["owner"]
+    conn.execute("UPDATE dbookings SET status='cancelled', cancel_by=?, cancel_reason=? WHERE id=?", ("doctor" if by_doctor else "patient", reason, r["id"]))
+    conn.execute("DELETE FROM reminders WHERE ref=?", (f"dbook:{r['id']}",))
+    when = f"{datetime.date.fromisoformat(r['date']).strftime('%a %d %b')} at {r['time']}"
+    if by_doctor:
+        notify(conn, r["patient_id"], "booking", f"❌ {r['lname']} cancelled your visit", f"{when}" + (f" · {reason}" if reason else " · Please book another time."), "account")
+    else:
+        notify(conn, r["owner"], "booking", f"❌ {r['for_name']} cancelled", when + (f" · {reason}" if reason else ""), "account")
+
+
+def m_booking_mark(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    st = str(d.get("status") or "")
+    if st not in ("done", "no_show", "booked"):
+        raise InputError("Unknown status")
+    r = conn.execute("SELECT * FROM dbookings WHERE id=? AND listing_id=?", (int(d.get("id") or 0), lst["id"] if lst else -1)).fetchone()
+    if not r or r["status"] == "cancelled":
+        raise InputError("Booking not found")
+    conn.execute("UPDATE dbookings SET status=? WHERE id=?", (st, r["id"]))
+
+
+def has_booking(conn, a, b):
+    """True when one of the two people booked a visit with the other (lets the doctor message or call that patient)."""
+    return bool(conn.execute("SELECT 1 FROM dbookings x JOIN listings l ON l.id=x.listing_id WHERE x.status!='cancelled' AND "
+                             "((x.patient_id=? AND l.owner=?) OR (x.patient_id=? AND l.owner=?)) LIMIT 1", (a, b, b, a)).fetchone())
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2267,7 +2493,9 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete,
                  "/api/m/verify/submit": m_verify_submit, "/api/m/reminder/save": m_reminder_save,
                  "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete,
-                 "/api/m/report": m_report, "/api/m/block": m_block, "/api/m/confirm/resend": m_confirm_resend}
+                 "/api/m/report": m_report, "/api/m/block": m_block, "/api/m/confirm/resend": m_confirm_resend,
+                 "/api/m/booking/settings": m_booking_settings, "/api/m/book": m_book, "/api/m/booking/cancel": m_booking_cancel,
+                 "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots}
 
 
 
@@ -2286,7 +2514,7 @@ def can_contact(conn, me, other_id):
     if me["kind"] == "patient" and other["kind"] == "doctor":
         return other
     if conn.execute("SELECT 1 FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) LIMIT 1",
-                    (me["id"], other_id, other_id, me["id"])).fetchone():
+                    (me["id"], other_id, other_id, me["id"])).fetchone() or has_booking(conn, me["id"], other_id):
         return other
     raise AuthError("You can call people you already chat with, or any doctor.")
 
