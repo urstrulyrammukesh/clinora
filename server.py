@@ -846,6 +846,7 @@ def public_listings(conn):
         d["verified"] = bool(d.get("verified"))
         cfg = booking_cfg(d)
         d["booking"] = {k: cfg[k] for k in ("fee", "cur", "modes", "slot")} if cfg else None
+        d["page"] = "/doctor/" + doctor_slug(d)
         try:
             d["social"] = json.loads(d.get("social") or "{}")
         except ValueError:
@@ -2572,6 +2573,95 @@ def push_to(conn, member_id, title, body, link):
     threading.Thread(target=run, daemon=True).start()
 
 
+# ---------------------------------------------------------------- public doctor pages:  /doctor/12-dr-sharma-srinagar
+# A real web page for every doctor: easy to share on WhatsApp/Instagram and found by Google.
+def slugify(s):
+    return re.sub(r"[^a-z0-9]+", "-", str(s or "").lower()).strip("-")[:60] or "doctor"
+
+
+def doctor_slug(lst):
+    return f"{lst['id']}-{slugify(lst['name'] + ' ' + (lst['city'] or ''))}"
+
+
+def doctor_page(conn, lid):
+    lst = conn.execute("SELECT l.*, m.photo_ts FROM listings l LEFT JOIN members m ON m.id=l.owner WHERE l.id=? AND l.hidden=0", (lid,)).fetchone()
+    if not lst:
+        return None, None
+    e = html.escape
+    rv = listing_reviews(conn, lid)
+    verified = conn.execute("SELECT 1 FROM verifications WHERE listing_id=? AND status='verified'", (lid,)).fetchone()
+    cfg = booking_cfg(lst)
+    url = f"{PUBLIC_URL}/doctor/{doctor_slug(lst)}"
+    kind = {"doctors": "Doctor", "clinic": "Clinic", "hospital": "Hospital", "dentist": "Dentist"}.get(lst["type"], "Doctor")
+    where = ", ".join(x for x in (lst["city"], lst["country"]) if x)
+    desc = f"{lst['name']}" + (f", {lst['spec']}" if lst["spec"] else "") + f" in {where}." + \
+           (f" Rated {rv['avg']}★ by {rv['count']} patients." if rv["count"] else "") + (" Book a visit online on Clinora." if cfg else " Message on Clinora.")
+    try:
+        social = json.loads(lst["social"] or "{}")
+    except ValueError:
+        social = {}
+    ld = {"@context": "https://schema.org", "@type": "Dentist" if lst["type"] == "dentist" else "Hospital" if lst["type"] == "hospital"
+          else "MedicalClinic" if lst["type"] == "clinic" else "Physician", "name": lst["name"], "url": url,
+          "address": {"@type": "PostalAddress", "streetAddress": lst["addr"], "addressLocality": lst["city"], "addressCountry": lst["cc"] or lst["country"]},
+          "geo": {"@type": "GeoCoordinates", "latitude": lst["lat"], "longitude": lst["lon"]}, "telephone": lst["phone"]}
+    if lst["spec"]:
+        ld["medicalSpecialty"] = lst["spec"]
+    if rv["count"]:
+        ld["aggregateRating"] = {"@type": "AggregateRating", "ratingValue": rv["avg"], "reviewCount": rv["count"]}
+    photo = f"/api/m/avatar/{lst['owner']}?v={lst['photo_ts']}" if lst["owner"] and lst["photo_ts"] else ""
+    stars = lambda n: "★" * n + "☆" * (5 - n)
+    revs = "".join(f"<div class='rv'><b>{e(r['name'])}</b> <span class='st'>{stars(r['stars'])}</span><p>{e(r['body'])}</p>"
+                   + (f"<div class='rp'><b>Reply from the doctor:</b> {e(r['reply'])}</div>" if r["reply"] else "") + "</div>"
+                   for r in rv["reviews"][:6])
+    links = "".join(f"<a href='{e(v if str(v).startswith('http') else '#')}' rel='noopener nofollow' target='_blank'>{e(k.title())}</a>"
+                    for k, v in social.items() if v and str(v).startswith("https://"))
+    book = (f"<p class='fee'>📅 Online booking · {e(str(cfg['fee']) + ' ' + cfg['cur']) if cfg['fee'] else 'Free'} · "
+            f"{' & '.join('🏥 In clinic' if m == 'clinic' else '📹 Video' for m in cfg['modes'])}</p>"
+            f"<a class='btn' href='/#book/{lid}'>📅 Book a visit</a>") if cfg else ""
+    ld_json = json.dumps(ld).replace("</", "<\\/")
+    tel = re.sub(r"[^0-9+]", "", lst["phone"])
+    title_spec = " · " + e(lst["spec"]) if lst["spec"] else ""
+    av_html = f'<img src="{e(photo)}" alt="">' if photo else e((lst["name"] or "?")[:1])
+    badge = '<span class="ok">✓ Verified</span>' if verified else ""
+    plural = "s" if rv["count"] != 1 else ""
+    rating_html = f"<div><span class='st'>{stars(round(rv['avg']))}</span> {rv['avg']} ({rv['count']} review{plural})</div>" if rv["count"] else ""
+    hours_html = f"<p>🕘 Online hours: {e(lst['hours'])}</p>" if lst["hours"] else ""
+    video_html = " · 📹 Video visits" if lst["video"] else ""
+    links_html = f"<p class='links'>{links}</p>" if links else ""
+    revs_html = revs or "<p class='mu'>No reviews yet.</p>"
+    more_html = f"<p><a href='/#doctor/{lid}'>See all {rv['count']} reviews on Clinora →</a></p>" if rv["count"] > 6 else ""
+    og_image = e(PUBLIC_URL + (photo or "/assets/icons/icon-512.png"))
+    page = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(lst['name'])}{title_spec} in {e(lst['city'] or '')} · Clinora</title>
+<meta name="description" content="{e(desc)}"><link rel="canonical" href="{e(url)}"><link rel="icon" href="/assets/icons/favicon-48.png">
+<meta property="og:type" content="profile"><meta property="og:title" content="{e(lst['name'])} · Clinora"><meta property="og:description" content="{e(desc)}">
+<meta property="og:url" content="{e(url)}"><meta property="og:image" content="{og_image}"><meta name="twitter:card" content="summary">
+<script type="application/ld+json">{ld_json}</script>
+<style>body{{margin:0;background:#06080b;color:#e9eff3;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}}
+main{{max-width:720px;margin:0 auto;padding:24px 18px 70px}}a{{color:#5cc8ff}}.top{{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:#e9eff3;text-decoration:none}}
+.top img{{width:32px;height:32px;border-radius:9px}}.card{{background:#0c1015;border:1px solid #1c242e;border-radius:16px;padding:20px;margin-top:18px}}
+.hd{{display:flex;gap:16px;align-items:center}}.av{{width:84px;height:84px;border-radius:50%;background:#14b8a6;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;overflow:hidden;flex:0 0 84px}}
+.av img{{width:100%;height:100%;object-fit:cover}}h1{{font-size:26px;margin:0}}.mu{{color:#8693a0}}.ok{{background:linear-gradient(90deg,#0ea5e9,#2563eb);color:#fff;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:700;vertical-align:middle}}
+.btn{{display:inline-block;background:#14b8a6;color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:12px;margin:6px 8px 0 0}}.btn.g{{background:none;border:1px solid #2a3440;color:#e9eff3}}
+.st{{color:#fbbf24}}.rv{{border-top:1px solid #1c242e;padding:12px 0}}.rv p{{margin:4px 0}}.rp{{background:#111821;border-radius:10px;padding:8px 10px;font-size:14px}}
+.links a{{margin-right:12px}}.fee{{margin:10px 0 0}}</style></head><body><main>
+<a class="top" href="/"><img src="/assets/icons/icon-192.png" alt="">Clinora</a>
+<div class="card"><div class="hd"><div class="av">{av_html}</div>
+<div><h1>{e(lst['name'])} {badge}</h1>
+<div class="mu">{e(kind)}{title_spec} · {e(where)}</div>
+{rating_html}</div></div>
+<p>📍 {e(lst['addr'])}, {e(where)} · <a href="https://www.google.com/maps/dir/?api=1&amp;destination={lst['lat']},{lst['lon']}" target="_blank" rel="noopener">Directions</a></p>
+<p>📞 <a href="tel:{e(tel)}">{e(lst['phone'])}</a>{video_html}</p>
+{hours_html}
+{book}<a class="btn g" href="/#doctor/{lid}">💬 Message / reviews</a>
+{links_html}</div>
+<div class="card"><h2 style="margin-top:0">Patient reviews</h2>{revs_html}
+{more_html}</div>
+<p class="mu" style="font-size:13px;margin-top:22px">Clinora is not a medical service and does not check every detail on this page. In an emergency, call your local emergency number.
+<a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p></main></body></html>"""
+    return page, doctor_slug(lst)
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3465,10 +3555,23 @@ class Handler(SimpleHTTPRequestHandler):
             page = page.replace("{{SUPPORT_EMAIL}}", SUPPORT_EMAIL or "the email address shown in the Clinora app")
             page = page.replace("{{SITE_URL}}", site).replace("{{UPDATED}}", "25 November 2026")
             return self.send_text(200, page, "text/html; charset=utf-8")
+        m = re.fullmatch(r"/doctor/(\d+)(?:-[a-z0-9-]*)?", path_only)
+        if m:
+            with connect() as conn:
+                page, slug = doctor_page(conn, int(m.group(1)))
+            if not page:
+                return self.send_text(404, "<!DOCTYPE html><title>Not found</title><p>This doctor is no longer on Clinora. <a href='/'>Find another doctor</a></p>",
+                                      "text/html; charset=utf-8")
+            if path_only != f"/doctor/{slug}":  # one address per doctor, even if the name changes
+                return self.redirect(f"/doctor/{slug}")
+            self._cache = "no-cache"
+            return self.send_text(200, page, "text/html; charset=utf-8")
         if path_only == "/robots.txt":
             return self.send_text(200, f"User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: {PUBLIC_URL}/sitemap.xml\n", "text/plain")
         if path_only == "/sitemap.xml":
-            urls = "".join(f"<url><loc>{PUBLIC_URL}{u}</loc></url>" for u in ("/", "/privacy", "/terms", "/delete-account"))
+            with connect() as conn:
+                docs = [f"/doctor/{doctor_slug(r)}" for r in conn.execute("SELECT id, name, city FROM listings WHERE hidden=0 ORDER BY id")]
+            urls = "".join(f"<url><loc>{html.escape(PUBLIC_URL + u)}</loc></url>" for u in ["/", "/privacy", "/terms", "/delete-account"] + docs)
             return self.send_text(200, '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
                                   + urls + "</urlset>", "application/xml")
         if path_only == "/.well-known/assetlinks.json":

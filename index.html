@@ -1529,6 +1529,8 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
   if(v==='reminders'){window.__openRem=true;v='account'}
+  {const m=String(v).match(/^(doctor|book)\/(\d+)$/);if(m){const id=+m[2];history.replaceState(null,'',location.search+'#directory');v='directory';
+    const open=()=>{if(!DBok&&!(DB.listings||[]).length)return setTimeout(open,300);m[1]==='book'?openBooking(id):openReviews(id)};setTimeout(open,200)}}
   if(/^reset\//.test(String(v))){window.__resetToken=String(v).slice(6);history.replaceState(null,'',location.search+'#account');v='account'}
   if(/^confirm\//.test(String(v))){const tok=String(v).slice(8);history.replaceState(null,'',location.search+'#account');v='account';
     setTimeout(async()=>{try{await mapi('confirm',{token:tok});acctNotice('✅ Your email is confirmed. Welcome to Clinora!')}catch(e){acctNotice(e.message)}},50)}
@@ -2781,7 +2783,8 @@ async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'PO
   if(!r)throw new Error('Could not reach the server. Is it running?');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
   if(!r.ok||j.error)throw new Error(j.error||'Server error');
   if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();
-  if('notif_unread' in j&&window.setBell)setBell(j.notif_unread);if('me' in j&&window.bellRefresh)bellRefresh();return j}
+  if('notif_unread' in j&&window.setBell)setBell(j.notif_unread);if('me' in j&&window.bellRefresh)bellRefresh();
+  if(j.me&&window.__afterLogin){const f=window.__afterLogin;window.__afterLogin=null;setTimeout(f,400)}return j}
 function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
   let im=b.querySelector('img');if(me&&me.photo_ts){if(!im){im=document.createElement('img');b.appendChild(im)}const src=`/api/m/avatar/${me.id}?v=${me.photo_ts}`;if(im.getAttribute('src')!==src)im.src=src}else if(im)im.remove();
   const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0);if(window.syncMenu)syncMenu()}
@@ -2881,6 +2884,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
       ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
+      ${L&&L.id?`<div class="card" style="padding:14px 18px;margin-bottom:18px">🔗 <b>Your public page:</b> <a class="teal" href="/doctor/${L.id}" target="_blank" rel="noopener">${esc(location.host)}/doctor/${L.id}…</a> <button class="btn ghost sm" type="button" data-share="/doctor/${L.id}" data-sname="${esc(L.name)}" style="margin-left:6px">Share</button><div style="font-size:12.5px;color:var(--mute);margin-top:4px">Put this link on WhatsApp, Instagram and Google so patients can book you.</div></div>`:''}
       ${L?verifyCard(MEM.verification):''}
       ${L?bookSettingsCard(L)+doctorVisitsCard():''}
       ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
@@ -3117,7 +3121,7 @@ function closeReviews(){$('#revSheet').classList.remove('on')}
 $('#revX').onclick=closeReviews;$('#revSheet').onclick=e=>{if(e.target.id==='revSheet')closeReviews()};
 function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{name:'Doctor'};const me=MEM.me;const mine=R2.reviews.find(r=>r.mine);
   const max=Math.max(1,...Object.values(R2.dist));
-  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)} ${l.verified?'<span class="lc-pill ok" style="vertical-align:middle;font-size:11px">✓ Verified</span>':''}</h3>${R2.is_owner?'':`<button class="rp-flag" type="button" data-report="listing:${R2.listing_id}" style="float:right;margin-top:-4px">⚑ Report profile</button>`}<div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
+  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)} ${l.verified?'<span class="lc-pill ok" style="vertical-align:middle;font-size:11px">✓ Verified</span>':''}</h3><div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px">${l.page?`<button class="btn ghost sm" type="button" data-share="${esc(l.page)}" data-sname="${esc(l.name)}">🔗 Share profile</button>`:''}${l.booking?`<button class="btn primary sm" type="button" data-book="${R2.listing_id}">📅 Book visit</button>`:''}</div>${R2.is_owner?'':`<button class="rp-flag" type="button" data-report="listing:${R2.listing_id}" style="float:right;margin-top:-4px">⚑ Report profile</button>`}<div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
     <div class="rv-head"><div><div class="rv-avg">${R2.avg??'–'}</div><div class="stars">${starTxt(Math.round(R2.avg||0))}</div><div style="font-size:12.5px;color:var(--mute)">${R2.count} review${R2.count===1?'':'s'}</div></div>
       <div class="rv-dist">${[5,4,3,2,1].map(n=>`<div>${n}★<i><b style="width:${R2.dist[n]/max*100}%"></b></i>${R2.dist[n]}</div>`).join('')}</div></div>
     ${R2.photos.length?`<div class="nd-h" style="margin-left:0">PHOTOS OF THEIR WORK</div><div class="rv-photos">${R2.photos.map(g=>`<figure data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><img loading="lazy" src="/api/m/gallery/${g.id}" alt="${esc(g.caption||'Work photo')}"><figcaption>${esc(g.caption||'')}</figcaption></figure>`).join('')}</div>`:''}
@@ -3273,6 +3277,10 @@ async function wirePush(){const box=$('#pushCard');if(!box)return;
         const reg=await navigator.serviceWorker.ready;const s=(await reg.pushManager.getSubscription())||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(MEM.push_key)});
         await mapi('push/subscribe',s.toJSON())}
       wirePush()}catch(e){alert(e.message);b.disabled=false}}}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-share]');if(!b)return;e.preventDefault();e.stopPropagation();
+  const url=location.origin+b.dataset.share,title=(b.dataset.sname||'Doctor')+' on Clinora';
+  try{if(navigator.share){await navigator.share({title,text:'Book or message '+(b.dataset.sname||'this doctor')+' on Clinora',url});return}}catch(err){if(err.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(url);const o=b.textContent;b.textContent='✅ Link copied';setTimeout(()=>b.textContent=o,1800)}catch{prompt('Copy this link:',url)}},true);
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3324,7 +3332,7 @@ function wireBookings(){
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
 // the booking window patients use
 async function openBooking(lid){
-  if(!MEM.me){go('account');acctNotice('Log in or create a free account to book a visit.');return}
+  if(!MEM.me){window.__afterLogin=()=>openBooking(lid);go('account');acctNotice('Log in or create a free account to book a visit. The booking opens right after.');return}
   const ov=document.createElement('div');ov.className='rp-ov';ov.innerHTML='<div class="rp-box" role="dialog" aria-modal="true" aria-label="Book a visit"><p>Loading free times…</p></div>';document.body.appendChild(ov);
   const close=()=>ov.remove();ov.onclick=e=>{if(e.target===ov)close()};ov.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}});
   let S;try{S=(await mapi('slots',{listing_id:lid})).result}catch(e){ov.firstChild.innerHTML=`<p class="red">${esc(e.message)}</p><div style="text-align:right"><button class="btn ghost sm" type="button" id="bkX">Close</button></div>`;$('#bkX').onclick=close;return}
