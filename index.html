@@ -930,6 +930,10 @@ html{overflow-x:clip}
 .soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
 .pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
 .pw-card form{padding:0 20px 20px}
+.st-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:10px 0}.st-tile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
+.st-tile b{display:block;font-size:22px;line-height:1.2}.st-tile span{font-size:12px;color:var(--mute)}
+.st-charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.st-chart{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.st-chart h5{margin:0 0 6px;font-size:13px}.st-chart svg{width:100%;height:70px;display:block}.st-chart rect{fill:var(--teal,#14b8a6)}.st-chart text{font-size:9px;fill:var(--mute)}
 .dir-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}.dir-filters input,.dir-filters select{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:10px;padding:8px 10px;font:inherit;font-size:14px}
 .dir-filters input{flex:1 1 220px}.dir-filters .day-chips{margin:0}
 .fam{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--panel2);font-size:14px}.fam .acts{margin-left:auto;display:flex;gap:6px}
@@ -1345,6 +1349,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
           <div id="docToggles"></div></div>
         <div class="panel-sec"><h4>🚨 EMERGENCY ALERTS</h4><div id="alerts"><div class="empty" style="padding:0">No alerts.</div></div></div>
         <div class="panel-sec team" id="teamSec" style="display:none"></div>
+        <div class="panel-sec" id="statsSec" style="display:none"></div>
         <div class="panel-sec" id="verifySec" style="display:none"></div>
         <div class="panel-sec" id="reportSec" style="display:none"></div>
         <div class="panel-sec" id="backupSec" style="display:none"></div>
@@ -1823,7 +1828,7 @@ function renderAuth(){
   $('#fDoc').style.display=admin?'':'none';if(!admin)$('#fDoc').value='';
   $$('[data-live]').forEach(b=>{b.disabled=!admin&&b.dataset.live!==me.doctor_id;b.title=b.disabled?'Only the clinic admin can change this':''});
   renderTeam(admin);
-  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue();renderReportQueue();renderBackups()}else if(!admin){window.__vqShown=false;['#verifySec','#reportSec','#backupSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
+  if(admin&&!window.__vqShown){window.__vqShown=true;renderStats();renderVerifyQueue();renderReportQueue();renderBackups()}else if(!admin){window.__vqShown=false;['#statsSec','#verifySec','#reportSec','#backupSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
@@ -3357,6 +3362,23 @@ async function rxScan(file){const box=$('#rxBox');box.innerHTML='<p style="font-
         try{await mapi('reminder/save',{kind:'medicine',title:((who?who+': ':'')+m.name+(m.strength?' '+m.strength:'')).slice(0,80),at,days:127,until,lead:0,
           note:[m.dose,RX_FOOD[m.food],m.note].filter(Boolean).join(' · ').slice(0,200),email:false,tz:remTZ()});n++}catch(e){bad.push(m.name+': '+e.message)}}}
     renderAccount();const c=$('#remCard');if(c){c.open=true;const b=$('#rxBox');if(b)b.innerHTML=`<p class="teal" style="font-size:13.5px">✅ Added ${n} reminder${n===1?'':'s'}.${bad.length?' Skipped: '+esc(bad.join('; ')):''}</p>`}}}
+
+/* ================= ADMIN STATISTICS ================= */
+function stBars(arr,label){const max=Math.max(1,...arr),w=200/arr.length;
+  return `<svg viewBox="0 0 200 70" role="img" aria-label="${esc(label)} per week, last 8 weeks: ${arr.join(', ')}">${arr.map((v,i)=>`<rect x="${i*w+3}" y="${58-50*v/max}" width="${w-6}" height="${Math.max(1,50*v/max)}" rx="2"><title>${v}</title></rect><text x="${i*w+w/2}" y="68" text-anchor="middle">${v}</text>`).join('')}</svg>`}
+async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
+  let s;try{s=(await api('/api/stats/overview')).created}catch(e){sec.innerHTML='<h4>📊 STATISTICS</h4><p class="red">'+esc(e.message)+'</p>';return}
+  const T=s.totals,tile=(n,l)=>`<div class="st-tile"><b>${n??'–'}</b><span>${l}</span></div>`;
+  sec.innerHTML=`<h4>📊 STATISTICS <button class="btn ghost sm" type="button" id="stReload" style="margin-left:8px">↻</button></h4>
+    <div class="st-tiles">${tile(T.patients,'patients')}${tile(T.doctors,'doctors')}${tile(T.verified,'✓ verified doctors')}${tile(T.bookable,'doctors taking bookings')}
+      ${tile(T.active_7d,'active this week')}${tile(T.visits_upcoming,'upcoming visits')}${tile(T.visits_done,'visits done')}${tile(T.visits_cancelled,'cancelled')}
+      ${tile(T.messages,'messages')}${tile(T.reviews+(T.avg_rating?` · ${T.avg_rating}★`:''),'reviews')}${tile(T.reminders_on,'reminders on')}${tile(T.push_devices,'phones with alerts')}
+      ${tile(T.confirmed+' / '+(T.patients+T.doctors),'emails confirmed')}${tile(T.reports_open,'open reports')}</div>
+    <div class="st-charts">${[['signups','🆕 Sign-ups'],['visits','📅 Visits booked'],['messages','💬 Messages'],['reviews','⭐ Reviews']].map(([k,l])=>`<div class="st-chart"><h5>${l} · per week</h5>${stBars(s.series[k],l)}</div>`).join('')}</div>
+    <div class="two" style="margin-top:10px;font-size:13px"><div><b>Most booked doctors</b>${s.top_doctors.length?s.top_doctors.map(d=>`<div>${esc(d.name)} <span style="color:var(--mute)">· ${esc(d.city||'')} · ${d.visits}</span></div>`).join(''):'<div style="color:var(--mute)">No bookings yet</div>'}</div>
+      <div><b>Top cities</b>${s.cities.length?s.cities.map(c=>`<div>${esc(c.city)} <span style="color:var(--mute)">· ${c.n}</span></div>`).join(''):'<div style="color:var(--mute)">No data yet</div>'}</div></div>
+    <p style="font-size:12px;color:var(--mute);margin-top:8px">Bars: the last 8 weeks, newest on the right. Only counts, no private details.</p>`;
+  $('#stReload').onclick=()=>renderStats()}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}

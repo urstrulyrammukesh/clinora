@@ -2707,6 +2707,55 @@ def m_family_delete(conn, d, me):
     conn.execute("DELETE FROM family WHERE id=? AND member_id=?", (int(d.get("id") or 0), me["id"]))
 
 
+# ---------------------------------------------------------------- admin statistics (Clinic Dashboard)
+def stats_overview(conn, d, user):
+    need_admin(user)
+    now = now_ms()
+    week = 7 * 86_400_000
+    one = lambda q, *a: conn.execute(q, a).fetchone()[0] or 0
+    totals = {
+        "patients": one("SELECT COUNT(*) FROM members WHERE kind='patient'"),
+        "doctors": one("SELECT COUNT(*) FROM members WHERE kind='doctor'"),
+        "profiles": one("SELECT COUNT(*) FROM listings WHERE owner IS NOT NULL AND hidden=0"),
+        "verified": one("SELECT COUNT(*) FROM verifications WHERE status='verified'"),
+        "bookable": sum(1 for r in conn.execute("SELECT booking FROM listings WHERE hidden=0 AND booking IS NOT NULL") if booking_cfg(r)),
+        "active_7d": one("SELECT COUNT(*) FROM members WHERE last_seen > ?", now - week),
+        "confirmed": one("SELECT COUNT(*) FROM members WHERE email_ok=1"),
+        "visits_upcoming": one("SELECT COUNT(*) FROM dbookings WHERE status='booked' AND at > ?", now),
+        "visits_done": one("SELECT COUNT(*) FROM dbookings WHERE status='done'"),
+        "visits_cancelled": one("SELECT COUNT(*) FROM dbookings WHERE status='cancelled'"),
+        "visits_no_show": one("SELECT COUNT(*) FROM dbookings WHERE status='no_show'"),
+        "messages": one("SELECT COUNT(*) FROM messages"),
+        "reviews": one("SELECT COUNT(*) FROM reviews"),
+        "avg_rating": conn.execute("SELECT ROUND(AVG(stars), 2) FROM reviews").fetchone()[0],
+        "reminders_on": one("SELECT COUNT(*) FROM reminders WHERE active=1"),
+        "push_devices": one("SELECT COUNT(*) FROM push_subs"),
+        "reports_open": one("SELECT COUNT(DISTINCT target_type || target_id) FROM reports WHERE status='open'"),
+        "clinic_bookings": one("SELECT COUNT(*) FROM appointments"),
+    }
+    # last 8 weeks, oldest first
+    start = now - 8 * week
+    def weekly(q):
+        b = [0] * 8
+        for (ts,) in conn.execute(q, (start,)):
+            i = int((ts - start) // week)
+            if 0 <= i < 8:
+                b[i] += 1
+        return b
+    series = {
+        "signups": weekly("SELECT created FROM members WHERE created > ?"),
+        "visits": weekly("SELECT ts FROM dbookings WHERE ts > ?"),
+        "messages": weekly("SELECT ts FROM messages WHERE ts > ?"),
+        "reviews": weekly("SELECT ts FROM reviews WHERE ts > ?"),
+    }
+    top = [dict(r) for r in conn.execute(
+        "SELECT l.name, l.city, COUNT(b.id) AS visits FROM listings l JOIN dbookings b ON b.listing_id=l.id AND b.status!='cancelled' "
+        "GROUP BY l.id ORDER BY visits DESC LIMIT 5")]
+    cities = [dict(r) for r in conn.execute(
+        "SELECT city, COUNT(*) AS n FROM members WHERE city IS NOT NULL AND city!='' GROUP BY LOWER(city) ORDER BY n DESC LIMIT 5")]
+    return {"totals": totals, "series": series, "week_start": start, "top_doctors": top, "cities": cities}
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3374,6 +3423,7 @@ ROUTES = {
     "/api/verify/list": verify_queue,
     "/api/report/list": report_queue,
     "/api/backup/list": backup_info,
+    "/api/stats/overview": stats_overview,
     "/api/backup/now": backup_now,
     "/api/report/decide": report_decide,
     "/api/verify/decide": verify_decide,
