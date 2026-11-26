@@ -102,7 +102,7 @@ class Client:
         assert s == 200, j
         if confirm:
             with self.s.db() as c:
-                c.execute("UPDATE members SET email_ok=1 WHERE email=?", (email,))
+                c.execute("UPDATE members SET email_ok=1 WHERE email=?", (email.lower(),))
         return j["me"]["id"]
 
     def profile(self, name="Test Clinic"):

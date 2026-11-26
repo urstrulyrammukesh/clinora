@@ -402,6 +402,8 @@ CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY AUTOINCREMENT, member_
   title TEXT NOT NULL, date TEXT, mime TEXT NOT NULL, size INTEGER NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS record_shares(record_id INTEGER NOT NULL, booking_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, expires INTEGER NOT NULL,
   PRIMARY KEY(record_id, booking_id));
+CREATE TABLE IF NOT EXISTS clinic_team(clinic_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, status TEXT NOT NULL, ts INTEGER NOT NULL,
+  PRIMARY KEY(clinic_id, doctor_id));
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -863,8 +865,13 @@ def public_listings(conn):
         "(SELECT COUNT(*) FROM verifications v WHERE v.listing_id = l.id AND v.status = 'verified') AS verified "
         "FROM listings l LEFT JOIN members m ON m.id = l.owner WHERE l.hidden = 0 ORDER BY l.ts")
     out = []
+    team, works_at = {}, {}
+    for t_ in conn.execute("SELECT clinic_id, doctor_id FROM clinic_team WHERE status='active'"):
+        team.setdefault(t_["clinic_id"], []).append(t_["doctor_id"])
+        works_at.setdefault(t_["doctor_id"], []).append(t_["clinic_id"])
     for r in rows:
         d = dict(r)
+        d["team"], d["clinics"] = team.get(d["id"], []), works_at.get(d["id"], [])
         seen = d.pop("m_seen")
         d["online"] = bool(d.pop("m_online")) and (seen or 0) > cutoff
         d["last_seen"] = seen or None
@@ -941,7 +948,7 @@ def member_state(conn, me):
     ph = conn.execute("SELECT phone, phone_ok FROM members WHERE id=?", (me["id"],)).fetchone()
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw, phone=ph["phone"], phone_ok=bool(ph["phone_ok"]),
                        sms_on=SMS_ON or WA_REMINDERS_ON), "notif_unread": notif_unread,
-            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY, "records": record_list(conn, me),
+            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY, "records": record_list(conn, me), "team": team_view(conn, me),
             "family": [dict(r) for r in conn.execute("SELECT id, name, relation, year FROM family WHERE member_id=? ORDER BY id", (me["id"],))],
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"]),
@@ -1415,6 +1422,7 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM family WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM clinic_team WHERE clinic_id IN (SELECT id FROM listings WHERE owner=?) OR doctor_id IN (SELECT id FROM listings WHERE owner=?)", (mid, mid))
     conn.execute("UPDATE queue_items SET patient_id=NULL, name='(deleted)' WHERE patient_id=?", (mid,))
     for (rid,) in conn.execute("SELECT id FROM records WHERE member_id=?", (mid,)).fetchall():
         _rec_path(rid).unlink(missing_ok=True)
@@ -2721,6 +2729,14 @@ def doctor_page(conn, lid):
     revs_html = revs or "<p class='mu'>No reviews yet.</p>"
     more_html = f"<p><a href='/#doctor/{lid}'>See all {rv['count']} reviews on Clinora →</a></p>" if rv["count"] > 6 else ""
     og_image = e(PUBLIC_URL + (photo or "/assets/icons/icon-512.png"))
+    team_rows = conn.execute("SELECT l.id, l.name, l.city, l.spec, l.booking FROM clinic_team t JOIN listings l ON l.id=t.doctor_id "
+                             "WHERE t.clinic_id=? AND t.status='active' AND l.hidden=0 ORDER BY l.name", (lid,)).fetchall()
+    team_html = ("<div class='card'><h2 style='margin-top:0'>Our doctors</h2>" + "".join(
+        f"<p><b><a href='/doctor/{doctor_slug(r)}'>{e(r['name'])}</a></b> <span class='mu'>{e(r['spec'] or '')}</span>"
+        + (f" · <a href='/#book/{r['id']}'>📅 Book</a>" if booking_cfg(r) else "") + "</p>" for r in team_rows) + "</div>") if team_rows else ""
+    at_rows = conn.execute("SELECT l.id, l.name, l.city FROM clinic_team t JOIN listings l ON l.id=t.clinic_id WHERE t.doctor_id=? AND t.status='active' AND l.hidden=0",
+                           (lid,)).fetchall()
+    at_html = ("<p>🏥 Works at " + ", ".join(f"<a href='/doctor/{doctor_slug(r)}'>{e(r['name'])}</a>" for r in at_rows) + "</p>") if at_rows else ""
     page = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(lst['name'])}{title_spec} in {e(lst['city'] or '')} · Clinora</title>
 <meta name="description" content="{e(desc)}"><link rel="canonical" href="{e(url)}"><link rel="icon" href="/assets/icons/favicon-48.png">
@@ -2744,7 +2760,8 @@ main{{max-width:720px;margin:0 auto;padding:24px 18px 70px}}a{{color:#5cc8ff}}.t
 <p>📞 <a href="tel:{e(tel)}">{e(lst['phone'])}</a>{video_html}</p>
 {hours_html}
 {book}<a class="btn g" href="/#doctor/{lid}">💬 Message / reviews</a>
-{links_html}</div>
+{at_html}{links_html}</div>
+{team_html}
 <div class="card"><h2 style="margin-top:0">Patient reviews</h2>{revs_html}
 {more_html}</div>
 <p class="mu" style="font-size:13px;margin-top:22px">Clinora is not a medical service and does not check every detail on this page. In an emergency, call your local emergency number.
@@ -3530,6 +3547,69 @@ def med_find(d, ip):
                                         "search": f"https://www.google.com/search?q={q}+Jan+Aushadhi+price"})
 
 
+# ---------------------------------------------------------------- clinics with several doctors
+# A clinic or hospital profile invites doctors (who have their own Clinora profile and calendar) to its team.
+# The clinic page then lists them, each with their own "Book visit" button.
+TEAM_TYPES = {"clinic", "hospital"}
+
+
+def team_view(conn, me):
+    lst = my_listing(conn, me) if me["kind"] == "doctor" else None
+    if not lst:
+        return None
+    out = {"is_clinic": lst["type"] in TEAM_TYPES}
+    if out["is_clinic"]:
+        out["members"] = [dict(r) for r in conn.execute(
+            "SELECT t.doctor_id, t.status, l.name, l.spec, l.city FROM clinic_team t JOIN listings l ON l.id=t.doctor_id WHERE t.clinic_id=? ORDER BY t.status, l.name", (lst["id"],))]
+    out["invites"] = [dict(r) for r in conn.execute(
+        "SELECT t.clinic_id, t.status, l.name, l.city FROM clinic_team t JOIN listings l ON l.id=t.clinic_id WHERE t.doctor_id=? AND t.status IN ('invited','active')", (lst["id"],))]
+    return out
+
+
+def m_team_invite(conn, d, me):
+    need_member(me, "doctor")
+    need_confirmed(me)
+    clinic = my_listing(conn, me)
+    if not clinic or clinic["type"] not in TEAM_TYPES:
+        raise InputError("Only clinic or hospital profiles can add a team. Change your profile type to Clinic first.")
+    if too_many("team", str(me["id"]), 30, 86400):
+        raise AuthError("Too many invites today.", 429)
+    email = valid_email(d)
+    doc = conn.execute("SELECT l.id, l.owner, l.name FROM members m JOIN listings l ON l.owner=m.id WHERE m.email=? AND l.hidden=0", (email,)).fetchone()
+    if not doc:
+        raise InputError("No doctor profile with that email yet. Send them your invite link so they can join Clinora first.")
+    if doc["id"] == clinic["id"]:
+        raise InputError("That's your own profile")
+    conn.execute("INSERT INTO clinic_team VALUES(?,?,?,?) ON CONFLICT(clinic_id, doctor_id) DO UPDATE SET status=CASE WHEN status='active' THEN 'active' ELSE 'invited' END, ts=excluded.ts",
+                 (clinic["id"], doc["id"], "invited", now_ms()))
+    notify(conn, doc["owner"], "booking", f"🏥 {clinic['name']} invited you to their team", "Accept on your Account page to show on their clinic page.", "account")
+    return {"invited": doc["name"]}
+
+
+def m_team_answer(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    cid = int(d.get("clinic_id") or 0)
+    row = conn.execute("SELECT c.owner, c.name FROM clinic_team t JOIN listings c ON c.id=t.clinic_id WHERE t.clinic_id=? AND t.doctor_id=?",
+                       (cid, lst["id"] if lst else -1)).fetchone()
+    if not row:
+        raise InputError("Invitation not found")
+    if d.get("accept"):
+        conn.execute("UPDATE clinic_team SET status='active', ts=? WHERE clinic_id=? AND doctor_id=?", (now_ms(), cid, lst["id"]))
+        notify(conn, row["owner"], "booking", f"✅ {lst['name']} joined your team", "They now show on your clinic page.", "account")
+    else:
+        conn.execute("DELETE FROM clinic_team WHERE clinic_id=? AND doctor_id=?", (cid, lst["id"]))
+
+
+def m_team_remove(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    cid, did = int(d.get("clinic_id") or 0), int(d.get("doctor_id") or 0)
+    if not lst or lst["id"] not in (cid, did):
+        raise InputError("Not allowed")
+    conn.execute("DELETE FROM clinic_team WHERE clinic_id=? AND doctor_id=?", (cid, did))
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3546,7 +3626,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/phone/start": m_phone_start, "/api/m/phone/confirm": m_phone_confirm, "/api/m/phone/remove": m_phone_remove,
                  "/api/m/queue/checkin": m_queue_checkin, "/api/m/queue/state": m_queue_state, "/api/m/queue/walkin": m_queue_walkin,
                  "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip,
-                 "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share}
+                 "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share,
+                 "/api/m/team/invite": m_team_invite, "/api/m/team/answer": m_team_answer, "/api/m/team/remove": m_team_remove}
 
 
 

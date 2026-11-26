@@ -206,3 +206,26 @@ def test_health_records_encrypted_and_shared(server, doctor, uniq):
     assert doc.get(f"/api/m/records/file/{rid}")[0] == 404
     p.post("/api/m/records/delete", {"id": rid})
     assert not (server.data_dir / "records" / f"{rid}.bin").exists()
+
+
+def test_clinic_team(server, uniq):
+    clinic, docA = server.client(), server.client()
+    clinic.signup("doctor", "Clinic Owner", uniq())
+    s, j = clinic.post("/api/m/profile", {"name": "City Care Clinic", "type": "clinic", "phone": "+911111111111", "addr": "Lal Chowk", "city": "Srinagar",
+                                          "country": "India", "lat": 34.07, "lon": 74.8})
+    cid = j["me"]["listing_id"]
+    a_email = uniq("docA")
+    docA.signup("doctor", "Dr Team A", a_email)
+    aid = docA.profile("Dr Team A")
+    assert docA.post("/api/m/team/invite", {"email": a_email})[0] == 400  # a doctor profile can't have a team
+    assert clinic.post("/api/m/team/invite", {"email": uniq("nobody")})[0] == 400
+    assert clinic.post("/api/m/team/invite", {"email": a_email})[0] == 200
+    t = docA.post("/api/m/me")[1]["team"]
+    assert t["invites"][0]["clinic_id"] == cid and t["invites"][0]["status"] == "invited"
+    assert docA.post("/api/m/team/answer", {"clinic_id": cid, "accept": True})[0] == 200
+    L = {x["id"]: x for x in server.client().post("/api/m/me")[1]["listings"]}
+    assert L[cid]["team"] == [aid] and L[aid]["clinics"] == [cid]
+    s, body, _ = server.client().get(f"/doctor/{cid}")
+    assert b"Our doctors" in body and b"Dr Team A" in body
+    assert docA.post("/api/m/team/remove", {"clinic_id": cid, "doctor_id": aid})[0] == 200
+    assert server.client().post("/api/m/me")[1]["listings"] and not {x["id"]: x for x in server.client().post("/api/m/me")[1]["listings"]}[cid]["team"]
