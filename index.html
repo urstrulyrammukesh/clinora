@@ -2925,7 +2925,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
       ${L&&L.id?`<div class="card" style="padding:14px 18px;margin-bottom:18px">🔗 <b>Your public page:</b> <a class="teal" href="/doctor/${L.id}" target="_blank" rel="noopener">${esc(location.host)}/doctor/${L.id}…</a> <button class="btn ghost sm" type="button" data-share="/doctor/${L.id}" data-sname="${esc(L.name)}" style="margin-left:6px">Share</button><div style="font-size:12.5px;color:var(--mute);margin-top:4px">Put this link on WhatsApp, Instagram and Google so patients can book you.</div></div>`:''}
       ${L?verifyCard(MEM.verification):''}
-      ${L?bookSettingsCard(L)+doctorVisitsCard():''}
+      ${L?bookSettingsCard(L)+doctorVisitsCard()+'<details class="card pw-card" id="qCard"><summary>🎫 Today\'s queue <span style="font-weight:400;color:var(--mute);font-size:13px">· tokens for patients at the clinic</span></summary><div id="qBody" style="padding:0 20px 16px">Loading…</div></details>':''}
       ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
     <h3 style="margin-bottom:10px">Messages</h3>
@@ -2952,7 +2952,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
   wireReminders();wireBookings();wirePush();wireFamily();wirePhone();
-  if(doc&&MEM.listing){renderGallery();wireVerify()}
+  if(doc&&MEM.listing){renderGallery();wireVerify();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
     <div id="delStep"><button class="btn ghost sm" type="button" id="delStart" style="border-color:rgba(255,61,85,.5);color:#ff6b7d">Delete my account…</button></div>`;
@@ -3477,6 +3477,25 @@ function wirePhone(){const f=$('#phForm');if(!f)return;const msg=t=>$('#phMsg').
   f.onsubmit=async e=>{e.preventDefault();try{await mapi('phone/start',{phone:$('#phNum').value.trim(),consent:$('#phOk').checked});renderAccount();keep();
       $('#phCodeRow').hidden=false;msg('<span class="teal">📩 Code sent. Type it below.</span>');$('#phCode').focus()}catch(err){msg('<span class="red">'+esc(err.message)+'</span>')}};
   const cf=$('#phConfirm');if(cf)cf.onclick=async()=>{try{await mapi('phone/confirm',{code:$('#phCode').value});renderAccount();keep()}catch(err){msg('<span class="red">'+esc(err.message)+'</span>')}}}
+
+/* ================= CLINIC QUEUE TOKENS ================= */
+function qShow(box,q){const m=(q.mine||[]).find(x=>x.status!=='done'&&x.status!=='skipped')||(q.mine||[])[0];if(!m||!box)return;
+  box.innerHTML=`<div class="visit" style="border-color:var(--teal);margin:6px 0"><b style="font-size:22px">🎫 Token #${m.token}</b>
+    <small>${m.status==='called'?'🔔 <b>It’s your turn. Please go in now.</b>':m.status==='waiting'?`Now serving #${q.now??'–'} · ${m.ahead} ahead of you · about ${m.wait_min} min`:m.status==='done'?'✅ Done':'Skipped: please tell the front desk'}</small>
+    <small>We’ll alert you when 2 people are ahead and when it’s your turn.</small></div>`}
+async function docQueue(){const box=$('#qBody');if(!box||!MEM.listing)return;let q;
+  try{q=(await mapi('queue/state',{listing_id:MEM.listing.id})).result}catch(e){box.textContent=e.message;return}
+  const items=q.items||[];const st={waiting:'⏳',called:'🔔',done:'✅',skipped:'⏭'};
+  box.innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:20px">Now serving: ${q.now?'#'+q.now:'–'}</b><span style="color:var(--mute)">${q.waiting} waiting</span>
+      <button class="btn primary sm" type="button" id="qNext">▶ Call next</button><a class="btn ghost sm" href="/queue/${q.listing_id}" target="_blank" rel="noopener">📺 Waiting-room screen</a></div>
+    <form id="qWalk" style="display:flex;gap:6px;margin:10px 0"><input id="qName" maxlength="60" placeholder="Walk-in patient's name" aria-label="Walk-in patient's name" style="flex:1"><button class="btn ghost sm" type="submit">+ Give token</button></form>
+    ${items.length?items.map(i=>`<div class="fam" style="margin-bottom:4px"><b>#${i.token}</b> ${esc(i.name)} <span style="color:var(--mute)">${st[i.status]||''} ${i.status}${i.booking_id?' · booked':''}</span>
+      <div class="acts">${i.status==='waiting'?`<button class="rv-mini" type="button" data-qskip="${i.id}">Skip</button>`:i.status==='skipped'?`<button class="rv-mini" type="button" data-qback="${i.id}">Back in line</button>`:''}</div></div>`).join('')
+      :'<p style="color:var(--mute);font-size:13px">No tokens yet today. Patients with a booked in-clinic visit tap “I’m at the clinic” on their phone; add walk-ins here.</p>'}`;
+  const run=async(path,body)=>{try{await mapi(path,body);docQueue()}catch(e){alert(e.message)}};
+  $('#qNext').onclick=()=>run('queue/next',{});$('#qWalk').onsubmit=e=>{e.preventDefault();const n=$('#qName').value.trim();if(n)run('queue/walkin',{name:n})};
+  box.querySelectorAll('[data-qskip]').forEach(b=>b.onclick=()=>run('queue/skip',{id:+b.dataset.qskip,skip:true}));
+  box.querySelectorAll('[data-qback]').forEach(b=>b.onclick=()=>run('queue/skip',{id:+b.dataset.qback,skip:false}))}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3491,6 +3510,7 @@ function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''
     ${!doc&&v.mode!=='video'&&v.addr?`<small>📍 ${esc(v.addr)}</small>`:''}${v.reason?`<small>📝 ${esc(v.reason)}</small>`:''}
     ${v.status==='cancelled'?`<small>Cancelled${v.cancel_reason?': '+esc(v.cancel_reason):''}</small>`:''}
     ${{paid:'<small>💳 Paid online</small>',pending:'<small>⏳ Waiting for payment: the time is held for 15 minutes</small>',refunded:'<small>↩️ Refunded</small>',refund_due:'<small>↩️ Refund in progress</small>'}[v.pay_status]||''}
+    ${!doc&&v.status==='booked'&&v.mode==='clinic'&&v.date===ymd(new Date())&&v.pay_status!=='pending'?`<div class="qbox" data-qlid="${v.listing_id}" data-qbid="${v.id}"><button class="btn primary sm" type="button" data-qin="${v.id}">🎫 I'm at the clinic: get my token</button></div>`:''}
     <div class="acts">${!doc&&v.status==='booked'&&v.pay_status==='pending'?`<button class="btn primary sm" type="button" data-paynow="${v.id}" data-pdoc="${esc(v.doctor)}" data-pfee="${v.fee}">💳 Pay now</button>`:''}${(()=>{const now=Date.now(),open=v.status==='booked'&&v.pay_status!=='pending'&&v.mode==='video'&&now>v.at-10*60e3&&now<v.at+((v.slot||30)+30)*60e3;
         return open?`<button class="btn primary sm" type="button" data-vcallm="${doc?v.patient_id:v.doctor_id}">📹 Join video visit</button>`
           :v.status==='booked'&&v.mode==='video'&&!past?'<small style="width:100%">📹 The <b>Join</b> button appears here 10 minutes before the visit.</small>':''})()}
@@ -3526,6 +3546,8 @@ function wireBookings(){
   $$('[data-vmsg]').forEach(b=>b.onclick=()=>{openConv(+b.dataset.vmsg,b.dataset.vlid?+b.dataset.vlid:undefined);const c=$('#conv');if(c)c.scrollIntoView({block:'center'})});
   $$('[data-vcancel]').forEach(b=>b.onclick=async()=>{const r=prompt('Cancel this visit? You can add a short reason (optional):','');if(r===null)return;
     try{await mapi('booking/cancel',{id:+b.dataset.vcancel,reason:r});renderAccount()}catch(e){alert(e.message)}});
+  $$('[data-qin]').forEach(b=>b.onclick=async()=>{try{const q=(await mapi('queue/checkin',{booking_id:+b.dataset.qin})).result;qShow(b.closest('.qbox'),q)}catch(e){alert(e.message)}});
+  $$('.qbox').forEach(async box=>{try{const q=(await mapi('queue/state',{listing_id:+box.dataset.qlid})).result;if((q.mine||[]).length)qShow(box,q)}catch{}});
   $$('[data-paynow]').forEach(b=>b.onclick=()=>payVisit(+b.dataset.paynow,b.dataset.pdoc,'',+b.dataset.pfee));
   $$('[data-rxwrite]').forEach(b=>b.onclick=()=>openRxWriter(+b.dataset.rxwrite,b.dataset.rxid?+b.dataset.rxid:0,b.dataset.rxfor));
   $$('[data-rxrem]').forEach(b=>b.onclick=async()=>{try{const r=(await mapi('rx/get',{id:+b.dataset.rxrem})).result;const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}

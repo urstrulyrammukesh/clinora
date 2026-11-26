@@ -143,3 +143,35 @@ def test_online_payment_demo_hold_and_refund(server, admin, uniq):
     s, j = admin.post("/api/payout/set", {"listing_id": lid, "acc": "acc_ABCDEFGH1234"})
     assert s == 200 and any(d["payout_acc"] == "acc_ABCDEFGH1234" for d in j["created"]["doctors"])
     assert all("payout_acc" not in x for x in server.client().post("/api/m/me")[1]["listings"])  # private
+
+
+def test_clinic_queue(server, uniq):
+    doc = server.client()
+    doc.signup("doctor", "Dr Queue", uniq())
+    lid = doc.profile("Queue Clinic")
+    doc.post("/api/m/booking/settings", {"on": True, "days": 127, "start": "00:00", "end": "23:59", "slot": 10, "modes": ["clinic"], "fee": 0, "cur": "INR", "tz": "Asia/Kolkata"})
+    a, b = server.client(), server.client()
+    a.signup("patient", "Asha", uniq())
+    b.signup("patient", "Bina", uniq())
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    today = days[0]
+    import datetime
+    from zoneinfo import ZoneInfo
+    if today["date"] != datetime.datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat() or len(today["times"]) < 2:
+        return  # too late in the day to book two visits today; covered on other runs
+    ba = a.post("/api/m/book", {"listing_id": lid, "date": today["date"], "time": today["times"][-1], "mode": "clinic"})[1]["result"]["id"]
+    bb = b.post("/api/m/book", {"listing_id": lid, "date": today["date"], "time": today["times"][-2], "mode": "clinic"})[1]["result"]["id"]
+    assert doc.post("/api/m/queue/walkin", {"name": "Walk-in Ravi"})[0] == 200  # token 1
+    assert b.post("/api/m/queue/checkin", {"booking_id": ba})[0] == 400  # not your visit
+    q = a.post("/api/m/queue/checkin", {"booking_id": ba})[1]["result"]  # token 2
+    assert q["mine"][0]["token"] == 2 and q["mine"][0]["ahead"] == 1
+    b.post("/api/m/queue/checkin", {"booking_id": bb})  # token 3
+    q = doc.post("/api/m/queue/next")[1]["result"]  # calls #1
+    assert q["now"] == 1 and len(q["items"]) == 3
+    q = doc.post("/api/m/queue/next")[1]["result"]  # calls #2 (Asha)
+    assert q["now"] == 2
+    assert any("your turn" in n["title"] for n in a.post("/api/m/notifs")[1]["notifs"])
+    q = b.post("/api/m/queue/state", {"listing_id": lid})[1]["result"]
+    assert q["mine"][0]["ahead"] == 1 and "items" not in q  # patients don't see other names
+    s, body, _ = server.client().get(f"/queue/{lid}")
+    assert s == 200 and b"#2" in body and b"Asha" not in body

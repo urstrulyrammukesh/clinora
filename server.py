@@ -395,6 +395,9 @@ CREATE TABLE IF NOT EXISTS family(id INTEGER PRIMARY KEY AUTOINCREMENT, member_i
 CREATE TABLE IF NOT EXISTS prescriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, booking_id INTEGER UNIQUE NOT NULL, doctor_id INTEGER NOT NULL,
   patient_id INTEGER NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS wa_threads(phone TEXT PRIMARY KEY, history TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS queue_items(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, day TEXT NOT NULL, token INTEGER NOT NULL,
+  name TEXT NOT NULL, patient_id INTEGER, booking_id INTEGER UNIQUE, status TEXT NOT NULL, ts INTEGER NOT NULL, called_ts INTEGER);
+CREATE INDEX IF NOT EXISTS queue_day ON queue_items(listing_id, day, status);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -1408,6 +1411,7 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM family WHERE member_id=?", (mid,))
+    conn.execute("UPDATE queue_items SET patient_id=NULL, name='(deleted)' WHERE patient_id=?", (mid,))
     conn.execute("DELETE FROM prescriptions WHERE patient_id=? OR doctor_id=?", (mid, mid))
     for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
                                            "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
@@ -3222,6 +3226,118 @@ def m_phone_remove(conn, d, me):
     conn.execute("UPDATE reminders SET sms=0 WHERE member_id=?", (me["id"],))
 
 
+# ---------------------------------------------------------------- clinic queue tokens ("You are #7, now serving #4")
+QUEUE_NAME_MAX = 60
+
+
+def _queue_day(lst):
+    cfg = booking_cfg(lst) or {}
+    return datetime.datetime.now(_zone(cfg.get("tz") or lst["tz"] or "Asia/Kolkata")).date().isoformat()
+
+
+def queue_view(conn, lst, me=None):
+    day = _queue_day(lst)
+    items = [dict(r) for r in conn.execute("SELECT * FROM queue_items WHERE listing_id=? AND day=? ORDER BY token", (lst["id"], day))]
+    now = next((i for i in items if i["status"] == "called"), None)
+    waiting = [i for i in items if i["status"] == "waiting"]
+    mins = (booking_cfg(lst) or {}).get("slot") or 10
+    pub = {"listing_id": lst["id"], "name": lst["name"], "day": day, "now": now["token"] if now else None, "waiting": len(waiting), "mins": mins}
+    if me:
+        mine = []
+        for i in items:
+            if i["patient_id"] == me["id"]:
+                ahead = sum(1 for w in waiting if w["token"] < i["token"]) + (1 if now and i["status"] == "waiting" else 0)
+                mine.append({"id": i["id"], "token": i["token"], "status": i["status"], "ahead": ahead, "wait_min": ahead * mins, "name": i["name"]})
+        pub["mine"] = mine
+        if lst["owner"] == me["id"]:
+            pub["items"] = [{k: i[k] for k in ("id", "token", "name", "status", "booking_id")} for i in items]
+    return pub
+
+
+def _next_token(conn, lid, day):
+    return (conn.execute("SELECT MAX(token) FROM queue_items WHERE listing_id=? AND day=?", (lid, day)).fetchone()[0] or 0) + 1
+
+
+def m_queue_checkin(conn, d, me):
+    """A patient with an in-clinic visit today taps "I'm at the clinic" and gets a token."""
+    need_member(me)
+    b = conn.execute("SELECT b.*, l.owner FROM dbookings b JOIN listings l ON l.id=b.listing_id WHERE b.id=? AND b.patient_id=?",
+                     (int(d.get("booking_id") or 0), me["id"])).fetchone()
+    if not b or b["status"] != "booked" or b["pay_status"] == "pending":
+        raise InputError("No active visit found")
+    lst = conn.execute("SELECT * FROM listings WHERE id=?", (b["listing_id"],)).fetchone()
+    day = _queue_day(lst)
+    if b["date"] != day:
+        raise InputError("You can check in on the day of your visit")
+    if not conn.execute("SELECT 1 FROM queue_items WHERE booking_id=?", (b["id"],)).fetchone():
+        conn.execute("INSERT INTO queue_items(listing_id,day,token,name,patient_id,booking_id,status,ts) VALUES(?,?,?,?,?,?,?,?)",
+                     (lst["id"], day, _next_token(conn, lst["id"], day), b["for_name"], me["id"], b["id"], "waiting", now_ms()))
+        notify(conn, lst["owner"], "booking", f"🎫 {b['for_name']} is at the clinic", f"Visit at {b['time']}", "account")
+    return queue_view(conn, lst, me)
+
+
+def m_queue_state(conn, d, me):
+    lst = conn.execute("SELECT * FROM listings WHERE id=? AND hidden=0", (int(d.get("listing_id") or 0),)).fetchone()
+    if not lst:
+        raise InputError("Not found")
+    return queue_view(conn, lst, me)
+
+
+def _my_queue_listing(conn, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    return lst
+
+
+def m_queue_walkin(conn, d, me):
+    lst = _my_queue_listing(conn, me)
+    name = text(d, "name", QUEUE_NAME_MAX)
+    day = _queue_day(lst)
+    conn.execute("INSERT INTO queue_items(listing_id,day,token,name,status,ts) VALUES(?,?,?,?,?,?)",
+                 (lst["id"], day, _next_token(conn, lst["id"], day), name, "waiting", now_ms()))
+    return queue_view(conn, lst, me)
+
+
+def m_queue_next(conn, d, me):
+    """Finish the current patient and call the next one. Patients get a bell/phone alert when it's their turn or nearly."""
+    lst = _my_queue_listing(conn, me)
+    day = _queue_day(lst)
+    conn.execute("UPDATE queue_items SET status='done' WHERE listing_id=? AND day=? AND status='called'", (lst["id"], day))
+    waiting = conn.execute("SELECT * FROM queue_items WHERE listing_id=? AND day=? AND status='waiting' ORDER BY token", (lst["id"], day)).fetchall()
+    if waiting:
+        nxt = waiting[0]
+        conn.execute("UPDATE queue_items SET status='called', called_ts=? WHERE id=?", (now_ms(), nxt["id"]))
+        if nxt["patient_id"]:
+            notify(conn, nxt["patient_id"], "booking", f"🔔 Token #{nxt['token']}: it's your turn", f"Please go in to {lst['name']} now.", "account")
+        if len(waiting) > 2 and waiting[2]["patient_id"]:
+            notify(conn, waiting[2]["patient_id"], "booking", f"⏳ Token #{waiting[2]['token']}: 2 people ahead of you", f"Please stay close to {lst['name']}.", "account")
+    return queue_view(conn, lst, me)
+
+
+def m_queue_skip(conn, d, me):
+    lst = _my_queue_listing(conn, me)
+    st = "skipped" if d.get("skip", True) else "waiting"
+    conn.execute("UPDATE queue_items SET status=? WHERE id=? AND listing_id=?", (st, int(d.get("id") or 0), lst["id"]))
+    return queue_view(conn, lst, me)
+
+
+def queue_screen(conn, lid):
+    """A big "Now serving" page for a TV in the waiting room. Refreshes itself, no scripts."""
+    lst = conn.execute("SELECT * FROM listings WHERE id=? AND hidden=0", (lid,)).fetchone()
+    if not lst:
+        return None
+    q = queue_view(conn, lst)
+    e = html.escape
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="10"><title>Now serving · {e(lst['name'])}</title><meta name="robots" content="noindex">
+<style>body{{margin:0;background:#04201c;color:#ecfeff;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}}
+.k{{font-size:3vw;letter-spacing:.3em;color:#5eead4}}.n{{font-size:28vw;font-weight:900;line-height:1;color:#fff}}.s{{font-size:3vw;color:#99f6e4}}.f{{position:fixed;bottom:2vh;width:100%;font-size:1.6vw;color:#5eead4}}</style></head>
+<body><div><div class="k">NOW SERVING</div><div class="n">{('#' + str(q['now'])) if q['now'] else '–'}</div>
+<div class="s">{q['waiting']} waiting · {e(lst['name'])}</div></div><div class="f">Clinora · get your token on your phone: open your visit and tap “I'm at the clinic”</div></body></html>"""
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3235,7 +3351,9 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe,
                  "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete, "/api/m/rx/write": m_rx_write, "/api/m/rx/get": m_rx_get,
                  "/api/m/book/pay": m_book_pay, "/api/m/book/pay/demo": m_book_pay_demo, "/api/m/book/pay/verify": m_book_pay_verify,
-                 "/api/m/phone/start": m_phone_start, "/api/m/phone/confirm": m_phone_confirm, "/api/m/phone/remove": m_phone_remove}
+                 "/api/m/phone/start": m_phone_start, "/api/m/phone/confirm": m_phone_confirm, "/api/m/phone/remove": m_phone_remove,
+                 "/api/m/queue/checkin": m_queue_checkin, "/api/m/queue/state": m_queue_state, "/api/m/queue/walkin": m_queue_walkin,
+                 "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip}
 
 
 
@@ -4191,6 +4309,13 @@ class Handler(SimpleHTTPRequestHandler):
             if WA_ON and q.get("hub.mode", [""])[0] == "subscribe" and hmac.compare_digest(q.get("hub.verify_token", [""])[0], WA_VERIFY):
                 return self.send_text(200, q.get("hub.challenge", [""])[0][:200], "text/plain")
             return self.send_text(403, "forbidden", "text/plain")
+        m = re.fullmatch(r"/queue/(\d+)", path_only)
+        if m:
+            with connect() as conn:
+                page = queue_screen(conn, int(m.group(1)))
+            if not page:
+                return self.send_text(404, "Not found", "text/plain")
+            return self.send_text(200, page, "text/html; charset=utf-8")
         m = re.fullmatch(r"/rx/(\d+)", path_only)
         if m:
             with connect() as conn:
