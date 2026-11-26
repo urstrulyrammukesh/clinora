@@ -1,18 +1,87 @@
-# ✚ Clinora
+<p align="center"><img src="assets/readme/banner.jpg" alt="Clinora: book doctors, video visits, reminders, health records" width="100%"></p>
 
-[![Tests](https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml/badge.svg)](https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml)
+<h1 align="center">✚ Clinora</h1>
+<p align="center"><b>Find and book real doctors, video visits, prescriptions, reminders and encrypted health records, in 139 languages.</b></p>
 
-**AI receptionist for clinics, built for patients anywhere in the world.**
+<p align="center">
+  <a href="https://clinora-cwxu.onrender.com"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-online-14b8a6?style=for-the-badge"></a>
+  <a href="https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white">
+  <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-vanilla-f7df1e?logo=javascript&logoColor=black">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-33%20tables-003b57?logo=sqlite&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-33%20groups-16a34a">
+  <img alt="Security" src="https://img.shields.io/badge/security-CSP%20%C2%B7%20AES--256-8b5cf6">
+</p>
 
-Patients can chat with an AI receptionist (powered by Claude) to book in-clinic visits or video consultations, find doctors, hospitals, labs and medical colleges in any city, see who is open right now on a 3D map, pay in their own currency, and book a cab to the hospital. Clinics get a private dashboard with doctor logins.
+<p align="center">
+  🌐 <a href="https://clinora-cwxu.onrender.com"><b>Open the live demo</b></a> ·
+  📄 <a href="docs/Clinora-Company-Overview.pdf"><b>Company paper (PDF)</b></a> ·
+  🛠️ <a href="https://github.com/urstrulyrammukesh/clinora-tech-stack"><b>How it's built</b></a> ·
+  👤 <a href="https://www.linkedin.com/in/ram-mukesh-yadav-033336412/">Ram Mukesh Yadav</a>, B.Tech CSE, NIT Srinagar
+</p>
 
-📄 **[Read the Clinora Company Overview & Product Paper (PDF, 33 pages)](docs/Clinora-Company-Overview.pdf)**: what Clinora is, how it works, architecture, security, business plan and roadmap.
+> The live demo runs on a free server: it may take ~50 seconds to wake up, and test data resets on restart. The AI does not give medical advice; in an emergency call your local emergency number.
 
-🛠️ **[How Clinora is built](https://github.com/urstrulyrammukesh/clinora-tech-stack)**: 6 languages, 10,700+ lines of code, 125 API endpoints, 33 tables, every tool and service used.
+## 🧭 How it works
 
-👤 Founded and built by **[Ram Mukesh Yadav](https://www.linkedin.com/in/ram-mukesh-yadav-033336412/)**, B.Tech CSE, NIT Srinagar · [Portfolio](https://urstrulyrammukesh.github.io)
+```mermaid
+flowchart LR
+    A([👩 Patient]) -->|search city or specialty| B[🔍 Find doctor<br/>✓ verified · reviews · fees]
+    B --> C[📅 Book a free slot<br/>clinic or video]
+    C -->|optional| D[💳 Pay online<br/>Razorpay split]
+    C --> E[⏰ Reminders<br/>push · SMS · WhatsApp]
+    E --> F{Visit}
+    F -->|clinic| G[🎫 Queue token<br/>live tracking link]
+    F -->|video| H[📹 Join video visit]
+    G --> I[💊 Prescription]
+    H --> I
+    I --> J[⏰ Medicine reminders]
+    I --> K[⭐ Review]
+    I --> L[📁 Encrypted records]
+```
 
-> ⚠️ Demo project. The clinic, doctors and sample data are placeholders. The AI does not give medical advice. In an emergency, call your local emergency number.
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph Clients
+      W[🌐 Website]
+      APP[📱 Installed app<br/>own app-style interface]
+      WA[💬 WhatsApp]
+    end
+    subgraph Server["Python server · 128 API endpoints"]
+      SEC[🛡️ CSP nonce · rate limits · sessions · HMAC webhooks]
+      API[Booking · reminders · records · queue · AI]
+      JOBS[⏱️ Background jobs<br/>reminders · backups · payment holds]
+    end
+    DB[(🗄️ SQLite · 33 tables)]
+    FILES[(🔐 AES-256-GCM files)]
+    W & APP --> SEC --> API
+    WA -->|signed webhook| API
+    API --> DB & FILES
+    JOBS --> DB
+    API --> AI[🤖 Claude AI] & PAY[💳 Razorpay · Stripe · PayPal] & MSG[📨 Email · SMS · Push]
+```
+
+## 🔁 A booking, step by step
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Patient
+    participant C as Clinora
+    participant R as Razorpay
+    actor D as Doctor
+    P->>C: Pick a free slot
+    C-->>P: Slot held 15 min (if paying online)
+    P->>R: Pay with UPI / card
+    R-->>C: Signed payment confirmation
+    C->>D: 🔔 New booking (push + bell)
+    C->>P: ⏰ Reminders: 1 day and 1 hour before
+    P->>C: "I'm at the clinic" → token #7
+    D->>C: Call next / write prescription
+    C-->>P: 💊 Prescription + medicine reminders + ⭐ review request
+```
 
 ## Features
 - 💬 **AI chat panel** on every page (Claude): bookings, cancellations, fees, emergencies, worldwide directory search
@@ -34,14 +103,16 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 - 📚 **Bookworm**: free medical books (Open Library, Google Books, OpenStax, NCBI, WHO and more)
 
 ## New for doctors and patients
+- 📱 **Phone app interface**: the installed app opens with a splash screen, an app home and bottom tabs (the website stays a website)
 - 📅 **Book real doctors**: free slots, video or in-clinic, online payment (Razorpay Route split), automatic refunds
-- 📹 **Visit flow**: Join button for video visits, printable prescriptions, one-tap medicine reminders, review requests
-- 🎫 **Clinic queue tokens** with turn alerts and a waiting-room TV screen
-- 🏥 **Clinics with several doctors**, a **doctor dashboard** and **invite links**
+- 📹 **Visit flow**: Join button for video visits, printable prescriptions, one-tap medicine reminders, review requests, receipts
+- 🎫 **Clinic queue tokens** with turn alerts, a **live tracking link** (no login) and a waiting-room TV screen
+- 🗂 **Patient history for doctors** (visits, diagnoses, medicines, shared reports, private notes) and **busiest hours** charts
+- 🏥 **Clinics with several doctors**, a **doctor dashboard**, **invite links** and **5 page designs** for doctor pages
 - 📁 **Encrypted health records**, shared with one doctor for one visit
 - ⏰ **Reminders** by bell, phone push, email, SMS and WhatsApp; 📷 prescription photo → reminders; 💊 cheaper generic medicines
 - 💬 **Clinora on WhatsApp**, 🎤 **voice input**, 👨‍👩‍👧 **family members**
-- 🛡️ Verified doctors, confirmed emails, report & block, daily backups, strict CSP, automatic tests
+- ⚡ **Light mode on phones**, smaller images, gzip, strict CSP, 33 automated test groups
 
 ## Put it live
 Step-by-step: **[docs/go-live.md](docs/go-live.md)** (Render + your own domain, about 1–2 hours). Check readiness any time with `python server.py --check`.
