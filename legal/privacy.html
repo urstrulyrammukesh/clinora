@@ -30,6 +30,9 @@ a{color:#5cc8ff}h1{font-size:34px;margin:18px 0 4px}h2{font-size:21px;margin-top
 <table>
 <tr><th>What</th><th>Why</th><th>Where it is kept</th></tr>
 <tr><td>Account: name, email, city, password (stored only as a secure hash)</td><td>To create and secure your account</td><td>Our server</td></tr>
+<tr><td>If you log in with Google, Facebook or X: your name, email (if they share it) and their account id for you</td><td>To log you in without a password</td><td>Our server. We never see or store your Google, Facebook or X password.</td></tr>
+<tr><td>Notifications (new messages, calls, reviews, replies, security alerts)</td><td>To show the bell alerts</td><td>Our server. We keep your latest 100; they are deleted with your account.</td></tr>
+<tr><td>Videos: doctors' demo videos, and patients' video reviews (optional)</td><td>Shown on the doctor's public profile. A patient's video review appears only after the doctor approves it.</td><td>Our server (public once live). Don't upload other people's faces or private details without their written permission.</td></tr>
 <tr><td>Profile photo (optional)</td><td>Shown on your profile and in chats</td><td>Our server</td></tr>
 <tr><td>Doctor profiles: name, specialty, clinic address and map location, phone, website, social links, online hours, work photos</td><td>Shown publicly so patients can find and contact the doctor</td><td>Our server (public)</td></tr>
 <tr><td>Messages between patients and doctors</td><td>To deliver your messages</td><td>Our server</td></tr>
@@ -37,11 +40,11 @@ a{color:#5cc8ff}h1{font-size:34px;margin:18px 0 4px}h2{font-size:21px;margin-top
 <tr><td>Bookings: name, mobile number, doctor, date and time</td><td>To manage your appointment</td><td>Our server, visible to the clinic</td></tr>
 <tr><td>Payments: amount, status and the payment company's reference</td><td>To confirm and refund payments</td><td>Our server. Card, UPI and bank details are handled only by Razorpay, Stripe or PayPal.</td></tr>
 <tr><td>Messages you send to the AI assistant</td><td>To answer you</td><td>Sent to our AI provider to create the reply. We do not keep chat history on our server, except a short alert text if the chat looks like an emergency, so the clinic can help.</td></tr>
-<tr><td>Food photos (Food Scan)</td><td>To check the food for you</td><td>Sent to our AI provider for the check, then discarded. We do not store them.</td></tr>
+<tr><td>Food photos and food videos (Food Scan)</td><td>To check the food for you</td><td>For videos, a few still frames are taken on your device and only those are sent. Photos and frames go to our AI provider for the check, then are discarded. We do not store them.</td></tr>
 <tr><td>Food Scan health profile (allergies, conditions, diet)</td><td>To personalise food checks</td><td>Only on your own device</td></tr>
 <tr><td>Location (only if you allow it)</td><td>To show nearby doctors, the map and your movement on the map</td><td>Used in your browser or app. Search areas are sent to OpenStreetMap services. We do not store your location.</td></tr>
 <tr><td>Video calls</td><td>To connect you with a doctor</td><td>Video and audio go directly between the two devices. Only short connection messages pass through our server and are deleted within 24 hours.</td></tr>
-<tr><td>Settings (language, colours, motion)</td><td>To remember your choices</td><td>Only on your own device</td></tr>
+<tr><td>Settings (language, colours, motion, light or dark mode, chat wallpaper)</td><td>To remember your choices</td><td>Only on your own device</td></tr>
 </table>
 
 <h2>3. Services we share data with</h2>
@@ -52,6 +55,7 @@ a{color:#5cc8ff}h1{font-size:34px;margin:18px 0 4px}h2{font-size:21px;margin-top
 <li><b>OpenStreetMap, Nominatim, Overpass, OpenFreeMap</b> (maps, addresses, nearby places)</li>
 <li><b>Google STUN servers</b> (to help connect video calls)</li>
 <li><b>Open Library and Google Books</b> (free book search: only your search words)</li>
+<li><b>Google, Facebook (Meta) and X</b> (only if you choose to log in with them)</li>
 <li>Our hosting provider (stores the server and database)</li>
 </ul>
 <p>We do not sell or rent your personal data, and we do not use it for advertising.</p>

@@ -883,8 +883,66 @@ html{overflow-x:clip}
 #tourCard.center{animation:none}
 @media (prefers-reduced-motion: reduce){#tourSpot,#tourCard{transition:none}}
 
+
+/* ================= NOTIFICATION BELL ================= */
+.bell-wrap{position:relative;flex-shrink:0}
+.bell-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;color:var(--text);cursor:pointer;position:relative;transition:border-color .2s}
+.bell-btn:hover{border-color:var(--teal)}.bell-btn svg{width:17px;height:17px}
+.bell-btn i{position:absolute;top:-4px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font:700 10px/17px var(--sys);font-style:normal;text-align:center;display:none;box-shadow:0 0 0 2px var(--bg)}
+.bell-btn i.on{display:block}
+.bell-btn.ring svg{animation:bellShake .9s ease}
+@keyframes bellShake{10%,50%{transform:rotate(16deg)}30%,70%{transform:rotate(-16deg)}90%{transform:rotate(6deg)}0%,100%{transform:none}}
+.bell-panel{position:absolute;right:0;top:44px;width:min(360px,92vw);max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.35);display:none;z-index:80}
+.bell-panel.on{display:block;animation:pop .2s ease}
+.bell-panel .bh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+.bell-panel .bh b{font-size:15px}.bell-panel .bh button{font-size:12.5px;color:var(--teal);background:none;border:0;cursor:pointer}
+.bell-item{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;position:relative}
+.bell-item:hover{background:var(--panel2)}.bell-item .ic{font-size:20px;width:34px;height:34px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;flex-shrink:0}
+.bell-item b{display:block;font-size:13.5px}.bell-item p{font-size:12.5px;color:var(--mute);margin-top:2px}.bell-item small{font-size:11px;color:var(--mute)}
+.bell-item.new:after{content:'';position:absolute;right:14px;top:18px;width:8px;height:8px;border-radius:50%;background:var(--teal)}
+.bell-empty{padding:26px 18px;text-align:center;color:var(--mute);font-size:13.5px}
+@media(max-width:1000px){.bell-panel{position:fixed;right:10px;left:10px;width:auto;top:64px}}
+
+/* ================= CHAT WALLPAPERS ================= */
+.wall-btn{margin-left:auto}
+#chat,#convM{transition:background .4s}
+.wall-panel{position:absolute;right:12px;top:66px;z-index:6;width:min(330px,calc(100% - 24px));background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 20px 50px rgba(0,0,0,.35);display:none}
+.wall-panel.on{display:block;animation:pop .2s ease}
+.wall-panel h4{font-size:12px;letter-spacing:.6px;color:var(--mute);margin-bottom:10px}
+.wall-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.wall-grid button{height:64px;border-radius:12px;border:2px solid transparent;cursor:pointer;position:relative;overflow:hidden;background-size:cover}
+.wall-grid button span{position:absolute;left:0;right:0;bottom:0;font-size:10.5px;font-weight:700;padding:3px 4px;background:rgba(0,0,0,.55);color:#fff;text-align:center}
+.wall-grid button.on{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal)}
+
+/* ================= SOCIAL LOGIN ================= */
+.soc-or{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:12px;margin:16px 0 10px}.soc-or:before,.soc-or:after{content:'';flex:1;height:1px;background:var(--line)}
+.soc-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.soc{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;text-decoration:none}
+.soc:hover{border-color:var(--teal)}.soc .lg{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font:800 12px/1 var(--sys);color:#fff;flex-shrink:0}
+.soc.g .lg{background:conic-gradient(#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0)}.soc.f .lg{background:#1877f2}.soc.x .lg{background:#000;border:1px solid #444}.soc.e .lg{background:var(--teal)}
+.soc.soon{opacity:.6}.soc small{font-size:10px;color:var(--mute);font-weight:500}
+.g-real{grid-column:1/-1;display:flex;justify-content:center;min-height:44px}
+.soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
+.pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
+.pw-card form{padding:0 20px 20px}
+
+/* ================= VIDEOS ================= */
+.rv-videos,.vid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0 16px}
+.rv-videos figure,.vid-grid figure{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden;position:relative}
+.rv-videos video,.vid-grid video{width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;display:block}
+.rv-videos figcaption,.vid-grid figcaption{font-size:12px;padding:8px 10px;color:var(--mute)}
+.vid-pend{display:inline-block;font-size:10.5px;font-weight:700;color:var(--amber);border:1px solid var(--amber);border-radius:99px;padding:1px 7px;margin-left:4px}
+.vid-acts{display:flex;gap:6px;padding:0 10px 10px;flex-wrap:wrap}
+.vid-up{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+
+/* ================= FOOD SCAN: VIDEO ================= */
+.fs-frames{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,1fr);gap:3px;background:#000}
+.fs-frames img{width:100%;height:100%;object-fit:cover}
+.fs-adv{display:inline-flex;align-items:center;gap:6px}
+.fs-adv b{font-size:9.5px;letter-spacing:.5px;padding:2px 6px;border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--accent2));color:#021512}
+
 /* ================= LIGHT / DARK THEME (sun & moon button) ================= */
-.theme-btn{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:18px;line-height:1;cursor:pointer;color:var(--text);transition:border-color .2s,transform .5s cubic-bezier(.3,1.6,.5,1),background .3s}
+.theme-btn{flex-shrink:0;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:14px;line-height:1;cursor:pointer;color:var(--text);transition:border-color .2s,transform .5s cubic-bezier(.3,1.6,.5,1),background .3s}
 .theme-btn:hover{border-color:var(--teal)}
 .theme-btn.spin{transform:rotate(360deg) scale(1.08)}
 html.theme-anim,html.theme-anim *,html.theme-anim *:before,html.theme-anim *:after{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease!important}
@@ -934,6 +992,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
       <h4>TEXT SIZE</h4><div class="fx-seg" id="fxSize"><button data-s=".9">A−</button><button data-s="1">A</button><button data-s="1.1">A+</button><button data-s="1.2">A++</button></div>
       <div style="margin-top:14px;text-align:right"><button class="btn ghost sm" id="fxReset">↺ Reset</button></div>
     </div></div>
+  <div class="bell-wrap notranslate"><button class="bell-btn" id="bellBtn" type="button" aria-label="Notifications" title="Notifications" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><i id="bellDot"></i></button><div class="bell-panel" id="bellPanel" role="dialog" aria-label="Notifications"></div></div>
   <button class="theme-btn notranslate" id="themeBtn" type="button" aria-label="Switch to light mode" title="Light / dark mode">🌙</button>
   <button class="acct-btn" id="acctBtn" data-go="account" aria-label="Your account" title="Your account">👤<i id="acctDot"></i></button>
   <div class="lang notranslate"><button id="langBtn" aria-label="Change language">🌐 EN</button>
@@ -1159,6 +1218,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
           <button class="btn primary sm" id="fsCam" type="button">📷 Open camera</button>
           <button class="btn primary sm" id="fsSnap" type="button" hidden>📸 Take photo</button>
           <label class="btn ghost sm" style="cursor:pointer">🖼️ Upload photo<input type="file" id="fsFile" accept="image/*" capture="environment" hidden></label>
+          <label class="btn ghost sm fs-adv" style="cursor:pointer" title="Advanced: record or pick a short video and the AI checks it from every side">🎬 Scan a video <b>ADVANCED</b><input type="file" id="fsVid" accept="video/*" hidden></label>
           <button class="btn ghost sm" id="fsRetake" type="button" hidden>↺ Retake</button>
         </div>
         <input class="fs-note" id="fsNote" maxlength="300" placeholder="Anything to add? e.g. 'left out overnight', 'from a street stall', 'for my 2-year-old'">
@@ -1264,7 +1324,8 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
 <button class="fab" id="chatFab" aria-label="Open AI chat"><span class="fdot"></span>💬 Ask AI</button>
 <aside class="drawer" id="drawer" aria-label="AI receptionist chat">
   <div class="chat-head"><div class="av">C</div><div style="min-width:0"><b>Clinora Medical Center</b><span id="aiBadge">AI Receptionist · connecting…</span></div>
-    <button class="dclose" id="chatClose" aria-label="Close chat">✕</button></div>
+    <button class="dclose wall-btn" id="wallBtn" type="button" aria-label="Chat wallpaper" title="Chat wallpaper">🎨</button><button class="dclose" id="chatClose" aria-label="Close chat">✕</button></div>
+  <div class="wall-panel" id="wallPanel"><h4>CHAT WALLPAPER · MEDICAL THEMES</h4><div class="wall-grid" id="wallGrid"></div></div>
   <div class="chan" id="chan"><span>CHANNEL</span><button class="on" data-src="WhatsApp">WhatsApp</button><button data-src="Website">Website</button><button data-src="Call">Call</button></div>
   <div id="chat"></div>
   <div class="typing" id="typing"><i></i><i></i><i></i></div>
@@ -1436,6 +1497,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);window.scrollTo(0,0);openCall(v.slice(5));return}
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
+  if(/^account\/login-/.test(String(v))){pendingNotice=v.endsWith('soon')?'That sign-in option is coming soon. Please use email for now.':'Sign-in didn\'t finish. Please try again, or use email.';v='account'}
   if(!['home','nearby','dashboard','directory','books','account','food'].includes(v)) v='home';
   $$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));
   $$('.tab').forEach(e=>e.classList.toggle('active',e.dataset.go===v));
@@ -1488,7 +1550,7 @@ function setAIBadge(){const b=$('#aiBadge');
   if(AI.on){b.textContent='AI Receptionist · powered by Claude · online';b.classList.remove('off');$('#aiNote').innerHTML='AI can make mistakes. It does not give medical advice. In an emergency call your local emergency number.'}
   else{b.textContent='Quick replies · AI assistant resting';b.classList.add('off');$('#aiNote').innerHTML='Quick-reply mode: you can still book, cancel, ask about fees and get emergency numbers. It does not give medical advice. In an emergency call your local emergency number.';
     if(AI.reason)console.info('[Clinora] AI is off:',AI.reason)}}
-fetch('/api/status').then(r=>r.json()).then(j=>{AI.on=!!j.ai;AI.reason=j.reason||''}).catch(()=>{AI.on=false;AI.reason='The AI server is not running (start it with start.command).'}).finally(setAIBadge);
+fetch('/api/status').then(r=>r.json()).then(j=>{AI.on=!!j.ai;AI.reason=j.reason||'';window.OAUTH=j.oauth||{};if(($('.view.active')||{}).id==='v-account'&&!MEM.me)renderAccount()}).catch(()=>{AI.on=false;AI.reason='The AI server is not running (start it with start.command).'}).finally(setAIBadge);
 function md(t){let h=esc(t).replace(/(https?:\/\/[^\s<]+#pay\/[A-Za-z0-9._-]+)/g,'<a class="teal" href="$1">💳 Pay now</a>').replace(/(https?:\/\/[^\s<]+#call\/[A-Za-z0-9._-]+)/g,'<a class="teal" href="$1">📹 Join video call</a>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^#{1,4}\s*(.+)$/gm,'<b>$1</b>').replace(/^\s*[-*]\s+/gm,'• ');return h}
 function aiContext(){const d=new Date();return [`Today: ${ymd(d)} (${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]})`,
   `Patient's local time now: ${pad(d.getHours())}:${pad(d.getMinutes())} ${TZA} (${myTZ})`,`Patient's country: ${countryName()} (${COUNTRY})`,
@@ -2676,7 +2738,8 @@ let MEM={me:null,favs:[],threads:[],listing:null},openThread=null,acctMode='sign
 async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
   if(!r)throw new Error('Could not reach the server. Is it running?');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
   if(!r.ok||j.error)throw new Error(j.error||'Server error');
-  if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();return j}
+  if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();
+  if('notif_unread' in j&&window.setBell)setBell(j.notif_unread);if('me' in j&&window.bellRefresh)bellRefresh();return j}
 function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
   let im=b.querySelector('img');if(me&&me.photo_ts){if(!im){im=document.createElement('img');b.appendChild(im)}const src=`/api/m/avatar/${me.id}?v=${me.photo_ts}`;if(im.getAttribute('src')!==src)im.src=src}else if(im)im.remove();
   const n=(MEM.threads||[]).reduce((s,t)=>s+t.unread,0);const d=$('#acctDot');d.textContent=n;d.classList.toggle('on',n>0);if(window.syncMenu)syncMenu()}
@@ -2684,6 +2747,21 @@ async function toggleFollow(id){if(!MEM.me){go('account');acctNotice('Log in or 
   try{await mapi('fav',{listing_id:id,on:!MEM.favs.includes(id)});if(dirInit)renderDir();if(nearInit)renderPlaces()}catch(e){alert(e.message)}}
 function messageListing(id){const l=regs().find(x=>x.id===id);if(!MEM.me){go('account');acctNotice('Log in or create a free account to message doctors.');return}
   if(!l||!l.owner)return;go('account');openConv(l.owner,id)}
+function socialBlock(where){const O=window.OAUTH||{};
+  const b=(cls,lg,name,on,href)=>on?`<a class="soc ${cls}" href="${href}"><span class="lg">${lg}</span>${name}</a>`:`<button type="button" class="soc ${cls} soon" data-soon="${name}"><span class="lg">${lg}</span><span>${name}<br><small>coming soon</small></span></button>`;
+  return `<div class="soc-or"><span>${where==='sg'?'or sign up with':'or log in with'}</span></div><div class="soc-btns">
+    ${O.google?`<div class="g-real" id="gBtn_${where}"></div>`:b('g','G','Google',false)}
+    ${b('f','f','Facebook',O.facebook,`/api/m/oauth/facebook/start?kind=${signKind}`)}${b('x','𝕏','X (Twitter)',O.x,`/api/m/oauth/x/start?kind=${signKind}`)}
+    <button type="button" class="soc e" data-email="${where}"><span class="lg">@</span>Email</button></div>
+    <p class="soc-note">${where==='sg'?`Google, Facebook and X sign up as a <b>${signKind}</b>. `:''}By continuing you agree to Clinora's <a class="teal" href="/terms">terms</a> and <a class="teal" href="/privacy">privacy policy</a>.</p>`}
+function wireSocial(){const O=window.OAUTH||{};
+  $$('#acctBox [data-soon]').forEach(x=>x.onclick=()=>{const m=x.closest('form').querySelector('[id$="Msg"]');if(m)m.innerHTML=`<span style="color:var(--amber)">${esc(x.dataset.soon)} login is coming soon. Please use email for now.</span>`});
+  $$('#acctBox [data-email]').forEach(x=>x.onclick=()=>{const i=$(x.dataset.email==='sg'?'#sgEmail':'#liEmail');i&&i.focus()});
+  if(!O.google)return;
+  const draw=()=>{if(!(window.google&&google.accounts&&google.accounts.id))return;
+    google.accounts.id.initialize({client_id:O.google_client_id,callback:async r=>{try{await mapi('oauth/google',{credential:r.credential,kind:signKind});pendingNotice='';renderAccount()}catch(e){acctNotice(e.message)}}});
+    ['sg','li'].forEach(w=>{const el=$('#gBtn_'+w);if(el)google.accounts.id.renderButton(el,{theme:document.documentElement.getAttribute('data-theme')==='light'?'outline':'filled_black',size:'large',shape:'pill',text:w==='sg'?'signup_with':'continue_with',width:260})})};
+  if(window.google&&google.accounts)draw();else if(!$('#gsiJs')){const s=document.createElement('script');s.id='gsiJs';s.src='https://accounts.google.com/gsi/client';s.async=true;s.onload=draw;document.head.appendChild(s)}}
 let pendingNotice='';function acctNotice(t){pendingNotice=t;renderAccount()}
 function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
   if(!me){box.innerHTML=`${pendingNotice?`<div class="card" style="padding:14px 18px;margin-bottom:14px;border-color:var(--teal)">${esc(pendingNotice)}</div>`:''}
@@ -2694,10 +2772,10 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       <label>PASSWORD (AT LEAST 10 CHARACTERS)</label><input id="sgPw" type="password" required minlength="10" autocomplete="new-password">
       <label>CITY</label><input id="sgCity" placeholder="e.g. Delhi" value="${esc(window.__myCity||'')}">
       <label class="chk"><input type="checkbox" id="sgAgree" required> I agree to the terms and to keep my messages respectful. Clinora is not for emergencies.</label>
-      <button class="btn primary" type="submit">Create account</button><div id="sgMsg"></div></form>
+      <button class="btn primary" type="submit">Create account</button><div id="sgMsg"></div>${socialBlock('sg')}</form>
     <form class="card form" id="liForm"><h3>Log in</h3><p style="margin-bottom:12px">Welcome back.</p>
       <label>EMAIL</label><input id="liEmail" type="email" required autocomplete="username"><label>PASSWORD</label><input id="liPw" type="password" required autocomplete="current-password">
-      <button class="btn primary" type="submit">Log in</button><div id="liMsg"></div>
+      <button class="btn primary" type="submit">Log in</button><div id="liMsg"></div>${socialBlock('li')}
       <p style="font-size:12.5px;margin-top:14px;color:var(--mute)">Clinic staff use the <a class="teal" href="#dashboard" data-go="dashboard">Clinic Dashboard</a> login instead.</p></form></div>`;
     $$('#sgForm .seg2 button').forEach(b=>b.onclick=()=>{signKind=b.dataset.k;renderAccount()});
     $('#sgForm').onsubmit=async e=>{e.preventDefault();$('#sgMsg').textContent='Creating your account…';
@@ -2705,7 +2783,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       catch(err){$('#sgMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
     $('#liForm').onsubmit=async e=>{e.preventDefault();$('#liMsg').textContent='Logging in…';
       try{await mapi('login',{email:$('#liEmail').value.trim(),password:$('#liPw').value});pendingNotice='';renderAccount()}catch(err){$('#liMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
-    return}
+    wireSocial();return}
   const doc=me.kind==='doctor',L=MEM.listing,soc=(L&&L.social)||{};
   const favs=(MEM.favs||[]).map(id=>regs().find(x=>x.id===id)).filter(Boolean).map(regToPlace);
   box.innerHTML=`<div class="acct-head"><button class="lc-av ph-edit" id="phBtn" style="--avh:${hash(me.name)%360}" title="Change profile photo" aria-label="Change profile photo">${esc(initials(me.name))}${avImg(me.id,me.photo_ts)}<span class="cam">${ico('cam',13)}</span></button>
@@ -2713,6 +2791,12 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       <div><h3>${esc(me.name)}</h3><div style="color:var(--mute);font-size:14px">${doc?'Doctor account':'Patient account'} · ${esc(me.email)}</div>
         <div class="ph-menu"><button type="button" id="phChange">${me.photo_ts?'Change photo':'Add profile photo'}</button>${me.photo_ts?'<button type="button" id="phRemove">Remove photo</button>':''}</div><div id="phMsg" style="font-size:13px;margin-top:6px"></div></div>
       <button class="btn ghost sm" id="loBtn" style="margin-left:auto">Log out</button></div>
+    <details class="card pw-card" id="pwCard"><summary>🔒 ${me.has_password?'Change password':'Set a password'} <span style="font-weight:400;color:var(--mute);font-size:13px">${me.has_password?'· any time':'· so you can also log in with email'}</span></summary>
+      <form class="form" id="pwForm">${me.has_password?'<label>CURRENT PASSWORD</label><input id="pwCur" type="password" required autocomplete="current-password">':''}
+        <label>NEW PASSWORD (AT LEAST 10 CHARACTERS)</label><input id="pwNew" type="password" required minlength="10" autocomplete="new-password">
+        <label>REPEAT NEW PASSWORD</label><input id="pwNew2" type="password" required minlength="10" autocomplete="new-password">
+        <button class="btn primary sm" type="submit">${me.has_password?'Update password':'Set password'}</button><div id="pwMsg" style="font-size:13px;margin-top:8px"></div>
+        <p style="font-size:12px;color:var(--mute);margin-top:8px">For your safety, this logs you out on your other phones and computers.</p></form></details>
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
     ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
       <form class="card form" id="dpForm" style="padding:22px;margin-bottom:18px"><h3>${L?'Your public profile':'Create your public profile'}</h3><p style="margin-bottom:10px">Shown in the World Directory and on the Nearby map. ${L&&L.followers?`${L.followers} people follow you.`:''}</p>
@@ -2737,6 +2821,9 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
   const openPick=()=>$('#phFile').click();$('#phBtn').onclick=openPick;$('#phChange').onclick=openPick;
   $('#phFile').onchange=e=>pickPhoto(e.target.files[0]);
   if($('#phRemove'))$('#phRemove').onclick=async()=>{if(!confirm('Remove your profile photo?'))return;try{await mapi('photo',{remove:true});renderAccount()}catch(e){alert(e.message)}};
+  $('#pwForm').onsubmit=async e=>{e.preventDefault();const m=$('#pwMsg');if($('#pwNew').value!==$('#pwNew2').value){m.innerHTML='<span class="red">The two new passwords don’t match.</span>';return}
+    m.textContent='Saving…';try{await mapi('password',{current:($('#pwCur')||{}).value||'',new:$('#pwNew').value});renderAccount();$('#pwCard').open=true;$('#pwMsg').innerHTML='<span class="teal">✅ Password updated. You stay logged in here.</span>'}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   $('#loBtn').onclick=async()=>{await mapi('logout').catch(()=>{});MEM={me:null,favs:[],threads:[],listing:null};openThread=null;updateAcctBtn();renderAccount()};
   $$('#thrList [data-thr]').forEach(t=>t.onclick=()=>openConv(+t.dataset.thr));
   if(doc){$('#onSw').onclick=async()=>{if(!MEM.listing){$('#dpMsg').innerHTML='<span class="red">Save your profile first.</span>';return}try{await mapi('status',{online:!me.online});renderAccount()}catch(e){alert(e.message)}};
@@ -2753,11 +2840,11 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
     <div id="delStep"><button class="btn ghost sm" type="button" id="delStart" style="border-color:rgba(255,61,85,.5);color:#ff6b7d">Delete my account…</button></div>`;
   box.appendChild(dz);
-  $('#delStart').onclick=()=>{$('#delStep').innerHTML=`<form id="delForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="fs-note" id="delPw" type="password" autocomplete="current-password" required placeholder="Type your password to confirm" style="margin:0;flex:1;min-width:220px">
+  $('#delStart').onclick=()=>{$('#delStep').innerHTML=`<form id="delForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="fs-note" id="delPw" type="${me.has_password?'password':'text'}" autocomplete="${me.has_password?'current-password':'off'}" required placeholder="${me.has_password?'Type your password to confirm':'Type DELETE to confirm'}" style="margin:0;flex:1;min-width:220px">
       <button class="btn sm" type="submit" style="background:#e5394f;color:#fff">Delete forever</button><button class="btn ghost sm" type="button" id="delCancel">Cancel</button></form><div id="delMsg" style="font-size:13px;margin-top:8px"></div>`;
     $('#delCancel').onclick=()=>renderAccount();
     $('#delForm').onsubmit=async e=>{e.preventDefault();if(!confirm('Delete your Clinora account and all its data permanently?'))return;
-      try{const r=await fetch('/api/m/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('#delPw').value})});const j=await r.json();
+      try{const r=await fetch('/api/m/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(me.has_password?{password:$('#delPw').value}:{confirm:$('#delPw').value})});const j=await r.json();
         if(!r.ok||j.error)throw new Error(j.error||'Could not delete the account');
         MEM={me:null,favs:[],threads:[],listing:null};openThread=null;updateAcctBtn();loadDB();renderAccount();acctNotice('Your account and its data were deleted. Take care! 💙')}
       catch(err){$('#delMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}};
@@ -2767,7 +2854,7 @@ async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').
   try{th=(await mapi('thread',{with:withId})).result}catch(e){if(listingId){th={with:{id:withId,name:(regs().find(x=>x.id===listingId)||{}).name||'Doctor',kind:'doctor',online:null},messages:[]}}else{c.innerHTML='<div class="empty-note">'+esc(e.message)+'</div>';return}}
   const w=th.with;c.innerHTML=`<div class="conv-h" style="flex-wrap:wrap"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}<button class="vc" type="button" data-vcallm="${w.id}">${ico('video',15)}Video call</button></div>
     <div class="conv-m" id="convM">${th.messages.length?th.messages.map(m=>`<div class="bub ${m.from_id===MEM.me.id?'me':''}">${esc(m.body)}<small>${new Date(m.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></div>`).join(''):'<div class="empty-note">Say hello 👋 Don’t share emergencies here: call your local emergency number.</div>'}</div>
-    <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;
+    <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;if(window.applyWall)applyWall();
   const M=$('#convM');M.scrollTop=M.scrollHeight;
   $('#convF').onsubmit=async e=>{e.preventDefault();const t=$('#convIn').value.trim();if(!t)return;$('#convIn').value='';
     try{await mapi('send',listingId&&!th.messages.length?{listing_id:listingId,body:t}:{to:withId,body:t});listingId=null;openConv(withId)}catch(err){alert(err.message)}};
@@ -2812,10 +2899,25 @@ function initFood(){if(fsInit)return;fsInit=true;
   $$('#v-food [data-fp]').forEach(box=>{const k=box.dataset.fp;FP[k]=FP[k]||[];
     box.innerHTML=FP_OPTS[k].map(o=>`<button type="button" class="${FP[k].includes(o)?'on':''}">${o}</button>`).join('');
     box.onclick=e=>{const b=e.target.closest('button');if(!b)return;const o=b.textContent;FP[k]=FP[k].includes(o)?FP[k].filter(x=>x!==o):[...FP[k],o];b.classList.toggle('on');try{localStorage.setItem('sd_foodprof',JSON.stringify(FP))}catch{}}});
-  $('#fsCam').onclick=fsOpenCam;$('#fsSnap').onclick=fsSnap;$('#fsRetake').onclick=()=>{fsImg=null;fsShow(null);$('#fsGo').disabled=true;$('#fsRes').innerHTML='';fsOpenCam()};
+  $('#fsCam').onclick=fsOpenCam;$('#fsSnap').onclick=fsSnap;$('#fsRetake').onclick=()=>{fsImg=null;fsFrames=null;fsShow(null);$('#fsGo').disabled=true;$('#fsRes').innerHTML='';fsOpenCam()};
   $('#fsFile').onchange=e=>{const f=e.target.files[0];if(f)fsLoadFile(f);e.target.value=''};
+  $('#fsVid').onchange=e=>{const f=e.target.files[0];if(f)fsLoadVideo(f);e.target.value=''};
   $('#fsGo').onclick=fsCheck;}
-function fsShow(src){const v=$('#fsView');v.querySelectorAll('video,img').forEach(x=>x.remove());$('#fsPh').hidden=!!src;
+let fsFrames=null;
+function fsShowFrames(frames){const v=$('#fsView');v.querySelectorAll('video,img,.fs-frames').forEach(x=>x.remove());$('#fsPh').hidden=true;
+  const g=document.createElement('div');g.className='fs-frames';g.innerHTML=frames.map((f,i)=>`<img src="${f}" alt="Frame ${i+1} from your video">`).join('');v.prepend(g);$('#fsRetake').hidden=false}
+async function fsLoadVideo(file){fsStopCam();fsImg=null;fsFrames=null;$('#fsRes').innerHTML='';$('#fsMsg').textContent='🎬 Reading your video…';
+  if(file.size>200_000_000){$('#fsMsg').textContent='That video is very large. Please record a short clip (under 1 minute).';return}
+  const u=URL.createObjectURL(file),v=document.createElement('video');v.muted=true;v.playsInline=true;v.preload='auto';v.src=u;
+  try{await new Promise((ok,bad)=>{v.onloadeddata=ok;v.onerror=()=>bad(new Error('This video format can’t be read in this browser. Try an MP4 video.'));setTimeout(()=>bad(new Error('The video took too long to open.')),15000)});
+    const dur=Math.min(isFinite(v.duration)?v.duration:0,120);const N=dur>4?6:dur>1.5?4:1;const frames=[];
+    for(let i=0;i<N;i++){const at=N===1?0:dur*(i+.5)/N;if(N>1){await new Promise(ok=>{v.onseeked=ok;v.currentTime=at;setTimeout(ok,2500)})}
+      const M=768,k=Math.min(1,M/Math.max(v.videoWidth,v.videoHeight));const c=document.createElement('canvas');c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);
+      c.getContext('2d').drawImage(v,0,0,c.width,c.height);frames.push(c.toDataURL('image/jpeg',.72))}
+    URL.revokeObjectURL(u);if(!frames.length||!v.videoWidth)throw new Error('Could not read frames from this video.');
+    fsFrames=frames;fsShowFrames(frames);$('#fsMsg').textContent=`🎬 ${frames.length} frames taken from your video.`;$('#fsGo').disabled=false;fsCheck()}
+  catch(e){URL.revokeObjectURL(u);$('#fsMsg').innerHTML='<span class="red">⚠️ '+esc(e.message)+'</span>'}}
+function fsShow(src){const v=$('#fsView');v.querySelectorAll('video,img,.fs-frames').forEach(x=>x.remove());$('#fsPh').hidden=!!src;if(src)fsFrames=null;
   if(src){const i=document.createElement('img');i.src=src;i.alt='Your food photo';v.prepend(i)}$('#fsRetake').hidden=!src}
 async function fsOpenCam(){fsStopCam();$('#fsMsg').textContent='';
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('#fsMsg').textContent='This browser can’t open the camera here. Use "Upload photo" instead.';return}
@@ -2830,8 +2932,8 @@ function fsSnap(){const v=$('#fsView video');if(!v||!v.videoWidth)return;fsImg=f
 function fsLoadFile(f){fsStopCam();const u=URL.createObjectURL(f);const i=new Image();i.onload=()=>{fsImg=fsToJpeg(i,i.naturalWidth,i.naturalHeight);URL.revokeObjectURL(u);fsShow(fsImg);$('#fsGo').disabled=false;fsCheck()};
   i.onerror=()=>{$('#fsMsg').textContent='That file is not a photo we can read. Try a JPG or PNG.'};i.src=u}
 const VERD={safe:['✅','Good to eat','#2ee07a'],moderation:['🟡','OK in moderation','#ffb547'],caution:['⚠️','Be careful','#ff8c3c'],avoid:['⛔','Better not eat this','#ff3d55'],unclear:['❔','Can’t tell from this photo','#8693a0']};
-async function fsCheck(){if(!fsImg)return;const tok=++fsTok;$('#fsGo').disabled=true;$('#fsView').classList.add('busy');$('#fsMsg').textContent='🔍 Checking your food… this takes a few seconds.';$('#fsRes').innerHTML='';
-  try{const r=await fetch('/api/foodscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:fsImg,note:$('#fsNote').value.trim(),profile:FP,country:countryName(),lang:(LANG_LIST[LANG]||[0,'English'])[1]})});
+async function fsCheck(){if(!fsImg&&!fsFrames)return;const tok=++fsTok;$('#fsGo').disabled=true;$('#fsView').classList.add('busy');$('#fsMsg').textContent=fsFrames?'🔍 Checking every side of your food in the video… this takes a few seconds.':'🔍 Checking your food… this takes a few seconds.';$('#fsRes').innerHTML='';
+  try{const r=await fetch('/api/foodscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...(fsFrames?{frames:fsFrames}:{image:fsImg}),note:$('#fsNote').value.trim(),profile:FP,country:countryName(),lang:(LANG_LIST[LANG]||[0,'English'])[1]})});
     const j=await r.json();if(tok!==fsTok)return;if(!r.ok||j.error)throw new Error(j.error||'The check failed');$('#fsMsg').textContent='';fsRender(j)}
   catch(e){if(tok===fsTok)$('#fsMsg').innerHTML='<span class="red">⚠️ '+esc(e.message)+'</span>'}
   finally{if(tok===fsTok){$('#fsGo').disabled=false;$('#fsView').classList.remove('busy')}}}
@@ -2942,6 +3044,7 @@ function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{n
     <div class="rv-head"><div><div class="rv-avg">${R2.avg??'–'}</div><div class="stars">${starTxt(Math.round(R2.avg||0))}</div><div style="font-size:12.5px;color:var(--mute)">${R2.count} review${R2.count===1?'':'s'}</div></div>
       <div class="rv-dist">${[5,4,3,2,1].map(n=>`<div>${n}★<i><b style="width:${R2.dist[n]/max*100}%"></b></i>${R2.dist[n]}</div>`).join('')}</div></div>
     ${R2.photos.length?`<div class="nd-h" style="margin-left:0">PHOTOS OF THEIR WORK</div><div class="rv-photos">${R2.photos.map(g=>`<figure data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><img loading="lazy" src="/api/m/gallery/${g.id}" alt="${esc(g.caption||'Work photo')}"><figcaption>${esc(g.caption||'')}</figcaption></figure>`).join('')}</div>`:''}
+${vidSection(R2,me)}
     ${R2.is_owner?'<p style="color:var(--mute);font-size:13.5px;margin-bottom:12px">This is your profile. You can reply to each review below.</p>':me?`<form class="rv-form" id="rvForm"><b>${mine?'Your review':'Write a review'}</b>
         <div class="rv-pick" id="rvPick">${[1,2,3,4,5].map(n=>`<button type="button" data-s="${n}" class="${n<=revDraft.stars?'on':''}" aria-label="${n} star${n>1?'s':''}">★</button>`).join('')}</div>
         <textarea id="rvText" maxlength="1000" placeholder="How was your visit? Was the doctor kind, on time, helpful? Good or bad, honest feedback helps others.">${esc(revDraft.body||'')}</textarea>
@@ -2967,6 +3070,7 @@ function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{n
       try{REV=await mpost('review',{listing_id:REV.listing_id,stars:revDraft.stars,body:ta.value.trim(),gif:revDraft.gif});renderReviews();$('#rvMsg')&&($('#rvMsg').innerHTML='<span class="teal">✅ Thank you! Your review is live.</span>')}
       catch(err){$('#rvMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
     const del=$('#rvDel');if(del)del.onclick=async()=>{if(!confirm('Delete your review?'))return;try{REV=await mpost('review/delete',{id:mine.id});revDraft={stars:0,gif:null,body:''};renderReviews()}catch(err){alert(err.message)}}}
+  wireVideos('#revBody',R2.listing_id,res=>{REV=res;renderReviews()});
   const li=$('#rvLogin');if(li)li.onclick=()=>{closeReviews();go('account');acctNotice('Log in or create a free account to review doctors.')};
   $$('#revBody [data-rep]').forEach(b=>b.onclick=()=>{const box=$(`[data-repbox="${b.dataset.rep}"]`);box.hidden=!box.hidden});
   $$('#revBody [data-repsend]').forEach(b=>b.onclick=async()=>{const t=$(`[data-repbox="${b.dataset.repsend}"] textarea`).value.trim();try{REV=await mpost('review/reply',{id:+b.dataset.repsend,reply:t});renderReviews()}catch(err){alert(err.message)}});
@@ -2976,13 +3080,43 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-rev]');if(
 $('#lightbox').onclick=()=>$('#lightbox').classList.remove('on');
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#lightbox').classList.remove('on');closeReviews()}});
 
+
+/* ================= VIDEOS: doctors' demo videos and patients' video reviews ================= */
+function vidCard(v,owner){return `<figure><video src="/api/m/video/${v.id}" controls preload="metadata" playsinline></video>
+  <figcaption>${v.kind==='demo'?'🎬':'🎥'} ${esc(v.caption||(v.kind==='demo'?'Demo video':'Video review by '+v.name))}${v.status==='pending'?'<span class="vid-pend">WAITING FOR APPROVAL</span>':''}</figcaption>
+  ${(owner&&v.status==='pending')||v.mine||owner?`<div class="vid-acts">${owner&&v.status==='pending'?`<button class="btn primary sm" type="button" data-vok="${v.id}">✓ Approve</button><button class="btn ghost sm" type="button" data-vno="${v.id}">✕ Reject</button>`:`<button class="rv-mini" type="button" data-vdel="${v.id}">Remove</button>`}</div>`:''}</figure>`}
+function vidSection(R2,me){const vids=R2.videos||[];const canAdd=me&&!R2.is_owner&&me.kind==='patient';
+  const mine=vids.find(v=>v.mine&&v.kind==='review');
+  return `${vids.length?`<div class="nd-h" style="margin-left:0">VIDEOS</div><div class="rv-videos">${vids.map(v=>vidCard(v,R2.is_owner)).join('')}</div>`:''}
+    ${canAdd?`<div class="rv-form"><b>🎥 ${mine?'Replace your video review':'Add a video review'}</b><p style="color:var(--mute);font-size:13px;margin:4px 0 8px">Up to 1 minute. It appears on this profile after the doctor approves it. Please don't show other patients' faces.</p>
+      <div class="vid-up"><input class="fs-note" data-vcap maxlength="140" placeholder="Caption, e.g. 'My knee after physiotherapy'" style="margin:0;flex:1;min-width:180px"><label class="btn primary sm" style="cursor:pointer">🎥 Choose video<input type="file" data-vfile accept="video/*" hidden></label></div><div data-vmsg style="font-size:13px;margin-top:6px"></div></div>`:''}`}
+async function videoLength(file){return new Promise(ok=>{const v=document.createElement('video');v.preload='metadata';v.muted=true;const u=URL.createObjectURL(file);
+  v.onloadedmetadata=()=>{URL.revokeObjectURL(u);ok(v.duration)};v.onerror=()=>{URL.revokeObjectURL(u);ok(null)};v.src=u})}
+async function uploadVideo(file,lid,caption){
+  if(!/^video\/(mp4|webm|quicktime)$/.test(file.type))throw new Error('Please choose an MP4, MOV or WebM video.');
+  if(file.size>30_000_000)throw new Error('That video is too large. Please keep it under 30 MB (about 1 minute).');
+  const d=await videoLength(file);if(d&&d>95)throw new Error('Please keep the video under about 1 minute.');
+  const r=await fetch(`/api/m/video/upload?listing_id=${lid}&caption=${encodeURIComponent(caption||'')}`,{method:'POST',headers:{'Content-Type':file.type},body:file}).catch(()=>null);
+  if(!r)throw new Error('Could not reach the server.');const j=await r.json().catch(()=>({error:'Upload failed'}));if(!r.ok||j.error)throw new Error(j.error||'Upload failed');return j.result}
+function wireVideos(root,lid,done){const box=$(root);if(!box)return;
+  const f=box.querySelector('[data-vfile]');if(f)f.onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const m=box.querySelector('[data-vmsg]');m.textContent='⏳ Uploading your video…';
+    try{const res=await uploadVideo(file,lid,(box.querySelector('[data-vcap]')||{}).value||'');done(res);const m2=$(root).querySelector('[data-vmsg]');
+      if(m2)m2.innerHTML=MEM.me&&MEM.listing&&MEM.listing.id===lid?'<span class="teal">✅ Your video is live on your profile.</span>':'<span class="teal">✅ Sent! It shows on the profile once the doctor approves it.</span>'}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+  box.querySelectorAll('[data-vok],[data-vno]').forEach(b=>b.onclick=async()=>{try{done(await mpost('video/moderate',{id:+(b.dataset.vok||b.dataset.vno),approve:!!b.dataset.vok}))}catch(err){alert(err.message)}});
+  box.querySelectorAll('[data-vdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this video?'))return;try{done(await mpost('video/delete',{id:+b.dataset.vdel}))}catch(err){alert(err.message)}})}
 // doctor's own work photos (account page)
 async function renderGallery(){const box=$('#galBox');if(!box||!MEM.listing)return;let d;try{d=await mpost('reviews',{listing_id:MEM.listing.id})}catch(e){box.innerHTML='<p class="red">'+esc(e.message)+'</p>';return}
   box.innerHTML=`<p style="color:var(--mute);font-size:13.5px">Show patients your clinic, equipment, certificates or results (with your patients' permission, and no faces or private details). Up to 12 photos.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center"><input class="fs-note" id="galCap" maxlength="140" placeholder="Caption, e.g. 'Our new dental chair'" style="margin:0;flex:1;min-width:200px">
       <label class="btn primary sm" style="cursor:pointer">📷 Add photo<input type="file" id="galFile" accept="image/*" hidden></label></div><div id="galMsg" style="font-size:13px;margin-top:6px"></div>
     <div class="gal-grid">${d.photos.map(g=>`<figure><img src="/api/m/gallery/${g.id}" alt="" data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><figcaption>${esc(g.caption||'')}</figcaption><button type="button" data-galdel="${g.id}" aria-label="Remove photo">✕</button></figure>`).join('')}</div>
+    <h4 style="margin-top:20px">🎬 Demo videos of your work</h4><p style="color:var(--mute);font-size:13.5px">Show how you work: your clinic, a procedure explained, or health advice. Up to 6 videos, about 1 minute each. Only show patients who agreed, in writing.</p>
+    <div class="vid-up" id="galVid"><input class="fs-note" data-vcap maxlength="140" placeholder="Caption, e.g. 'How we do a painless root canal'" style="margin:0;flex:1;min-width:200px"><label class="btn primary sm" style="cursor:pointer">🎬 Add video<input type="file" data-vfile accept="video/*" hidden></label><div data-vmsg style="font-size:13px;width:100%"></div></div>
+    ${(d.videos||[]).some(v=>v.status==='pending')?`<h4 style="margin-top:16px">🎥 Patient video reviews waiting for you</h4><div class="vid-grid">${d.videos.filter(v=>v.status==='pending').map(v=>vidCard(v,true)).join('')}</div>`:''}
+    ${(d.videos||[]).some(v=>v.status==='live')?`<div class="vid-grid">${d.videos.filter(v=>v.status==='live').map(v=>vidCard(v,true)).join('')}</div>`:''}
     <div style="margin-top:14px;font-size:14px">${d.count?`★ <b>${d.avg}</b> from ${d.count} review${d.count>1?'s':''}`:'No reviews yet.'} <button class="rv-mini" type="button" data-rev="${MEM.listing.id}">See & reply to reviews</button></div>`;
+  wireVideos('#galBox',MEM.listing.id,()=>renderGallery());
   $('#galFile').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;$('#galMsg').textContent='Uploading…';
     try{const u=URL.createObjectURL(f);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read.'));i.src=u});
       const M=1400,k=Math.min(1,M/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
@@ -3136,6 +3270,55 @@ go(location.hash.slice(1)||'home');
     btn.classList.remove('spin');void btn.offsetWidth;btn.classList.add('spin');paint();
     setTimeout(()=>root.classList.remove('theme-anim'),500)});
   paint()})();
+
+/* ================= NOTIFICATION BELL ================= */
+(()=>{const btn=$('#bellBtn'),panel=$('#bellPanel'),dot=$('#bellDot');if(!btn)return;let last=0,items=[];
+  const ICON={welcome:'👋',message:'💬',review:'⭐',reply:'↩️',call:'📹',video:'🎥',security:'🔒'};
+  const ago=ts=>{const s=(Date.now()-ts)/1000;return s<60?'just now':s<3600?Math.floor(s/60)+' min ago':s<86400?Math.floor(s/3600)+' h ago':new Date(ts).toLocaleDateString([], {day:'numeric',month:'short'})};
+  window.setBell=n=>{n=+n||0;dot.textContent=n>99?'99+':n;dot.classList.toggle('on',n>0);if(n>last){btn.classList.remove('ring');void btn.offsetWidth;btn.classList.add('ring')}last=n;
+    btn.setAttribute('aria-label',n?`Notifications, ${n} new`:'Notifications')};
+  const render=()=>{if(!MEM.me){panel.innerHTML=`<div class="bh"><b>Notifications</b></div><div class="bell-empty">🔔<br><br>Log in to get alerts for new messages, video calls, reviews and replies.<br><br><button class="btn primary sm" type="button" id="bellLogin">Log in or sign up</button></div>`;
+      const b=$('#bellLogin');if(b)b.onclick=()=>{panel.classList.remove('on');go('account')};return}
+    panel.innerHTML=`<div class="bh"><b>Notifications</b>${items.some(n=>!n.seen)?'<button type="button" id="bellAll">Mark all as read</button>':''}</div>`+(items.length?items.map(n=>`<div class="bell-item ${n.seen?'':'new'}" data-nid="${n.id}" data-link="${esc(n.link||'')}" role="button" tabindex="0"><span class="ic">${ICON[n.kind]||'🔔'}</span><div><b>${esc(n.title)}</b>${n.body?`<p>${esc(n.body)}</p>`:''}<small>${ago(n.ts)}</small></div></div>`).join(''):'<div class="bell-empty">You’re all caught up ✨</div>');
+    const all=$('#bellAll');if(all)all.onclick=async e=>{e.stopPropagation();await load('notifs/read',{})};
+    panel.querySelectorAll('.bell-item').forEach(el=>el.onclick=async()=>{const id=+el.dataset.nid,link=el.dataset.link;panel.classList.remove('on');btn.setAttribute('aria-expanded','false');
+      load('notifs/read',{id});if(link.startsWith('reviews:'))openReviews(+link.slice(8));else go(link||'account')})};
+  async function load(path='notifs',body={}){if(!MEM.me){items=[];setBell(0);if(panel.classList.contains('on'))render();return}
+    try{const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)return;const j=await r.json();items=j.notifs||[];setBell(j.unread);if(panel.classList.contains('on'))render()}catch{}}
+  window.bellRefresh=()=>load();
+  btn.onclick=e=>{e.stopPropagation();const on=!panel.classList.contains('on');panel.classList.toggle('on',on);btn.setAttribute('aria-expanded',on);if(on){render();load()}};
+  document.addEventListener('click',e=>{if(!e.target.closest('.bell-wrap'))panel.classList.remove('on')});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')panel.classList.remove('on')});
+  setInterval(()=>{if(MEM.me&&!document.hidden)load()},20000);setTimeout(load,1500)})();
+
+/* ================= CHAT WALLPAPERS (medical themes) ================= */
+(()=>{const tile=(a,b,op=.18)=>`url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><g opacity='${op}' font-size='26' font-family='Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif'><text x='14' y='40' transform='rotate(-14 26 30)'>${a}</text><text x='84' y='62' transform='rotate(12 96 52)'>${b}</text><text x='40' y='118' transform='rotate(-6 52 108)'>${b}</text><text x='104' y='128' transform='rotate(18 116 118)'>${a}</text></g></svg>`)}")`;
+  const ecg=`url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='220' height='90'><polyline points='0,50 60,50 72,50 80,20 90,78 100,36 108,50 220,50' fill='none' stroke='#22ff88' stroke-opacity='.35' stroke-width='2.4'/></svg>")}")`;
+  const W=[['none','Default',''],
+    ['mint','Clinic Mint',`${tile('🩺','✚')},linear-gradient(160deg,#dff7f0,#bfeee2)`],
+    ['heart','Heartbeat',`${tile('❤️','💓',.22)},linear-gradient(160deg,#3a0f1f,#160710)`],
+    ['ecg','ECG Monitor',`${ecg},linear-gradient(180deg,#03140f,#061f17)`],
+    ['pills','Pharmacy',`${tile('💊','💉')},linear-gradient(160deg,#fff4e6,#ffdcb8)`],
+    ['dna','DNA Lab',`${tile('🧬','🔬',.22)},linear-gradient(160deg,#0b1e3a,#12325e)`],
+    ['herbal','Herbal Care',`${tile('🌿','🍃')},linear-gradient(160deg,#eef8e4,#cfe8b6)`],
+    ['dental','Smile Dental',`${tile('🦷','🪥')},linear-gradient(160deg,#eef7ff,#cfe6ff)`],
+    ['surgical','Surgical Green',`${tile('✚','🩻',.2)},linear-gradient(160deg,#0f3d33,#082a23)`],
+    ['calm','Lavender Calm',`${tile('💜','🫶')},linear-gradient(160deg,#f4eeff,#dccbff)`],
+    ['getwell','Get Well Soon',`${tile('🌻','💐')},linear-gradient(160deg,#fff3e8,#ffd2bd)`],
+    ['kids','Kids Care',`${tile('🧸','🩹')},linear-gradient(160deg,#fff8d8,#ffe49a)`],
+    ['lab','Lab Blue',`${tile('🧪','⚗️')},linear-gradient(160deg,#e8f4ff,#c6e1ff)`],
+    ['night','Night Ward',`${tile('🌙','✨',.25)},linear-gradient(160deg,#0a0f22,#141d3f)`],
+    ['eye','Eye Care',`${tile('👁️','👓')},linear-gradient(160deg,#e9fbff,#c7eef8)`]];
+  const grid=$('#wallGrid'),panel=$('#wallPanel'),btn=$('#wallBtn');if(!grid)return;
+  let cur=(()=>{try{return localStorage.getItem('cl_wall')||'none'}catch{return 'none'}})();
+  const apply=()=>{const w=W.find(x=>x[0]===cur)||W[0];['#chat','#convM'].forEach(s=>{const el=$(s);if(el){el.style.background=w[2];el.style.backgroundSize=w[2]?'auto, cover':'';el.style.backgroundAttachment=w[2]?'local, scroll':''}});
+    grid.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.w===cur))};
+  grid.innerHTML=W.map(w=>`<button type="button" data-w="${w[0]}" aria-label="${w[1]} wallpaper"><span>${w[1]}</span></button>`).join('');
+  grid.querySelectorAll('button').forEach((b,i)=>{b.style.background=W[i][2]||'var(--panel2)';if(W[i][2])b.style.backgroundSize='70px, cover'});
+  grid.onclick=e=>{const b=e.target.closest('[data-w]');if(!b)return;cur=b.dataset.w;try{localStorage.setItem('cl_wall',cur)}catch{}apply()};
+  btn.onclick=e=>{e.stopPropagation();panel.classList.toggle('on')};
+  document.addEventListener('click',e=>{if(!e.target.closest('#wallPanel')&&e.target!==btn)panel.classList.remove('on')});
+  window.applyWall=apply;apply()})();
 </script>
 </body>
 </html>

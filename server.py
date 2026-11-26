@@ -364,6 +364,16 @@ CREATE TABLE IF NOT EXISTS gallery(id INTEGER PRIMARY KEY AUTOINCREMENT, listing
 """
 
 
+EXTRA_SCHEMA = """
+CREATE TABLE IF NOT EXISTS notifs(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, kind TEXT NOT NULL,
+  title TEXT NOT NULL, body TEXT, link TEXT, ts INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS notif_member ON notifs(member_id, id);
+CREATE TABLE IF NOT EXISTS videos(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, member_id INTEGER NOT NULL,
+  kind TEXT NOT NULL, caption TEXT, status TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ts INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS video_listing ON videos(listing_id, status);
+"""
+
+
 class InputError(Exception):
     pass
 
@@ -427,6 +437,10 @@ def init_db():
         mcols = {r["name"] for r in conn.execute("PRAGMA table_info(members)")}
         if "photo_ts" not in mcols:
             conn.execute("ALTER TABLE members ADD COLUMN photo_ts INTEGER")
+        for col in ("provider", "provider_id"):
+            if col not in mcols:
+                conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
+        conn.executescript(EXTRA_SCHEMA)
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
         for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT")]:
             if col not in lcols:
@@ -835,7 +849,10 @@ def member_state(conn, me):
         if other:
             threads.append({"with": other["id"], "name": other["name"], "kind": other["kind"], "photo_ts": other["photo_ts"], "last": last["body"][:80],
                             "ts": last["ts"], "mine": last["from_id"] == me["id"], "unread": unread})
-    return {"me": dict(me, listing_id=lst["id"] if lst else None), "favs": fav_ids, "threads": threads,
+    has_pw = (conn.execute("SELECT pw FROM members WHERE id=?", (me["id"],)).fetchone() or {"pw": "!"})["pw"] != "!"
+    notif_unread = conn.execute("SELECT COUNT(*) FROM notifs WHERE member_id=? AND seen=0", (me["id"],)).fetchone()[0]
+    return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
+            "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
 
 
@@ -851,6 +868,7 @@ def m_signup(conn, d, me, ip):
     cur = conn.execute("INSERT INTO members(email,name,kind,pw,created,city,last_seen) VALUES(?,?,?,?,?,?,?)",
                        (email, text(d, "name", 80), kind, hash_password(valid_password(d)), now_ms(),
                         text(d, "city", 80, False), now_ms()))
+    welcome(conn, cur.lastrowid, kind)
     return cur.lastrowid
 
 
@@ -925,6 +943,7 @@ def m_send(conn, d, me):
         raise AuthError("You are sending messages too quickly. Please wait a little.", 429)
     body = text(d, "body", 2000)
     conn.execute("INSERT INTO messages(from_id,to_id,body,ts) VALUES(?,?,?,?)", (me["id"], to, body, now_ms()))
+    notify(conn, to, "message", f"New message from {me['name']}", body[:90], "account")
     return {"to": to}
 
 
@@ -1002,7 +1021,14 @@ def listing_reviews(conn, lid, me=None):
         dist[str(r["stars"])] += 1
     avg = round(sum(r["stars"] for r in revs) / len(revs), 1) if revs else None
     photos = [dict(g) for g in conn.execute("SELECT id, caption, ts FROM gallery WHERE listing_id=? ORDER BY ts DESC", (lid,))]
-    return {"listing_id": lid, "avg": avg, "count": len(revs), "dist": dist, "reviews": revs, "photos": photos,
+    owner = bool(me and row["owner"] == me["id"])
+    videos = []
+    for v in conn.execute("SELECT v.*, m.name FROM videos v JOIN members m ON m.id=v.member_id WHERE v.listing_id=? ORDER BY v.ts DESC", (lid,)):
+        mine = bool(me and v["member_id"] == me["id"])
+        if v["status"] == "live" or owner or mine:
+            videos.append({"id": v["id"], "kind": v["kind"], "caption": v["caption"], "status": v["status"], "ts": v["ts"],
+                           "name": short_name(v["name"]), "mine": mine})
+    return {"listing_id": lid, "avg": avg, "count": len(revs), "dist": dist, "reviews": revs, "photos": photos, "videos": videos,
             "is_owner": bool(me and row["owner"] == me["id"])}
 
 
@@ -1033,6 +1059,8 @@ def m_review(conn, d, me):
     conn.execute("INSERT INTO reviews(listing_id,member_id,stars,body,gif,ts) VALUES(?,?,?,?,?,?) "
                  "ON CONFLICT(listing_id, member_id) DO UPDATE SET stars=excluded.stars, body=excluded.body, gif=excluded.gif, ts=excluded.ts",
                  (lid, me["id"], stars, body, gif, now_ms()))
+    if row["owner"]:
+        notify(conn, row["owner"], "review", f"New {stars}★ review from {short_name(me['name'])}", body[:90], f"reviews:{lid}")
     return listing_reviews(conn, lid, me)
 
 
@@ -1056,6 +1084,10 @@ def m_review_reply(conn, d, me):
     if reply and LINK_RE.search(reply):
         raise InputError("Please don't put links in replies")
     conn.execute("UPDATE reviews SET reply=?, reply_ts=? WHERE id=?", (reply or None, now_ms() if reply else None, int(d["id"])))
+    if reply:
+        author = conn.execute("SELECT member_id FROM reviews WHERE id=?", (int(d["id"]),)).fetchone()
+        if author:
+            notify(conn, author["member_id"], "reply", f"{me['name']} replied to your review", reply[:90], f"reviews:{r['listing_id']}")
     return listing_reviews(conn, r["listing_id"], me)
 
 
@@ -1104,10 +1136,18 @@ def m_delete_account(conn, d, me, ip):
     if too_many_failures(ip):
         raise AuthError("Too many failed attempts. Try again in 15 minutes.", 429)
     row = conn.execute("SELECT pw FROM members WHERE id=?", (me["id"],)).fetchone()
-    if not row or not check_password(str(d.get("password") or ""), row["pw"]):
+    if row and row["pw"] == "!":  # signed up with Google / Facebook / X and never set a password
+        if str(d.get("confirm") or "").strip().upper() != "DELETE":
+            raise InputError('Type DELETE to confirm.')
+    elif not row or not check_password(str(d.get("password") or ""), row["pw"]):
         FAILED_LOGINS.setdefault(ip, []).append(time.time())
         raise AuthError("That password is not right.", 401)
     mid = me["id"]
+    for v in conn.execute("SELECT v.id, v.mime FROM videos v LEFT JOIN listings l ON l.id=v.listing_id "
+                          "WHERE v.member_id=? OR l.owner=?", (mid, mid)).fetchall():
+        video_file(v["id"], v["mime"]).unlink(missing_ok=True)
+        conn.execute("DELETE FROM videos WHERE id=?", (v["id"],))
+    conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
     for (lid,) in conn.execute("SELECT id FROM listings WHERE owner=?", (mid,)).fetchall():
         for (gid,) in conn.execute("SELECT id FROM gallery WHERE listing_id=?", (lid,)).fetchall():
             (GALLERY_DIR / f"{gid}.jpg").unlink(missing_ok=True)
@@ -1125,10 +1165,259 @@ def m_delete_account(conn, d, me, ip):
     RINGS.pop(mid, None)
 
 
+
+# ---------------------------------------------------------------- notifications (the bell)
+NOTIF_KINDS = {"welcome", "message", "review", "reply", "call", "video", "security"}
+
+
+def notify(conn, member_id, kind, title, body="", link=""):
+    if not member_id:
+        return
+    conn.execute("INSERT INTO notifs(member_id,kind,title,body,link,ts) VALUES(?,?,?,?,?,?)",
+                 (member_id, kind if kind in NOTIF_KINDS else "welcome", str(title)[:120], str(body or "")[:200], str(link or "")[:60], now_ms()))
+    # keep the newest 100 per person
+    conn.execute("DELETE FROM notifs WHERE member_id=? AND id NOT IN (SELECT id FROM notifs WHERE member_id=? ORDER BY id DESC LIMIT 100)",
+                 (member_id, member_id))
+
+
+def welcome(conn, member_id, kind):
+    notify(conn, member_id, "welcome", "Welcome to Clinora! 👋",
+           "Complete your public profile so patients can find you." if kind == "doctor" else "Follow doctors you trust and message them any time.",
+           "account")
+
+
+def m_notifs(conn, d, me):
+    need_member(me)
+    rows = [dict(r) for r in conn.execute("SELECT id, kind, title, body, link, ts, seen FROM notifs WHERE member_id=? ORDER BY id DESC LIMIT 50", (me["id"],))]
+    unread = sum(1 for r in rows if not r["seen"])
+    return {"notifs": rows, "unread": unread}
+
+
+def m_notifs_read(conn, d, me):
+    need_member(me)
+    if d.get("id"):
+        conn.execute("UPDATE notifs SET seen=1 WHERE member_id=? AND id=?", (me["id"], int(d["id"])))
+    else:
+        conn.execute("UPDATE notifs SET seen=1 WHERE member_id=?", (me["id"],))
+    return m_notifs(conn, d, me)
+
+
+# ---------------------------------------------------------------- change / set password (any time)
+def m_password(conn, d, me, ip):
+    need_member(me)
+    row = conn.execute("SELECT pw FROM members WHERE id=?", (me["id"],)).fetchone()
+    if row["pw"] != "!":  # accounts that already have a password must confirm the current one
+        if too_many_failures(ip):
+            raise AuthError("Too many failed attempts. Try again in 15 minutes.", 429)
+        if not check_password(str(d.get("current") or ""), row["pw"]):
+            FAILED_LOGINS.setdefault(ip, []).append(time.time())
+            raise AuthError("Your current password is not right.", 401)
+    new = valid_password(d, "new")
+    if row["pw"] != "!" and check_password(new, row["pw"]):
+        raise InputError("The new password must be different from the old one.")
+    conn.execute("UPDATE members SET pw=? WHERE id=?", (hash_password(new), me["id"]))
+    notify(conn, me["id"], "security", "Your password was changed",
+           "If this wasn't you, change it again right away and contact the clinic.", "account")
+    return {"changed": True}
+
+
+# ---------------------------------------------------------------- log in with Google, Facebook or X
+# Each one switches on when its keys are in .env (see docs/social-login.md). Until then the buttons show "coming soon".
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+FACEBOOK_APP_ID = os.environ.get("FACEBOOK_APP_ID", "").strip()
+FACEBOOK_APP_SECRET = os.environ.get("FACEBOOK_APP_SECRET", "").strip()
+X_CLIENT_ID = os.environ.get("X_CLIENT_ID", "").strip()
+X_CLIENT_SECRET = os.environ.get("X_CLIENT_SECRET", "").strip()
+OAUTH_STATES = {}  # state -> {"prov", "kind", "verifier", "ts"}
+
+
+def oauth_status():
+    return {"google": bool(GOOGLE_CLIENT_ID), "google_client_id": GOOGLE_CLIENT_ID,
+            "facebook": bool(FACEBOOK_APP_ID and FACEBOOK_APP_SECRET), "x": bool(X_CLIENT_ID and X_CLIENT_SECRET)}
+
+
+def oauth_redirect_uri(prov):
+    return f"{PUBLIC_URL}/api/m/oauth/{prov}/callback"
+
+
+def social_member(conn, prov, pid, email, name, kind):
+    """Find the account for this Google / Facebook / X user, link it to an existing email account, or create one."""
+    pid = str(pid or "").strip()
+    if not pid:
+        raise InputError("The sign-in provider did not return an account id.")
+    row = conn.execute("SELECT id FROM members WHERE provider=? AND provider_id=?", (prov, pid)).fetchone()
+    if row:
+        return row["id"]
+    email = str(email or "").strip().lower()
+    if email:
+        row = conn.execute("SELECT id FROM members WHERE email=?", (email,)).fetchone()
+        if row:  # the provider confirmed this email, so it's the same person: link the accounts
+            conn.execute("UPDATE members SET provider=COALESCE(provider, ?), provider_id=COALESCE(provider_id, ?) WHERE id=?",
+                         (prov, pid, row["id"]))
+            return row["id"]
+    kind = kind if kind in MEMBER_KINDS else "patient"
+    cur = conn.execute("INSERT INTO members(email,name,kind,pw,created,last_seen,provider,provider_id) VALUES(?,?,?,?,?,?,?,?)",
+                       (email or f"{prov}-{pid}@users.clinora.invalid", (str(name or "").strip() or "Clinora user")[:80], kind, "!",
+                        now_ms(), now_ms(), prov, pid))
+    welcome(conn, cur.lastrowid, kind)
+    return cur.lastrowid
+
+
+def google_login(conn, d):
+    if not GOOGLE_CLIENT_ID:
+        raise InputError("Google login is coming soon.")
+    cred = str(d.get("credential") or "")
+    if not cred or len(cred) > 5000:
+        raise InputError("Google sign-in failed. Please try again.")
+    try:
+        info = http_json("GET", "https://oauth2.googleapis.com/tokeninfo?id_token=" + urllib.parse.quote(cred))
+    except ProviderError:
+        raise AuthError("Google could not confirm this sign-in. Please try again.", 401)
+    if info.get("aud") != GOOGLE_CLIENT_ID or info.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise AuthError("This Google sign-in is not for Clinora.", 401)
+    if str(info.get("email_verified")).lower() != "true":
+        raise AuthError("Please verify your Google email first.", 401)
+    if int(info.get("exp") or 0) < time.time():
+        raise AuthError("This Google sign-in expired. Please try again.", 401)
+    return social_member(conn, "google", info.get("sub"), info.get("email"), info.get("name"), str(d.get("kind") or "patient"))
+
+
+def oauth_start_url(prov, kind):
+    for k, v in list(OAUTH_STATES.items()):
+        if v["ts"] < time.time() - 600:
+            OAUTH_STATES.pop(k, None)
+    state = secrets.token_urlsafe(24)
+    rec = {"prov": prov, "kind": kind if kind in MEMBER_KINDS else "patient", "ts": time.time()}
+    if prov == "facebook":
+        OAUTH_STATES[state] = rec
+        return "https://www.facebook.com/v19.0/dialog/oauth?" + urllib.parse.urlencode(
+            {"client_id": FACEBOOK_APP_ID, "redirect_uri": oauth_redirect_uri("facebook"), "state": state, "scope": "email,public_profile"})
+    if prov == "x":
+        verifier = secrets.token_urlsafe(48)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        OAUTH_STATES[state] = dict(rec, verifier=verifier)
+        return "https://x.com/i/oauth2/authorize?" + urllib.parse.urlencode(
+            {"response_type": "code", "client_id": X_CLIENT_ID, "redirect_uri": oauth_redirect_uri("x"), "state": state,
+             "scope": "users.read tweet.read users.email", "code_challenge": challenge, "code_challenge_method": "S256"})
+    raise InputError("Unknown sign-in provider")
+
+
+def oauth_finish(conn, prov, query):
+    state = (query.get("state") or [""])[0]
+    rec = OAUTH_STATES.pop(state, None)
+    if not rec or rec["prov"] != prov or rec["ts"] < time.time() - 600:
+        raise AuthError("This sign-in link expired. Please try again.", 400)
+    code = (query.get("code") or [""])[0]
+    if not code:
+        raise AuthError("Sign-in was cancelled.", 400)
+    if prov == "facebook":
+        tok = http_json("GET", "https://graph.facebook.com/v19.0/oauth/access_token?" + urllib.parse.urlencode(
+            {"client_id": FACEBOOK_APP_ID, "client_secret": FACEBOOK_APP_SECRET, "redirect_uri": oauth_redirect_uri("facebook"), "code": code}))
+        me = http_json("GET", "https://graph.facebook.com/me?" + urllib.parse.urlencode(
+            {"fields": "id,name,email", "access_token": tok.get("access_token", "")}))
+        return social_member(conn, "facebook", me.get("id"), me.get("email"), me.get("name"), rec["kind"])
+    if prov == "x":
+        tok = http_json("POST", "https://api.x.com/2/oauth2/token", auth=(X_CLIENT_ID, X_CLIENT_SECRET),
+                        form={"code": code, "grant_type": "authorization_code", "redirect_uri": oauth_redirect_uri("x"),
+                              "code_verifier": rec["verifier"], "client_id": X_CLIENT_ID})
+        me = http_json("GET", "https://api.x.com/2/users/me?user.fields=confirmed_email", bearer=tok.get("access_token", "")).get("data", {})
+        return social_member(conn, "x", me.get("id"), me.get("confirmed_email"), me.get("name") or me.get("username"), rec["kind"])
+    raise InputError("Unknown sign-in provider")
+
+
+# ---------------------------------------------------------------- videos: doctors' demo videos, patients' video reviews
+VIDEO_DIR = DATA_DIR / "videos"
+MAX_VIDEO_BYTES = 30_000_000   # about 1 minute of phone video
+MAX_DEMO_VIDEOS = 6
+VIDEO_TYPES = {"video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
+
+
+def video_file(vid, mime):
+    return VIDEO_DIR / f"{int(vid)}.{VIDEO_TYPES.get(mime, 'mp4')}"
+
+
+def looks_like_video(head, mime):
+    if mime == "video/webm":
+        return head[:4] == b"\x1aE\xdf\xa3"
+    return head[4:8] == b"ftyp"  # mp4 and mov
+
+
+def video_upload(conn, me, mime, raw, lid, caption):
+    need_member(me)
+    if mime not in VIDEO_TYPES:
+        raise InputError("Please choose an MP4, MOV or WebM video.")
+    if len(raw) > MAX_VIDEO_BYTES:
+        raise InputError("That video is too large. Please keep it under 30 MB (about 1 minute).")
+    if not looks_like_video(raw[:16], mime):
+        raise InputError("That file is not a video we can play.")
+    lst = conn.execute("SELECT id, owner, name FROM listings WHERE id=?", (lid,)).fetchone()
+    if not lst:
+        raise InputError("This doctor is no longer listed")
+    caption = str(caption or "").strip()[:140]
+    if caption and LINK_RE.search(caption):
+        raise InputError("Please don't put links in captions")
+    if lst["owner"] == me["id"]:  # the doctor's own demo video, live straight away
+        if conn.execute("SELECT COUNT(*) FROM videos WHERE listing_id=? AND kind='demo'", (lid,)).fetchone()[0] >= MAX_DEMO_VIDEOS:
+            raise InputError(f"You can show up to {MAX_DEMO_VIDEOS} videos. Remove one first.")
+        kind, status = "demo", "live"
+    else:  # a patient's video review: hidden until the doctor approves it
+        if me["kind"] != "patient":
+            raise AuthError("Only patients can add a video review.")
+        if too_many("video", str(me["id"]), 5, 3600):
+            raise AuthError("Too many uploads. Please try again later.", 429)
+        old = conn.execute("SELECT id, mime FROM videos WHERE listing_id=? AND member_id=? AND kind='review'", (lid, me["id"])).fetchone()
+        if old:  # one video review per patient per doctor: the new one replaces the old
+            video_file(old["id"], old["mime"]).unlink(missing_ok=True)
+            conn.execute("DELETE FROM videos WHERE id=?", (old["id"],))
+        kind, status = "review", "pending"
+    cur = conn.execute("INSERT INTO videos(listing_id,member_id,kind,caption,status,mime,size,ts) VALUES(?,?,?,?,?,?,?,?)",
+                       (lid, me["id"], kind, caption, status, mime, len(raw), now_ms()))
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    video_file(cur.lastrowid, mime).write_bytes(raw)
+    if kind == "review" and lst["owner"]:
+        notify(conn, lst["owner"], "video", f"{short_name(me['name'])} sent you a video review",
+               "Approve it to show it on your profile.", f"reviews:{lid}")
+    return listing_reviews(conn, lid, me)
+
+
+def m_video_moderate(conn, d, me):
+    need_member(me, "doctor")
+    v = conn.execute("SELECT v.*, l.owner FROM videos v JOIN listings l ON l.id=v.listing_id WHERE v.id=?", (int(d.get("id") or 0),)).fetchone()
+    if not v or v["owner"] != me["id"]:
+        raise AuthError("You can only approve videos on your own profile.")
+    if d.get("approve"):
+        conn.execute("UPDATE videos SET status='live' WHERE id=?", (v["id"],))
+        notify(conn, v["member_id"], "video", f"{me['name']} approved your video review", "It is now on their profile. Thank you!", f"reviews:{v['listing_id']}")
+    else:
+        conn.execute("DELETE FROM videos WHERE id=?", (v["id"],))
+        video_file(v["id"], v["mime"]).unlink(missing_ok=True)
+    return listing_reviews(conn, v["listing_id"], me)
+
+
+def m_video_delete(conn, d, me):
+    need_member(me)
+    v = conn.execute("SELECT v.*, l.owner FROM videos v JOIN listings l ON l.id=v.listing_id WHERE v.id=?", (int(d.get("id") or 0),)).fetchone()
+    if not v or me["id"] not in (v["member_id"], v["owner"]):
+        raise AuthError("You can only remove your own videos.")
+    conn.execute("DELETE FROM videos WHERE id=?", (v["id"],))
+    video_file(v["id"], v["mime"]).unlink(missing_ok=True)
+    return listing_reviews(conn, v["listing_id"], me)
+
+
+def video_visible(conn, vid, me):
+    v = conn.execute("SELECT v.*, l.owner FROM videos v JOIN listings l ON l.id=v.listing_id WHERE v.id=?", (vid,)).fetchone()
+    if not v:
+        return None
+    if v["status"] == "live" or (me and me["id"] in (v["member_id"], v["owner"])):
+        return v
+    return None
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
-                 "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete}
+                 "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete,
+                 "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete}
 
 
 
@@ -1209,6 +1498,7 @@ def mcall_ring(conn, d, me):
     other = can_contact(conn, me, int(d.get("to") or 0))
     room = mroom(me["id"], other["id"])
     RINGS[other["id"]] = {"from": me["id"], "name": me["name"], "room": room, "photo_ts": me.get("photo_ts"), "ts": time.time()}
+    notify(conn, other["id"], "call", f"Video call from {me['name']}", "Missed it? Call back from your messages.", "account")
     return {"room": room}
 
 
@@ -1274,19 +1564,26 @@ def str_list(v, n=20, ln=40):
 
 def food_scan(d, ip):
     if client is None:
-        raise InputError("The food scanner needs the AI: add ANTHROPIC_API_KEY to .env")
+        print("[AI] Food Scan unavailable: no ANTHROPIC_API_KEY in .env", flush=True)
+        raise InputError("Food Scan is resting right now. Please try again a little later.")
     if too_many("food", ip, 30, 3600):
         raise AuthError("You've scanned a lot this hour. Please try again a little later.", 429)
-    data = str(d.get("image") or "")
     prefix = "data:image/jpeg;base64,"
-    if not data.startswith(prefix):
+    frames = d.get("frames") if isinstance(d.get("frames"), list) else None
+    shots = [str(x or "") for x in frames[:8]] if frames else [str(d.get("image") or "")]
+    if not shots or not shots[0]:
         raise InputError("Please take or choose a photo of the food")
-    try:
-        raw = base64.b64decode(data[len(prefix):], validate=True)
-    except ValueError:
-        raise InputError("That photo could not be read")
-    if len(raw) > MAX_FOOD_PHOTO or not raw.startswith(b"\xff\xd8\xff"):
-        raise InputError("That photo could not be used. Try another one.")
+    images = []
+    for data in shots:
+        if not data.startswith(prefix):
+            raise InputError("Please take or choose a photo of the food")
+        try:
+            raw = base64.b64decode(data[len(prefix):], validate=True)
+        except ValueError:
+            raise InputError("That photo could not be read")
+        if len(raw) > (900_000 if frames else MAX_FOOD_PHOTO) or not raw.startswith(b"\xff\xd8\xff"):
+            raise InputError("That photo could not be used. Try another one.")
+        images.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data[len(prefix):]}})
     prof = d.get("profile") if isinstance(d.get("profile"), dict) else {}
     about = "\n".join([
         "Allergies: " + (", ".join(str_list(prof.get("allergies"))) or "none given"),
@@ -1298,9 +1595,10 @@ def food_scan(d, ip):
     ])
     response = client.beta.messages.create(
         model=MODEL, max_tokens=8000, system=FOOD_SYSTEM,
-        messages=[{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data[len(prefix):]}},
-            {"type": "text", "text": "Is this safe and OK for me to eat?\n" + about}]}],
+        messages=[{"role": "user", "content": images + [
+            {"type": "text", "text": ("These are frames, in order, from a short video of the food. Look at all of them together "
+                                      "(different sides, the label, how it is stored or cooked).\n" if frames else "")
+             + "Is this safe and OK for me to eat?\n" + about}]}],
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": FOOD_SCHEMA}},
         betas=["server-side-fallback-2026-07-01"], fallbacks="default")
     if response.stop_reason == "refusal":
@@ -1330,7 +1628,8 @@ def uni_doctors(conn_unused, d, ip):
         if row and row["ts"] > now_ms() - 7 * 86_400_000:
             return dict(json.loads(row["result"]), cached=True)
     if client is None:
-        raise InputError("The AI search is off: add ANTHROPIC_API_KEY to .env")
+        print("[AI] University search unavailable: no ANTHROPIC_API_KEY in .env", flush=True)
+        raise InputError("This search is resting right now. Please try again a little later.")
     if too_many("uni", ip, 10, 3600):
         raise AuthError("Too many searches. Please try again in a little while.", 429)
     messages = [{"role": "user", "content": f"Institute: {q}" + (f"\nDepartment: {dept}" if dept else "")}]
@@ -1929,7 +2228,7 @@ class Handler(SimpleHTTPRequestHandler):
             with connect() as conn:
                 return self.send_json(200, snapshot(conn, user_for_token(conn, self.session_token())))
         if self.path.startswith("/api/status"):
-            return self.send_json(200, {"ai": client is not None, "reason": AI_REASON, "model": MODEL,
+            return self.send_json(200, {"ai": client is not None, "reason": AI_REASON, "model": MODEL, "oauth": oauth_status(),
                                         "pay_mode": PAY_MODE, "currency": CURRENCY, "video_needs_payment": REQUIRE_VIDEO_PAYMENT})
         if path_only.removesuffix(".html") in LEGAL_PAGES:
             name = LEGAL_PAGES[path_only.removesuffix(".html")]
@@ -1952,6 +2251,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(200, links)
         if path_only.startswith("/api/m/avatar/"):
             return self.send_avatar(path_only.rsplit("/", 1)[1])
+        if path_only.startswith("/api/m/video/") and path_only.rsplit("/", 1)[1].isdigit():
+            return self.send_video(int(path_only.rsplit("/", 1)[1]))
+        m = re.fullmatch(r"/api/m/oauth/(facebook|x)/(start|callback)", path_only)
+        if m:
+            return self.oauth_get(m.group(1), m.group(2))
         if path_only.startswith("/api/m/gallery/"):
             gid = path_only.rsplit("/", 1)[1]
             f = GALLERY_DIR / f"{int(gid)}.jpg" if gid.isdigit() else None
@@ -2053,6 +2357,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(200, {"received": True})
             except Exception:
                 return self.send_json(400, {"error": "Invalid webhook"})
+        # Video uploads send the raw file. "video/..." is not a type other websites can send without the browser's
+        # permission check (CORS preflight), so this is as safe against cross-site posts as the JSON rule below.
+        if path == "/api/m/video/upload" and (self.headers.get("Content-Type") or "").startswith("video/"):
+            return self.video_upload_raw()
         # Only JSON requests: blocks other websites from submitting plain forms here (CSRF)
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             return self.send_json(415, {"error": "JSON required"})
@@ -2073,7 +2381,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(e.status, {"error": str(e)})
         if path == "/api/foodscan":
             try:
-                data = self.read_json(4_200_000)
+                data = self.read_json(7_000_000)
                 if not isinstance(data, dict):
                     raise InputError("Bad request")
                 return self.send_json(200, food_scan(data, self.client_ip()))
@@ -2168,6 +2476,78 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def video_upload_raw(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            if length <= 0 or length > MAX_VIDEO_BYTES:
+                raise InputError("That video is too large. Please keep it under 30 MB (about 1 minute).")
+            raw = self.rfile.read(length)
+            mime = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            with DB_LOCK, connect() as conn:
+                me = member_for_token(conn, self.member_token())
+                out = video_upload(conn, me, mime, raw, int((q.get("listing_id") or ["0"])[0] or 0), (q.get("caption") or [""])[0])
+                return self.send_json(200, {"result": out})
+        except InputError as e:
+            return self.send_json(400, {"error": str(e)})
+        except AuthError as e:
+            return self.send_json(e.status, {"error": str(e)})
+
+    def send_video(self, vid):
+        with connect() as conn:
+            v = video_visible(conn, vid, member_for_token(conn, self.member_token()))
+        f = video_file(vid, v["mime"]) if v else None
+        if not f or not f.is_file():
+            return self.send_json(404, {"error": "not found"})
+        size = f.stat().st_size
+        start, end = 0, size - 1
+        rng = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range") or "")
+        if rng and (rng.group(1) or rng.group(2)):
+            if rng.group(1):
+                start = int(rng.group(1)); end = min(int(rng.group(2)) if rng.group(2) else size - 1, size - 1)
+            else:
+                start = max(0, size - int(rng.group(2)))
+            if start > end:
+                self.send_response(416); self.send_header("Content-Range", f"bytes */{size}"); self.end_headers(); return
+        with f.open("rb") as fh:
+            fh.seek(start)
+            body = fh.read(end - start + 1)
+        self.send_response(206 if rng else 200)
+        self.send_header("Content-Type", v["mime"])
+        self.send_header("Accept-Ranges", "bytes")
+        if rng:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=3600")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def redirect(self, location, cookie=None):
+        self.send_response(302)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def oauth_get(self, prov, step):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        on = oauth_status()[prov]
+        if not on:
+            return self.redirect("/#account/login-soon")
+        if step == "start":
+            if too_many("oauth", self.client_ip(), 30, 3600):
+                return self.redirect("/#account/login-error")
+            return self.redirect(oauth_start_url(prov, (q.get("kind") or ["patient"])[0]))
+        try:
+            with DB_LOCK, connect() as conn:
+                mid = oauth_finish(conn, prov, q)
+                token = new_member_session(conn, mid)
+            return self.redirect("/#account", cookie=self.member_cookie(token, 30 * 86_400))
+        except (InputError, AuthError, ProviderError) as e:
+            print(f"[login] {prov} sign-in failed: {e}", flush=True)
+            return self.redirect("/#account/login-error")
+
     def member_token(self):
         for part in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = part.strip().partition("=")
@@ -2193,6 +2573,23 @@ class Handler(SimpleHTTPRequestHandler):
                     me = member_for_token(conn, self.member_token())
                     m_delete_account(conn, data, me, ip)
                     return self.send_json(200, {"me": None, "deleted": True}, cookie=self.member_cookie("", 0))
+                if path in ("/api/m/notifs", "/api/m/notifs/read"):  # light: polled by the bell, no listings
+                    me = member_for_token(conn, self.member_token())
+                    return self.send_json(200, (m_notifs if path.endswith("notifs") else m_notifs_read)(conn, data, me))
+                if path == "/api/m/password":
+                    me = member_for_token(conn, self.member_token())
+                    extra = m_password(conn, data, me, ip)
+                    # signs out every other phone or computer; this one stays logged in
+                    conn.execute("DELETE FROM member_sessions WHERE member_id=? AND token<>?", (me["id"], token_hash(self.member_token())))
+                    out = member_state(conn, me)
+                    out["result"] = extra
+                    return self.send_json(200, out)
+                if path == "/api/m/oauth/google":
+                    if too_many("oauth", ip, 30, 3600):
+                        raise AuthError("Too many sign-in attempts. Try again later.", 429)
+                    mid = google_login(conn, data)
+                    token = new_member_session(conn, mid)
+                    return self.send_json(200, member_state(conn, member_for_token(conn, token)), cookie=self.member_cookie(token, 30 * 86_400))
                 if path in ("/api/m/signup", "/api/m/login"):
                     mid = (m_signup if path.endswith("signup") else m_login)(conn, data, None, ip)
                     token = new_member_session(conn, mid)
