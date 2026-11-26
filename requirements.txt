@@ -1,4 +1,4 @@
-anthropic<1
+anthropic<3
 stripe
 pywebpush
 # security floors for packages pulled in by the ones above (pip-audit, 2026-11-27)
