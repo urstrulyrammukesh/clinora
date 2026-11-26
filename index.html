@@ -567,6 +567,12 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 .lc-acts .fav.on{color:#ff6b9a;border-color:#ff6b9a66}
 .lc-pill{font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:var(--panel);color:var(--mute);border:1px solid var(--line);white-space:nowrap}
 .lc-pill.live{color:#3ddc84;border-color:#3ddc8455}
+.lc-pill.ok{color:#fff;background:linear-gradient(90deg,#0ea5e9,#2563eb);border-color:transparent;font-weight:700}
+.vstat{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:99px;border:1px solid var(--line)}
+.vstat.verified{background:linear-gradient(90deg,#0ea5e9,#2563eb);color:#fff;border-color:transparent}.vstat.pending{color:var(--amber);border-color:var(--amber)}.vstat.rejected{color:var(--red);border-color:var(--red)}
+.vq-item{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;background:var(--panel2);font-size:13px}
+.vq-item b{font-size:14px}.vq-item dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:8px 0}.vq-item dt{color:var(--mute)}
+.vq-item .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .lc-pill.live:before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:#3ddc84;margin-right:6px;vertical-align:1px;animation:livePulse 1.6s infinite}
 @keyframes livePulse{50%{box-shadow:0 0 0 4px #3ddc8433}}
 .lc-pill.v{color:var(--teal);border-color:hsla(var(--h),78%,50%,.4)}
@@ -1307,6 +1313,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
           <div id="docToggles"></div></div>
         <div class="panel-sec"><h4>🚨 EMERGENCY ALERTS</h4><div id="alerts"><div class="empty" style="padding:0">No alerts.</div></div></div>
         <div class="panel-sec team" id="teamSec" style="display:none"></div>
+        <div class="panel-sec" id="verifySec" style="display:none"></div>
         <div class="panel-sec" id="demoSec"><h4>DEMO</h4><button class="btn ghost sm" id="resetBtn">↺ Reset demo data</button></div>
       </div>
     </div>
@@ -1774,6 +1781,7 @@ function renderAuth(){
   $('#fDoc').style.display=admin?'':'none';if(!admin)$('#fDoc').value='';
   $$('[data-live]').forEach(b=>{b.disabled=!admin&&b.dataset.live!==me.doctor_id;b.title=b.disabled?'Only the clinic admin can change this':''});
   renderTeam(admin);
+  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue()}else if(!admin){window.__vqShown=false;const s=$('#verifySec');if(s)s.style.display='none'}
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
@@ -1963,7 +1971,7 @@ async function nominatim(q,extra=''){
   if(!r.ok)throw new Error('nominatim');return r.json();
 }
 const HEALTH=/^(hospital|clinic|doctors|doctor|dentist|pharmacy|laboratory|university|college)$/;
-function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,
+function regToPlace(r){const hs=typeof scheduleStatus==='function'?scheduleStatus(r):null;return {name:r.name,type:r.type,lat:r.lat,lon:r.lon,addr:`${r.addr}, ${r.city}, ${r.country}`,phone:r.phone,reg:1,st:hs,spec:r.spec,video:r.video,verified:!!r.verified,
   hours:r.hours,tz:r.tz,live:!!(r.online||(hs&&hs.open)),hoursRaw:r.hours||'',
   id:r.id,owner:r.owner,photo:r.owner_photo,rating:r.rating,reviews:r.reviews||0,photos:r.photos||0,online:r.online,last_seen:r.last_seen,followers:r.followers||0,
   tags:Object.assign({website:r.web,email:r.email,'addr:city':r.city,'healthcare:speciality':r.spec},r.social||{}),cc:r.cc}}
@@ -2525,7 +2533,7 @@ function lcard(p,i,ctx){
   const phones=String(p.phone||'').split(';').map(x=>x.trim()).filter(Boolean).slice(0,3);
   const fav=p.reg&&MEM.favs&&MEM.favs.includes(p.id);
   const sub=[typeLabel(p),p.spec,near&&p.d!=null?fmtD(p.d)+' away':''].filter(Boolean).map(esc).join(' · ');
-  const pills=[p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.live?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${p.hours?'Offline':agoText(p.last_seen)}</span>`):'',
+  const pills=[p.verified?'<span class="lc-pill ok" title="Registration checked by Clinora">✓ Verified</span>':'',p.partner?'<span class="lc-pill v">Clinora partner</span>':'',p.reg?(p.live?'<span class="lc-pill live">Online now</span>':`<span class="lc-pill">${p.hours?'Offline':agoText(p.last_seen)}</span>`):'',
     p.sample?'<span class="lc-pill">Sample</span>':'',p.video?'<span class="lc-pill">Video visits</span>':''].join('');
   const prof=near?`data-prof="${i}"`:`data-dprof="${i}"`,ride=near?`data-ride="${i}"`:`data-dride="${i}"`,mapb=near?`data-fly="${i}"`:`data-dmap="${i}"`;
   return `<article class="lc ${near?'place':''} ${p.partner||p.reg?'hl':''}" ${near?`data-i="${i}"`:''}>
@@ -2833,6 +2841,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         ${hoursEditor('dpHours',L?L.hours:'')}
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
+      ${L?verifyCard(MEM.verification):''}
       ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
     <h3 style="margin-bottom:10px">Messages</h3>
@@ -2856,7 +2865,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  if(doc&&MEM.listing)renderGallery();
+  if(doc&&MEM.listing){renderGallery();wireVerify()}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
     <div id="delStep"><button class="btn ghost sm" type="button" id="delStart" style="border-color:rgba(255,61,85,.5);color:#ff6b7d">Delete my account…</button></div>`;
@@ -3061,7 +3070,7 @@ function closeReviews(){$('#revSheet').classList.remove('on')}
 $('#revX').onclick=closeReviews;$('#revSheet').onclick=e=>{if(e.target.id==='revSheet')closeReviews()};
 function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{name:'Doctor'};const me=MEM.me;const mine=R2.reviews.find(r=>r.mine);
   const max=Math.max(1,...Object.values(R2.dist));
-  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)}</h3><div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
+  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)} ${l.verified?'<span class="lc-pill ok" style="vertical-align:middle;font-size:11px">✓ Verified</span>':''}</h3><div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
     <div class="rv-head"><div><div class="rv-avg">${R2.avg??'–'}</div><div class="stars">${starTxt(Math.round(R2.avg||0))}</div><div style="font-size:12.5px;color:var(--mute)">${R2.count} review${R2.count===1?'':'s'}</div></div>
       <div class="rv-dist">${[5,4,3,2,1].map(n=>`<div>${n}★<i><b style="width:${R2.dist[n]/max*100}%"></b></i>${R2.dist[n]}</div>`).join('')}</div></div>
     ${R2.photos.length?`<div class="nd-h" style="margin-left:0">PHOTOS OF THEIR WORK</div><div class="rv-photos">${R2.photos.map(g=>`<figure data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><img loading="lazy" src="/api/m/gallery/${g.id}" alt="${esc(g.caption||'Work photo')}"><figcaption>${esc(g.caption||'')}</figcaption></figure>`).join('')}</div>`:''}
@@ -3126,6 +3135,54 @@ function wireVideos(root,lid,done){const box=$(root);if(!box)return;
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   box.querySelectorAll('[data-vok],[data-vno]').forEach(b=>b.onclick=async()=>{try{done(await mpost('video/moderate',{id:+(b.dataset.vok||b.dataset.vno),approve:!!b.dataset.vok}))}catch(err){alert(err.message)}});
   box.querySelectorAll('[data-vdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this video?'))return;try{done(await mpost('video/delete',{id:+b.dataset.vdel}))}catch(err){alert(err.message)}})}
+
+/* ================= DOCTOR VERIFICATION ================= */
+const COUNCILS=["National Medical Commission (NMC)","Dental Council of India (DCI)","Andhra Pradesh Medical Council","Arunachal Pradesh Medical Council","Assam Medical Council","Bihar Medical Council","Chhattisgarh Medical Council","Delhi Medical Council","Goa Medical Council","Gujarat Medical Council","Haryana Medical Council","Himachal Pradesh Medical Council","Jammu & Kashmir Medical Council","Jharkhand Medical Council","Karnataka Medical Council","Kerala (Travancore-Cochin) Medical Council","Madhya Pradesh Medical Council","Maharashtra Medical Council","Manipur Medical Council","Meghalaya Medical Council","Mizoram Medical Council","Nagaland Medical Council","Odisha Council of Medical Registration","Punjab Medical Council","Rajasthan Medical Council","Sikkim Medical Council","Tamil Nadu Medical Council","Telangana State Medical Council","Tripura State Medical Council","Uttar Pradesh Medical Council","Uttarakhand Medical Council","West Bengal Medical Council","State Dental Council","Medical council outside India"];
+const VSTAT={verified:'✓ Verified',pending:'⏳ Under review',rejected:'❌ Not approved yet'};
+function verifyCard(v){v=v||{};const st=v.status;const open=!st||st==='rejected';
+  return `<details class="card" id="vCard" style="padding:22px;margin-bottom:18px" ${open?'open':''}><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3 style="margin:0">🩺 Doctor verification</h3>${st?`<span class="vstat ${st}">${VSTAT[st]}</span>`:'<span class="vstat">Not verified</span>'}</summary>
+    <p style="color:var(--mute);font-size:13.5px;margin:10px 0">${st==='verified'?'Patients see a blue ✓ Verified badge on your profile. Your registration details stay private.':
+      st==='pending'?'Thanks! We are checking your registration on the official register. You get a 🔔 notification when it is done.':
+      'Get a blue ✓ Verified badge. We check your registration number on the official medical register. Your details and certificate are private: only you and the Clinora admin see them.'}</p>
+    ${st==='rejected'&&v.reason?`<div class="card" style="padding:12px 14px;border-color:var(--red);margin-bottom:12px;font-size:13.5px"><b>Reason:</b> ${esc(v.reason)}<br><span style="color:var(--mute)">Fix the details below and send again.</span></div>`:''}
+    <form class="form" id="vForm">
+      <label>MEDICAL COUNCIL *</label><select id="vCouncil" required><option value="">Choose your council…</option>${COUNCILS.map(c=>`<option ${v.council===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      <div class="two"><div><label>REGISTRATION NUMBER *</label><input id="vReg" required maxlength="30" value="${esc(v.reg_no||'')}" placeholder="As on your certificate"></div>
+        <div><label>YEAR OF REGISTRATION *</label><input id="vYear" required type="number" min="1950" max="${new Date().getFullYear()}" value="${v.reg_year||''}" placeholder="e.g. 2018"></div></div>
+      <label>QUALIFICATION *</label><input id="vQual" required maxlength="80" value="${esc(v.qualification||'')}" placeholder="e.g. MBBS, MD (Medicine)">
+      <label>PHOTO OF REGISTRATION CERTIFICATE ${v.cert?'(already sent · choose a new one to replace it)':'(recommended)'}</label><input id="vCert" type="file" accept="image/*">
+      <label class="chk"><input type="checkbox" id="vOk" required> I confirm these details are true and my own. I agree that Clinora may check them on the official register.</label>
+      <button class="btn primary" type="submit">${st==='verified'?'Update details (needs a new check)':st==='pending'?'Update request':'Send for verification'}</button><div id="vMsg" style="font-size:13px;margin-top:8px"></div></form></details>`}
+function wireVerify(){const f=$('#vForm');if(!f)return;
+  f.onsubmit=async e=>{e.preventDefault();const m=$('#vMsg');
+    if(MEM.verification&&MEM.verification.status==='verified'&&!confirm('Changing your details removes the ✓ badge until we check them again. Continue?'))return;
+    m.textContent='Sending…';let cert='';
+    try{const file=$('#vCert').files[0];
+      if(file){const u=URL.createObjectURL(file);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read.'));i.src=u});
+        const M=1600,k=Math.min(1,M/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);let q=.85;cert=c.toDataURL('image/jpeg',q);while(cert.length>1_500_000&&q>.4){q-=.12;cert=c.toDataURL('image/jpeg',q)}}
+      await mapi('verify/submit',{council:$('#vCouncil').value,reg_no:$('#vReg').value.trim(),reg_year:+$('#vYear').value,qualification:$('#vQual').value.trim(),certificate:cert,confirm:$('#vOk').checked});
+      renderAccount();const c2=$('#vCard');if(c2){c2.open=true;c2.scrollIntoView({block:'center'})}}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
+
+// clinic admin: the review queue in the Clinic Dashboard
+async function renderVerifyQueue(){const sec=$('#verifySec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
+  let q;try{q=(await api('/api/verify/list')).created}catch(e){sec.innerHTML='<h4>🩺 DOCTOR VERIFICATION</h4><p class="red">'+esc(e.message)+'</p>';return}
+  const items=q.verifications||[],pend=items.filter(v=>v.status==='pending').length;
+  sec.innerHTML=`<h4>🩺 DOCTOR VERIFICATION ${pend?`<span class="vstat pending" style="margin-left:6px">${pend} waiting</span>`:''}</h4>
+    <p style="font-size:12.5px;color:var(--mute)">Check each number on the official register before approving: <a class="teal" href="https://www.nmc.org.in/information-desk/indian-medical-register/" target="_blank" rel="noopener">NMC Indian Medical Register ↗</a>. Dentists: the Dental Council of India or the state dental council.</p>
+    ${items.length?items.map(v=>`<div class="vq-item"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(v.doctor)}</b><span class="vstat ${v.status}">${VSTAT[v.status]}</span></div>
+      <dl><dt>Profile</dt><dd>${esc([v.listing_name,v.spec,v.city].filter(Boolean).join(' · ')||'–')}</dd><dt>Email</dt><dd>${esc(v.email)}</dd>
+        <dt>Council</dt><dd>${esc(v.council)}</dd><dt>Reg. no.</dt><dd><b>${esc(v.reg_no)}</b> (${v.reg_year})</dd><dt>Qualification</dt><dd>${esc(v.qualification)}</dd>
+        <dt>Certificate</dt><dd>${v.cert?`<a class="teal" href="/api/verify/cert/${v.member_id}?t=${v.submitted}" target="_blank" rel="noopener">View photo ↗</a>`:'Not sent'}</dd>
+        ${v.reason?`<dt>Reason</dt><dd>${esc(v.reason)}</dd>`:''}${v.reviewer?`<dt>Checked by</dt><dd>${esc(v.reviewer)}</dd>`:''}</dl>
+      <div class="acts">${v.status!=='verified'?`<button class="btn primary sm" type="button" data-vapprove="${v.member_id}">✓ Approve</button>`:''}<button class="btn ghost sm" type="button" data-vreject="${v.member_id}">${v.status==='verified'?'Remove badge':'✕ Reject'}</button></div></div>`).join('')
+      :'<p style="font-size:13px;color:var(--mute)">No requests yet. Doctors send them from their account page.</p>'}`;
+  sec.querySelectorAll('[data-vapprove]').forEach(b=>b.onclick=async()=>{if(!confirm('Approve? Only do this after you found this registration number on the official register.'))return;
+    try{await api('/api/verify/decide',{member_id:+b.dataset.vapprove,approve:true});renderVerifyQueue()}catch(e){alert(e.message)}});
+  sec.querySelectorAll('[data-vreject]').forEach(b=>b.onclick=async()=>{const r=prompt('Reason (the doctor sees this), e.g. "Registration number not found on the NMC register"');if(r==null)return;
+    try{await api('/api/verify/decide',{member_id:+b.dataset.vreject,approve:false,reason:r});renderVerifyQueue()}catch(e){alert(e.message)}})}
 // doctor's own work photos (account page)
 async function renderGallery(){const box=$('#galBox');if(!box||!MEM.listing)return;let d;try{d=await mpost('reviews',{listing_id:MEM.listing.id})}catch(e){box.innerHTML='<p class="red">'+esc(e.message)+'</p>';return}
   box.innerHTML=`<p style="color:var(--mute);font-size:13.5px">Show patients your clinic, equipment, certificates or results (with your patients' permission, and no faces or private details). Up to 12 photos.</p>

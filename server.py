@@ -371,6 +371,9 @@ CREATE INDEX IF NOT EXISTS notif_member ON notifs(member_id, id);
 CREATE TABLE IF NOT EXISTS videos(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, member_id INTEGER NOT NULL,
   kind TEXT NOT NULL, caption TEXT, status TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS video_listing ON videos(listing_id, status);
+CREATE TABLE IF NOT EXISTS verifications(member_id INTEGER PRIMARY KEY, listing_id INTEGER, reg_no TEXT NOT NULL, council TEXT NOT NULL,
+  reg_year INTEGER NOT NULL, qualification TEXT NOT NULL, cert INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, reason TEXT,
+  submitted INTEGER NOT NULL, reviewed INTEGER, reviewer TEXT);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
 
@@ -613,6 +616,7 @@ def snapshot(conn, user=None):
             rows = conn.execute("SELECT * FROM appointments ORDER BY date, time")
             data["users"] = [dict(r) for r in conn.execute(
                 "SELECT id, email, name, role, doctor_id, created FROM users ORDER BY created")]
+            data["verify_pending"] = conn.execute("SELECT COUNT(*) FROM verifications WHERE status='pending'").fetchone()[0]
         else:
             rows = conn.execute("SELECT * FROM appointments WHERE doc=? ORDER BY date, time", (user["doctor_id"],))
         data["appointments"] = [dict(r) for r in rows]
@@ -787,7 +791,8 @@ def public_listings(conn):
         "(SELECT COUNT(*) FROM favs f WHERE f.listing_id = l.id) AS followers, "
         "(SELECT ROUND(AVG(stars), 1) FROM reviews r WHERE r.listing_id = l.id) AS rating, "
         "(SELECT COUNT(*) FROM reviews r WHERE r.listing_id = l.id) AS reviews, "
-        "(SELECT COUNT(*) FROM gallery g WHERE g.listing_id = l.id) AS photos "
+        "(SELECT COUNT(*) FROM gallery g WHERE g.listing_id = l.id) AS photos, "
+        "(SELECT COUNT(*) FROM verifications v WHERE v.listing_id = l.id AND v.status = 'verified') AS verified "
         "FROM listings l LEFT JOIN members m ON m.id = l.owner ORDER BY l.ts")
     out = []
     for r in rows:
@@ -796,6 +801,7 @@ def public_listings(conn):
         d["online"] = bool(d.pop("m_online")) and (seen or 0) > cutoff
         d["last_seen"] = seen or None
         d["video"] = bool(d["video"])
+        d["verified"] = bool(d.get("verified"))
         try:
             d["social"] = json.loads(d.get("social") or "{}")
         except ValueError:
@@ -852,7 +858,10 @@ def member_state(conn, me):
                             "ts": last["ts"], "mine": last["from_id"] == me["id"], "unread": unread})
     has_pw = (conn.execute("SELECT pw FROM members WHERE id=?", (me["id"],)).fetchone() or {"pw": "!"})["pw"] != "!"
     notif_unread = conn.execute("SELECT COUNT(*) FROM notifs WHERE member_id=? AND seen=0", (me["id"],)).fetchone()[0]
+    ver = conn.execute("SELECT reg_no, council, reg_year, qualification, cert, status, reason, submitted, reviewed FROM verifications "
+                       "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
+            "verification": dict(ver) if ver else None,
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"])) if lst else None}
 
@@ -1149,6 +1158,8 @@ def m_delete_account(conn, d, me, ip):
         video_file(v["id"], v["mime"]).unlink(missing_ok=True)
         conn.execute("DELETE FROM videos WHERE id=?", (v["id"],))
     conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
+    (VERIFY_DIR / f"{mid}.jpg").unlink(missing_ok=True)
     for (lid,) in conn.execute("SELECT id FROM listings WHERE owner=?", (mid,)).fetchall():
         for (gid,) in conn.execute("SELECT id FROM gallery WHERE listing_id=?", (lid,)).fetchall():
             (GALLERY_DIR / f"{gid}.jpg").unlink(missing_ok=True)
@@ -1222,6 +1233,93 @@ def m_password(conn, d, me, ip):
     return {"changed": True}
 
 
+
+
+# ---------------------------------------------------------------- doctor verification (registration checked by the clinic admin)
+# Details and the certificate photo are private: only the doctor and the Clinora admin see them. The public sees a ✓ badge.
+COUNCILS = ["National Medical Commission (NMC)", "Dental Council of India (DCI)", "Andhra Pradesh Medical Council", "Arunachal Pradesh Medical Council",
+            "Assam Medical Council", "Bihar Medical Council", "Chhattisgarh Medical Council", "Delhi Medical Council", "Goa Medical Council",
+            "Gujarat Medical Council", "Haryana Medical Council", "Himachal Pradesh Medical Council", "Jammu & Kashmir Medical Council",
+            "Jharkhand Medical Council", "Karnataka Medical Council", "Kerala (Travancore-Cochin) Medical Council", "Madhya Pradesh Medical Council",
+            "Maharashtra Medical Council", "Manipur Medical Council", "Meghalaya Medical Council", "Mizoram Medical Council", "Nagaland Medical Council",
+            "Odisha Council of Medical Registration", "Punjab Medical Council", "Rajasthan Medical Council", "Sikkim Medical Council",
+            "Tamil Nadu Medical Council", "Telangana State Medical Council", "Tripura State Medical Council", "Uttar Pradesh Medical Council",
+            "Uttarakhand Medical Council", "West Bengal Medical Council", "State Dental Council", "Medical council outside India"]
+VERIFY_DIR = DATA_DIR / "verify"
+REG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/ .-]{1,29}$")
+
+
+def m_verify_submit(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    reg = str(d.get("reg_no") or "").strip()
+    if not REG_RE.match(reg):
+        raise InputError("Enter your registration number as it appears on your certificate")
+    council = str(d.get("council") or "")
+    if council not in COUNCILS:
+        raise InputError("Please choose your medical council")
+    try:
+        year = int(d.get("reg_year"))
+    except (TypeError, ValueError):
+        year = 0
+    if not 1950 <= year <= datetime.date.today().year:
+        raise InputError("Please enter the year you were registered")
+    qual = text(d, "qualification", 80)
+    if not d.get("confirm"):
+        raise InputError("Please confirm the details are true")
+    if too_many("verify", str(me["id"]), 6, 86400):
+        raise AuthError("Too many requests today. Please try again tomorrow.", 429)
+    old = conn.execute("SELECT cert FROM verifications WHERE member_id=?", (me["id"],)).fetchone()
+    cert = 1 if old and old["cert"] else 0
+    img = str(d.get("certificate") or "")
+    if img:
+        prefix = "data:image/jpeg;base64,"
+        try:
+            raw = base64.b64decode(img[len(prefix):], validate=True) if img.startswith(prefix) else b""
+        except ValueError:
+            raw = b""
+        if not raw.startswith(b"\xff\xd8\xff") or len(raw) > 1_200_000:
+            raise InputError("That certificate photo could not be used. Try another one.")
+        VERIFY_DIR.mkdir(parents=True, exist_ok=True)
+        (VERIFY_DIR / f"{me['id']}.jpg").write_bytes(raw)
+        cert = 1
+    conn.execute("INSERT INTO verifications(member_id, listing_id, reg_no, council, reg_year, qualification, cert, status, submitted) "
+                 "VALUES(?,?,?,?,?,?,?,'pending',?) ON CONFLICT(member_id) DO UPDATE SET listing_id=excluded.listing_id, reg_no=excluded.reg_no, "
+                 "council=excluded.council, reg_year=excluded.reg_year, qualification=excluded.qualification, cert=excluded.cert, "
+                 "status='pending', reason=NULL, submitted=excluded.submitted, reviewed=NULL, reviewer=NULL",
+                 (me["id"], lst["id"], reg, council, year, qual, cert, now_ms()))
+    notify(conn, me["id"], "security", "Verification request received",
+           "We'll check your registration and tell you here. This usually takes 1 to 2 working days.", "account")
+
+
+def verify_queue(conn, d, user):
+    need_admin(user)
+    rows = conn.execute("SELECT v.*, m.name AS doctor, m.email, l.name AS listing_name, l.city, l.spec FROM verifications v "
+                        "JOIN members m ON m.id = v.member_id LEFT JOIN listings l ON l.id = v.listing_id "
+                        "ORDER BY CASE v.status WHEN 'pending' THEN 0 ELSE 1 END, v.submitted DESC LIMIT 100")
+    return {"verifications": [dict(r) for r in rows], "councils": COUNCILS}
+
+
+def verify_decide(conn, d, user):
+    need_admin(user)
+    mid = int(d.get("member_id") or 0)
+    v = conn.execute("SELECT * FROM verifications WHERE member_id=?", (mid,)).fetchone()
+    if not v:
+        raise InputError("Request not found")
+    if d.get("approve"):
+        conn.execute("UPDATE verifications SET status='verified', reason=NULL, reviewed=?, reviewer=? WHERE member_id=?",
+                     (now_ms(), user["name"], mid))
+        notify(conn, mid, "security", "✅ You are verified!", "Patients now see a Verified badge on your profile.", "account")
+    else:
+        reason = str(d.get("reason") or "").strip()[:200]
+        if len(reason) < 5:
+            raise InputError("Please write the reason, so the doctor can fix it")
+        conn.execute("UPDATE verifications SET status='rejected', reason=?, reviewed=?, reviewer=? WHERE member_id=?",
+                     (reason, now_ms(), user["name"], mid))
+        notify(conn, mid, "security", "Verification not approved yet", reason, "account")
+    return verify_queue(conn, d, user)
 
 # ---------------------------------------------------------------- forgot password: a one-time link by email
 # Email is sent with any SMTP service (Brevo, Gmail app password, Resend, Zoho...). See docs/email-setup.md.
@@ -1507,7 +1605,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
                  "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete,
-                 "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete}
+                 "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete,
+                 "/api/m/verify/submit": m_verify_submit}
 
 
 
@@ -2098,6 +2197,8 @@ ROUTES = {
     "/api/pay/mark_cash": pay_mark_cash,
     "/api/pay/refund": pay_refund,
     "/api/reset": reset_demo,
+    "/api/verify/list": verify_queue,
+    "/api/verify/decide": verify_decide,
 }
 
 
@@ -2341,6 +2442,20 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(200, links)
         if path_only.startswith("/api/m/avatar/"):
             return self.send_avatar(path_only.rsplit("/", 1)[1])
+        if path_only.startswith("/api/verify/cert/") and path_only.rsplit("/", 1)[1].isdigit():
+            with connect() as conn:
+                user = user_for_token(conn, self.session_token())
+            f = VERIFY_DIR / f"{int(path_only.rsplit('/', 1)[1])}.jpg"
+            if not user or user["role"] != "admin" or not f.is_file():
+                return self.send_json(404, {"error": "not found"})
+            body = f.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path_only.startswith("/api/m/video/") and path_only.rsplit("/", 1)[1].isdigit():
             return self.send_video(int(path_only.rsplit("/", 1)[1]))
         m = re.fullmatch(r"/api/m/oauth/(facebook|x)/(start|callback)", path_only)
@@ -2652,7 +2767,7 @@ class Handler(SimpleHTTPRequestHandler):
     def member(self, path):
         ip = self.client_ip()
         try:
-            data = self.read_json(1_300_000 if path == "/api/m/gallery/add" else 450_000 if path == "/api/m/photo" else 10_000)
+            data = self.read_json(1_700_000 if path in ("/api/m/gallery/add", "/api/m/verify/submit") else 450_000 if path == "/api/m/photo" else 10_000)
             if not isinstance(data, dict):
                 raise InputError("Bad request")
             with DB_LOCK, connect() as conn:
