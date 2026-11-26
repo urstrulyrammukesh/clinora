@@ -60,10 +60,21 @@ def cross(w, l, z0, z1):
     return tris
 
 
+def tilt(v, ax=-50, az=25):
+    """Rotate a point so viewers that look straight at the model see it from a 3/4 angle."""
+    x, y, z = v
+    c, s = math.cos(math.radians(az)), math.sin(math.radians(az))
+    x, y = x * c - y * s, x * s + y * c
+    c, s = math.cos(math.radians(ax)), math.sin(math.radians(ax))
+    y, z = y * c - z * s, y * s + z * c
+    return (x, y, z)
+
+
 def build():
     tris = []
     tris += prism(rounded_square(20, 7), 0, 3)          # the app-icon tile
     tris += cross(11, 15, 1.5, 14)                       # the raised medical cross, sunk 1.5 into the tile
+    tris = [tuple(tilt(v) for v in tri) for tri in tris]   # open at a 3/4 angle in viewers
     lines = ["solid clinora_logo"]
     for a, b, c in tris:
         n = norm(a, b, c)
