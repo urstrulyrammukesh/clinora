@@ -22,6 +22,10 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clinora","applicationCategory":"HealthApplication","operatingSystem":"Web, Android","description":"Find doctors and hospitals near you, book visits and video consultations, AI health assistant, food scan and free medical books.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <style>
+.skip{position:absolute;left:-999px;top:8px;z-index:100000;background:#0d9488;color:#fff;padding:10px 16px;border-radius:10px;font-weight:700;text-decoration:none}
+.skip:focus{left:8px}
+:focus-visible{outline:3px solid #38bdf8!important;outline-offset:2px!important;border-radius:6px}
+#app-main:focus{outline:none}
 :root{
   --bg:#06080b;--panel:#0c1015;--panel2:#11161d;--line:#1c242e;--text:#e9eff3;--mute:#8693a0;
   --h:170;--teal:hsl(var(--h),78%,50%);--teal2:hsl(var(--h),84%,38%);--accent2:hsl(calc(var(--h) + 45),90%,64%);--accent3:hsl(calc(var(--h) + 95),85%,66%);--red:#ff3d55;--amber:#ffb547;--green:#2ee07a;
@@ -999,7 +1003,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
 </style>
 </head>
 <body>
-<div id="ambient"></div>
+<a class="skip" href="#app-main">Skip to main content</a><div id="ambient"></div>
 <div id="pageWash"></div>
 
 <nav>
@@ -1018,7 +1022,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
       <h4>MOTION</h4><div class="fx-seg" id="fxMotion"><button data-m="0">Off</button><button data-m=".25">Low</button><button data-m=".55">Medium</button><button data-m="1">High</button></div>
       <h4>COLOURS</h4><div class="fx-row"><span>Change colours while scrolling &amp; per tab</span><button class="sw" id="fxColors"></button></div>
       <div id="fxHueBox" style="margin-top:10px"><div class="fx-row" style="margin-bottom:6px"><span>Main colour</span><span id="fxHueDot" style="width:18px;height:18px;border-radius:50%;background:var(--teal)"></span></div>
-        <input type="range" id="fxHue" min="0" max="359"><div class="hue-bar"></div></div>
+        <input type="range" id="fxHue" min="0" max="359" aria-label="Main colour"><div class="hue-bar"></div></div>
       <h4>FONT</h4><div class="fx-fonts" id="fxFonts">
         <button data-f="modern" style="font-family:-apple-system,Segoe UI,Roboto,sans-serif">Modern</button>
         <button data-f="rounded" style="font-family:ui-rounded,SF Pro Rounded,sans-serif">Rounded</button>
@@ -1035,6 +1039,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
 </nav>
 
 <!-- ================= HOME ================= -->
+<div id="app-main" tabindex="-1"></div>
 <div class="view" id="v-home">
   <header class="hero">
     <div class="grid-bg"></div>
@@ -1176,7 +1181,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
     <form class="card dir-search" id="dirForm">
       <input id="dirName" placeholder="Name (optional), e.g. St Mary's, Apollo, Mayo…">
       <input id="dirCity" placeholder="City, country or PIN / ZIP code, e.g. Dubai or 110001" required>
-      <select id="dirType"><option value="hospital">🏥 Hospitals</option><option value="clinic">Clinics</option><option value="doctors">👨‍⚕️ Doctors</option><option value="dentist">🦷 Dentists</option><option value="pharmacy">💊 Pharmacies</option><option value="laboratory">🧪 Labs &amp; diagnostics</option><option value="university">🎓 Universities &amp; colleges</option></select>
+      <select id="dirType" aria-label="Type of place"><option value="hospital">🏥 Hospitals</option><option value="clinic">Clinics</option><option value="doctors">👨‍⚕️ Doctors</option><option value="dentist">🦷 Dentists</option><option value="pharmacy">💊 Pharmacies</option><option value="laboratory">🧪 Labs &amp; diagnostics</option><option value="university">🎓 Universities &amp; colleges</option></select>
       <button class="btn primary sm" type="submit">🔍 Search</button>
     </form>
     <div class="cities" id="cityChips"><button class="chip" type="button" id="dirNear">📍 Near me</button><span>POPULAR</span></div>
@@ -1337,8 +1342,8 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
       <div class="card" style="overflow:auto">
         <div class="tbl-head"><h3>Appointments</h3>
           <div style="display:flex;gap:8px">
-            <select id="fDay"><option value="upcoming">Upcoming</option><option value="today">Today</option><option value="all">All</option></select>
-            <select id="fDoc"><option value="">All doctors</option></select>
+            <select id="fDay" aria-label="Filter by day"><option value="upcoming">Upcoming</option><option value="today">Today</option><option value="all">All</option></select>
+            <select id="fDoc" aria-label="Filter by doctor"><option value="">All doctors</option></select>
           </div></div>
         <table><thead><tr><th>ID</th><th>PATIENT</th><th>DOCTOR</th><th>DATE · TIME</th><th>TYPE</th><th>PAYMENT</th><th>SOURCE</th><th>STATUS</th></tr></thead><tbody id="tbody"></tbody></table>
         <div class="empty" id="tEmpty" style="display:none">No appointments yet. Use 💬 Ask AI to make one.</div>
@@ -1836,8 +1841,8 @@ function renderTeam(admin){
   if(!$('#teamForm')){sec.innerHTML=`<h4>👥 TEAM LOGINS</h4>${list}
     <form id="teamForm"><b style="font-size:13px;margin-top:6px">Add a login</b>
       <input id="tName" placeholder="Full name" required><input id="tEmail" type="email" placeholder="Email" required autocomplete="off">
-      <div class="two"><select id="tRole"><option value="doctor">Doctor</option><option value="admin">Admin</option></select>
-        <select id="tDoc">${DOCS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select></div>
+      <div class="two"><select id="tRole" aria-label="Role"><option value="doctor">Doctor</option><option value="admin">Admin</option></select>
+        <select id="tDoc" aria-label="Doctor">${DOCS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('')}</select></div>
       <input id="tPw" type="password" placeholder="Temporary password (10+ characters)" minlength="10" required autocomplete="new-password">
       <button class="btn primary sm" type="submit">Create login</button><div class="msgline" id="tMsg"></div>
       <small style="color:var(--mute);font-size:11.5px">Share the email and temporary password privately. They can change it after logging in.</small></form>`;
@@ -1858,7 +1863,8 @@ function renderDash(){
   $('#sChats').textContent=(DB.stats||{}).chats||0;
   $('#sCx').textContent=list.filter(a=>a.status==='No-show'||a.status==='Cancelled').length;
   const al=DB.alerts||[];$('#sAl').textContent=al.length;$('#sRev').textContent=money(list.filter(a=>a.pay_status==='paid').reduce((s,a)=>s+(a.amount||0),0),'usd');
-  $$('[data-live]').forEach(b=>b.classList.toggle('on',!!l[b.dataset.live]));
+  $$('[data-live]').forEach(b=>{const on=!!l[b.dataset.live];b.classList.toggle('on',on);b.setAttribute('role','switch');b.setAttribute('aria-checked',String(on));
+    if(!b.getAttribute('aria-label'))b.setAttribute('aria-label',((((b.closest('.tog')||{}).firstElementChild||{}).firstChild||{}).textContent||'Available').trim())});
   $('#alerts').innerHTML=al.length?al.map(a=>`<div class="alert-item">"${esc(a.text)}"<small>${esc(a.src)} · ${new Date(a.ts).toLocaleString(undefined,{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})} · staff to call back</small></div>`).join(''):'<div class="empty" style="padding:0">No alerts. ✅</div>';
   const fd=$('#fDay').value,fdoc=$('#fDoc').value;
   let rows=list.filter(a=>(fd==='all'||(fd==='today'?a.date===t:a.date>=t))&&(!fdoc||a.doc===fdoc));
@@ -1871,7 +1877,7 @@ function renderDash(){
       ${(a.pay_status||'unpaid')==='unpaid'&&a.status!=='Cancelled'?`<button class="mini ghost" data-cash="${a.id}">Mark paid (cash)</button> <button class="mini ghost" data-copy="${esc(payLink(a.id,a.pay_token||''))}">Copy pay link</button>`:''}
       ${DB.me&&DB.me.role==='admin'&&['paid','refund_due'].includes(a.pay_status)?`<button class="mini ghost" data-refund="${a.id}">Refund</button>`:''}</td>
     <td><span class="src" style="color:${SRCC[a.src]};border-color:${SRCC[a.src]}">${a.src}</span></td>
-    <td><select data-id="${a.id}">${STAT.map(s=>`<option ${s===a.status?'selected':''}>${s}</option>`).join('')}</select></td></tr>`}).join('');
+    <td><select data-id="${a.id}" aria-label="Status for booking ${a.id}">${STAT.map(s=>`<option ${s===a.status?'selected':''}>${s}</option>`).join('')}</select></td></tr>`}).join('');
   $$('#tbody select').forEach(s=>s.onchange=()=>api('/api/appointments/status',{id:s.dataset.id,status:s.value}).catch(e=>{alert(e.message);renderDash()}));
   if(freshIds.size)setTimeout(()=>freshIds.clear(),2500);
 }
@@ -2776,8 +2782,8 @@ function hoursEditor(id,h){const st=parseHours(h);const r2=st.r[1]||['17:00','21
   return `<div class="hed" id="${id}" data-mode="${st.mode}"><label>ONLINE HOURS (LIKE WHATSAPP BUSINESS)</label>
     <div class="seg3"><button type="button" data-hm="set">Set hours</button><button type="button" data-hm="24">24 hours</button><button type="button" data-hm="none">Not set</button></div>
     <div class="hed-set"><div class="hed-days">${DAYS.map(([k,l],i)=>`<button type="button" data-d="${i}" class="${st.days.includes(i)?'on':''}">${l}</button>`).join('')}</div>
-      <div class="hed-row"><span>From</span><input type="time" data-t="a1" value="${st.r[0][0]}"><span>to</span><input type="time" data-t="b1" value="${st.r[0][1]}"></div>
-      <div class="hed-row hed-2" ${st.r[1]?'':'hidden'}><span>And</span><input type="time" data-t="a2" value="${r2[0]}"><span>to</span><input type="time" data-t="b2" value="${r2[1]}"><button type="button" class="hed-x" aria-label="Remove second slot">✕</button></div>
+      <div class="hed-row"><span>From</span><input type="time" aria-label="From" data-t="a1" value="${st.r[0][0]}"><span>to</span><input type="time" aria-label="To" data-t="b1" value="${st.r[0][1]}"></div>
+      <div class="hed-row hed-2" ${st.r[1]?'':'hidden'}><span>And</span><input type="time" aria-label="From (second time)" data-t="a2" value="${r2[0]}"><span>to</span><input type="time" aria-label="To (second time)" data-t="b2" value="${r2[1]}"><button type="button" class="hed-x" aria-label="Remove second slot">✕</button></div>
       <button type="button" class="hed-add" ${st.r[1]?'hidden':''}>+ Add a second time slot (e.g. evening)</button></div>
     <div class="hed-prev"></div></div>`}
 function readHours(id){const el=$('#'+id);if(!el)return {hours:'',tz:''};const mode=el.dataset.mode;const tz=myTZ||'';
@@ -3379,6 +3385,16 @@ async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin
       <div><b>Top cities</b>${s.cities.length?s.cities.map(c=>`<div>${esc(c.city)} <span style="color:var(--mute)">· ${c.n}</span></div>`).join(''):'<div style="color:var(--mute)">No data yet</div>'}</div></div>
     <p style="font-size:12px;color:var(--mute);margin-top:8px">Bars: the last 8 weeks, newest on the right. Only counts, no private details.</p>`;
   $('#stReload').onclick=()=>renderStats()}
+
+/* ================= ACCESSIBILITY: names for form fields ================= */
+// Many forms use <label>TEXT</label><input>. This links each label to its field (and gives placeholder-only
+// fields a name), so screen readers say what every box is for.
+(()=>{let pend=0,n=0;const fix=()=>{pend=0;
+  document.querySelectorAll('label:not([for])').forEach(l=>{if(l.querySelector('input,select,textarea'))return;const c=l.nextElementSibling;
+    if(c&&/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName)){if(!c.id)c.id='f'+(++n)+'_'+Math.random().toString(36).slice(2,6);l.htmlFor=c.id}});
+  document.querySelectorAll('input:not([type=hidden]):not([aria-label]),select:not([aria-label]),textarea:not([aria-label])').forEach(c=>{
+    if((c.labels&&c.labels.length)||c.closest('label'))return;const ph=c.getAttribute('placeholder');if(ph)c.setAttribute('aria-label',ph)});};
+  new MutationObserver(()=>{if(!pend)pend=setTimeout(fix,250)}).observe(document.body,{childList:true,subtree:true});fix()})();
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}

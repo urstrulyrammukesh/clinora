@@ -72,6 +72,7 @@ Without the code nobody can create this account, so a stranger can't take over y
 | Feature | Guide | Notes |
 |---|---|---|
 | Cloud copy of backups | `docs/backups.md` | **Do this in week 1.** Free on Cloudflare R2. |
+| Uptime alerts | `docs/uptime.md` | Free. Emails you within 5 minutes if the site goes down. |
 | Login with Google / Facebook / X | `docs/social-login.md` | Needs the real https address. |
 | Payments | the comments at the top of `server.py` | Start with **test keys**, try a payment, then switch to **live** keys. |
 
