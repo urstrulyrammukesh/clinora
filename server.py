@@ -474,8 +474,11 @@ def init_db():
             conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE members SET email_ok=1")
         conn.executescript(EXTRA_SCHEMA)
-        if "ref" not in {r["name"] for r in conn.execute("PRAGMA table_info(reminders)")}:
+        rcols = {r["name"] for r in conn.execute("PRAGMA table_info(reminders)")}
+        if "ref" not in rcols:
             conn.execute("ALTER TABLE reminders ADD COLUMN ref TEXT")
+        if "until" not in rcols:
+            conn.execute("ALTER TABLE reminders ADD COLUMN until TEXT")
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
         for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0"), ("booking", "TEXT")]:
             if col not in lcols:
@@ -1236,8 +1239,11 @@ def reminder_next(r, after_ms):
         ms = int((datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=zone) - lead).timestamp() * 1000)
         return ms if ms > after_ms else None
     start = datetime.datetime.fromtimestamp(after_ms / 1000, zone).date() - datetime.timedelta(days=1)
+    until = r.get("until") if isinstance(r, dict) else (r["until"] if "until" in r.keys() else None)
     for i in range(10):
         day = start + datetime.timedelta(days=i)
+        if until and day.isoformat() > until:
+            return None  # the course is finished
         if r["days"] & (1 << day.weekday()):  # bit 0 = Monday … bit 6 = Sunday
             ms = int((datetime.datetime(day.year, day.month, day.day, h, m, tzinfo=zone) - lead).timestamp() * 1000)
             if ms > after_ms:
@@ -1246,7 +1252,7 @@ def reminder_next(r, after_ms):
 
 
 def reminder_list(conn, mid):
-    return [dict(r) for r in conn.execute("SELECT id, kind, title, note, at, days, date, tz, lead, email, active, next_at, last_sent "
+    return [dict(r) for r in conn.execute("SELECT id, kind, title, note, at, days, date, tz, lead, email, active, next_at, last_sent, until "
                                           "FROM reminders WHERE member_id=? ORDER BY active DESC, COALESCE(next_at, 9e15), id", (mid,))]
 
 
@@ -1281,15 +1287,18 @@ def m_reminder_save(conn, d, me):
     lead = int(d.get("lead") or 0)
     if not 0 <= lead <= 7 * 1440:
         raise InputError("Reminder can be at most a week before")
-    r = {"at": at, "days": days, "date": date, "tz": tz, "lead": lead}
+    until = str(d.get("until") or "") or None
+    if until and (not days or not DATE_RE.match(until)):
+        raise InputError("Check the end date")
+    r = {"at": at, "days": days, "date": date, "tz": tz, "lead": lead, "until": until}
     nxt = reminder_next(r, now_ms())
     if nxt is None:
         raise InputError("That time has already passed. Pick a time in the future.")
-    vals = (kind, title, text(d, "note", 200, False), at, days, date, tz, lead, 1 if d.get("email") else 0, nxt)
+    vals = (kind, title, text(d, "note", 200, False), at, days, date, tz, lead, 1 if d.get("email") else 0, nxt, until)
     if rid:
-        conn.execute("UPDATE reminders SET kind=?,title=?,note=?,at=?,days=?,date=?,tz=?,lead=?,email=?,next_at=?,active=1 WHERE id=?", vals + (rid,))
+        conn.execute("UPDATE reminders SET kind=?,title=?,note=?,at=?,days=?,date=?,tz=?,lead=?,email=?,next_at=?,until=?,active=1 WHERE id=?", vals + (rid,))
     else:
-        rid = conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,member_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        rid = conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,until,member_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            vals + (me["id"], now_ms())).lastrowid
     return {"id": rid, "next_at": nxt}
 
@@ -2901,6 +2910,68 @@ def food_scan(d, ip):
     except ValueError:
         raise InputError("The check didn't finish. Please try again.")
 
+# ---------------------------------------------------------------- prescription photo -> medicine reminders
+RX_SYSTEM = """You read photos of medical prescriptions (handwritten or printed, from any country) for Clinora, a health website, so the patient can set medicine reminders.
+
+Rules:
+- Only list medicines you can actually read on the paper. Never guess a medicine name: if a word is unclear, write what you see and say in "note" that it was hard to read.
+- Turn dosing into clock times in 24-hour HH:MM: once daily/OD -> 09:00; twice/BD/BID -> 09:00 and 21:00; three times/TDS/TID -> 08:00, 14:00, 20:00; four times/QID -> 08:00, 12:00, 16:00, 20:00; at night/HS/bedtime -> 22:00; morning-afternoon-night codes like 1-0-1 or 1-1-1 -> 08:00, 14:00, 21:00 for each 1; SOS/PRN/as needed -> no times.
+- "days" = length of the course if written (e.g. "x 5 days" -> 5), otherwise 0.
+- "food": before / after / with / any, as written (AC = before, PC = after).
+- Do not give medical advice and do not change doses. Put anything important (e.g. "taper", "stop if rash") in "note".
+- If the photo is not a prescription or can't be read, set readable=false and explain in "warning" in one short sentence.
+- Write the warning and notes in the requested language."""
+RX_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "readable": {"type": "boolean"},
+        "warning": {"type": "string"},
+        "medicines": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {"name": {"type": "string"}, "strength": {"type": "string"}, "dose": {"type": "string"},
+                           "times": {"type": "array", "items": {"type": "string"}}, "days": {"type": "integer"},
+                           "food": {"type": "string", "enum": ["before", "after", "with", "any"]}, "note": {"type": "string"}},
+            "required": ["name", "strength", "dose", "times", "days", "food", "note"]}}},
+    "required": ["readable", "warning", "medicines"]}
+
+
+def rx_scan(d, ip):
+    if client is None:
+        print("[AI] Prescription scan unavailable: no ANTHROPIC_API_KEY in .env", flush=True)
+        raise InputError("Prescription reading is resting right now. Please add reminders by hand, or try later.")
+    if too_many("rx", ip, 20, 3600):
+        raise AuthError("You've scanned a lot this hour. Please try again a little later.", 429)
+    prefix = "data:image/jpeg;base64,"
+    data = str(d.get("image") or "")
+    if not data.startswith(prefix):
+        raise InputError("Please take or choose a photo of the prescription")
+    try:
+        raw = base64.b64decode(data[len(prefix):], validate=True)
+    except ValueError:
+        raise InputError("That photo could not be read")
+    if len(raw) > MAX_FOOD_PHOTO or not raw.startswith(b"\xff\xd8\xff"):
+        raise InputError("That photo could not be used. Try another one.")
+    response = client.beta.messages.create(
+        model=MODEL, max_tokens=4000, system=RX_SYSTEM,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": data[len(prefix):]}},
+            {"type": "text", "text": "Read this prescription and list the medicines with reminder times. Reply language: "
+             + str(d.get("lang") or "English")[:40]}]}],
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": RX_SCHEMA}},
+        betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+    if response.stop_reason == "refusal":
+        raise InputError("Sorry, this photo can't be read. Try a clearer photo of the prescription.")
+    txt = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
+    try:
+        out = json.loads(txt)
+    except ValueError:
+        raise InputError("Reading didn't finish. Please try again.")
+    for m in out.get("medicines", []):  # keep only valid clock times and sane course lengths
+        m["times"] = [x for x in m.get("times", []) if HHMM_RE.match(str(x))][:6]
+        m["days"] = max(0, min(int(m.get("days") or 0), 365))
+    return out
+
+
 # ---------------------------------------------------------------- doctors on university & institute websites (AI + web search)
 UNI_SYSTEM = """You find medical doctors listed on the official websites of universities, medical colleges, institutes and their hospitals or health centres (for example AIIMS, PGIMER, JIPMER, CMC Vellore, IIT and NIT hospitals / health centres, university medical schools anywhere in the world).
 
@@ -3785,6 +3856,19 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
                 return self.send_json(e.status, {"error": str(e)})
+        if path == "/api/rxscan":
+            try:
+                data = self.read_json(2_000_000)
+                if not isinstance(data, dict):
+                    raise InputError("Bad request")
+                return self.send_json(200, rx_scan(data, self.client_ip()))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+            except Exception as e:
+                print("Prescription scan error:", repr(e)[:300], flush=True)
+                return self.send_json(502, {"error": "Prescription reading is busy. Please try again."})
         if path == "/api/foodscan":
             try:
                 data = self.read_json(7_000_000)

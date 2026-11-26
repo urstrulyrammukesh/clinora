@@ -3229,8 +3229,10 @@ function remNext(r){if(!r.active||!r.next_at)return r.days?'Paused':'Done';const
 function remCard(){const R=MEM.reminders||[];const perm=('Notification' in window)?Notification.permission:'unsupported';
   return `<details class="card pw-card" id="remCard" ${window.__openRem?'open':''}><summary>⏰ Reminders <span style="font-weight:400;color:var(--mute);font-size:13px">· medicines, appointments, check-ups${R.filter(r=>r.active).length?` · ${R.filter(r=>r.active).length} on`:''}</span></summary>
     ${perm==='default'?`<div style="padding:0 20px 10px"><button class="btn ghost sm" type="button" id="remPerm">🔔 Allow pop-up alerts on this device</button></div>`:perm==='denied'?`<p style="padding:0 20px;font-size:12.5px;color:var(--mute)">Pop-ups are blocked in this browser. Reminders still appear in the 🔔 bell.</p>`:''}
+    <div style="padding:0 20px 10px"><label class="btn ghost sm" style="cursor:pointer">📷 Read a prescription<input type="file" id="rxFile" accept="image/*" hidden></label>
+      <span style="font-size:12.5px;color:var(--mute);margin-left:6px">Take a photo of the prescription: we suggest reminders, you check them.</span><div id="rxBox"></div></div>
     <div class="rem-list">${R.length?R.map(r=>`<div class="rem ${r.active?'':'off'}"><span class="ic">${(REM_KINDS[r.kind]||REM_KINDS.other)[0]}</span><div><b>${esc(r.title)}</b>
-      <small>${fmtHM(r.at)} · ${remRepeat(r)}${remLead(r.lead)}${r.email?' · ✉️ email':''}</small><small>${remNext(r)}${r.note?' · '+esc(r.note):''}</small></div>
+      <small>${fmtHM(r.at)} · ${remRepeat(r)}${r.until?' · until '+bkDay(r.until):''}${remLead(r.lead)}${r.email?' · ✉️ email':''}</small><small>${remNext(r)}${r.note?' · '+esc(r.note):''}</small></div>
       <div class="acts"><button type="button" data-remtog="${r.id}" data-on="${r.active?0:1}" title="${r.active?'Pause':'Turn on'}">${r.active?'⏸':'▶️'}</button><button type="button" data-remedit="${r.id}" title="Edit">✏️</button><button type="button" data-remdel="${r.id}" title="Delete">🗑</button></div></div>`).join('')
       :'<p style="font-size:13.5px;color:var(--mute);margin:0 0 6px">No reminders yet. Add one for your medicines, an appointment, or to drink water.</p>'}</div>
     <form class="form" id="remForm"><input type="hidden" id="remId">
@@ -3240,6 +3242,7 @@ function remCard(){const R=MEM.reminders||[];const perm=('Notification' in windo
       <label>WHAT TO REMIND *</label><input id="remTitle" required maxlength="80" placeholder="e.g. Metformin 500 mg after breakfast">
       <label>REPEAT</label><div class="day-chips" id="remDays"><button type="button" data-preset="0" class="on">Once</button><button type="button" data-preset="127">Every day</button><button type="button" data-preset="31">Weekdays</button>${REM_DAYS.map((d,i)=>`<button type="button" data-bit="${i}">${d}</button>`).join('')}</div>
       <div id="remDateRow"><label>DATE</label><input id="remDate" type="date"></div>
+      <div id="remUntilRow" hidden><label>UNTIL (OPTIONAL, E.G. END OF A MEDICINE COURSE)</label><input id="remUntil" type="date"></div>
       <div class="two"><div><label>REMIND ME</label><select id="remLead"><option value="0">At that time</option><option value="10">10 min before</option><option value="30">30 min before</option><option value="60">1 hour before</option><option value="1440">1 day before</option></select></div>
         <div><label>NOTE (OPTIONAL)</label><input id="remNote" maxlength="200" placeholder="e.g. with water, 1 tablet"></div></div>
       <label class="chk"><input type="checkbox" id="remEmail"> Also email me</label>
@@ -3248,7 +3251,7 @@ function remCard(){const R=MEM.reminders||[];const perm=('Notification' in windo
       <p style="font-size:12px;color:var(--mute);margin-top:6px">Times use your time zone (${esc(remTZ())}). Reminders show in the 🔔 bell and as a pop-up while Clinora is open. Never change medicine without asking your doctor.</p></form></details>`}
 function wireReminders(){const f=$('#remForm');if(!f)return;let days=0;
   const today=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);$('#remDate').value=today;$('#remDate').min=today;
-  const paint=()=>{$$('#remDays button').forEach(b=>b.classList.toggle('on',b.dataset.preset!=null?+b.dataset.preset===days:!!(days&(1<<+b.dataset.bit))));$('#remDateRow').style.display=days?'none':''};
+  const paint=()=>{$$('#remDays button').forEach(b=>b.classList.toggle('on',b.dataset.preset!=null?+b.dataset.preset===days:!!(days&(1<<+b.dataset.bit))));$('#remDateRow').style.display=days?'none':'';const u=$('#remUntilRow');if(u)u.hidden=!days};
   $$('#remDays button').forEach(b=>b.onclick=()=>{days=b.dataset.preset!=null?+b.dataset.preset:days^(1<<+b.dataset.bit);paint()});paint();
   const p=$('#remPerm');if(p)p.onclick=async()=>{try{await Notification.requestPermission()}catch{}renderAccount();$('#remCard').open=true};
   const reset=()=>{$('#remId').value='';$('#remSave').textContent='Add reminder';$('#remCancel').style.display='none'};
@@ -3256,14 +3259,15 @@ function wireReminders(){const f=$('#remForm');if(!f)return;let days=0;
   f.onsubmit=async e=>{e.preventDefault();const m=$('#remMsg');m.textContent='Saving…';
     const who=($('#remFor')||{}).value,ttl=$('#remTitle').value.trim();
     try{await mapi('reminder/save',{id:+$('#remId').value||0,kind:$('#remKind').value,title:who&&!ttl.startsWith(who+':')?(who+': '+ttl).slice(0,80):ttl,at:$('#remAt').value,days,date:$('#remDate').value,
-        lead:+$('#remLead').value,note:$('#remNote').value.trim(),email:$('#remEmail').checked,tz:remTZ()});
+        lead:+$('#remLead').value,note:$('#remNote').value.trim(),email:$('#remEmail').checked,tz:remTZ(),until:days?(($('#remUntil')||{}).value||''):''});
       renderAccount();$('#remCard').open=true;$('#remMsg').innerHTML='<span class="teal">✅ Saved. We will remind you.</span>'}
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   $$('[data-remtog]').forEach(b=>b.onclick=async()=>{try{await mapi('reminder/toggle',{id:+b.dataset.remtog,on:b.dataset.on==='1'});renderAccount();$('#remCard').open=true}catch(e){alert(e.message)}});
   $$('[data-remdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this reminder?'))return;try{await mapi('reminder/delete',{id:+b.dataset.remdel});renderAccount();$('#remCard').open=true}catch(e){alert(e.message)}});
   $$('[data-remedit]').forEach(b=>b.onclick=()=>{const r=(MEM.reminders||[]).find(x=>x.id===+b.dataset.remedit);if(!r)return;
     $('#remId').value=r.id;$('#remKind').value=r.kind;$('#remAt').value=r.at;$('#remTitle').value=r.title;$('#remNote').value=r.note||'';$('#remLead').value=String(r.lead);
-    $('#remEmail').checked=!!r.email;days=r.days;if(r.date)$('#remDate').value=r.date;paint();$('#remSave').textContent='Save changes';$('#remCancel').style.display='';f.scrollIntoView({block:'center'})});
+    $('#remEmail').checked=!!r.email;days=r.days;if(r.date)$('#remDate').value=r.date;if($('#remUntil'))$('#remUntil').value=r.until||'';paint();$('#remSave').textContent='Save changes';$('#remCancel').style.display='';f.scrollIntoView({block:'center'})});
+  const rx=$('#rxFile');if(rx)rx.onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)rxScan(f)};
   if(window.__openRem){window.__openRem=false;setTimeout(()=>{const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}},80)}}
 // a booking made while logged in gets two reminders: a day before and an hour before
 async function apptReminders(title,date,time,note){let ok=false;
@@ -3324,6 +3328,35 @@ function wireFamily(){const f=$('#famForm');if(!f)return;
   f.onsubmit=async e=>{e.preventDefault();try{await mapi('family/save',{name:$('#famName').value.trim(),relation:$('#famRel').value,year:$('#famYear').value});renderAccount();$('#famCard').open=true}
     catch(err){$('#famMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   $$('[data-famrm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this family member? Their visits and reminders stay.'))return;try{await mapi('family/delete',{id:+b.dataset.famrm});renderAccount();$('#famCard').open=true}catch(e){alert(e.message)}})}
+
+/* ================= PRESCRIPTION PHOTO -> MEDICINE REMINDERS ================= */
+async function rxJpeg(file){const u=URL.createObjectURL(file);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read.'));i.src=u});
+  const M=2000,k=Math.min(1,M/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);let q=.85,d=c.toDataURL('image/jpeg',q);while(d.length>2_600_000&&q>.4){q-=.1;d=c.toDataURL('image/jpeg',q)}return d}
+const RX_FOOD={before:'before food',after:'after food',with:'with food',any:''};
+async function rxScan(file){const box=$('#rxBox');box.innerHTML='<p style="font-size:13.5px;margin:8px 0">🔍 Reading the prescription…</p>';
+  let out;try{const image=await rxJpeg(file);const r=await fetch('/api/rxscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image,lang:(document.documentElement.lang||'en')})});
+    out=await r.json();if(!r.ok||out.error)throw new Error(out.error||'Reading failed. Please try again.')}
+  catch(e){box.innerHTML=`<p class="red" style="font-size:13.5px">${esc(e.message)}</p>`;return}
+  const meds=(out.medicines||[]).filter(m=>m.name);
+  if(!out.readable||!meds.length){box.innerHTML=`<p style="font-size:13.5px">😕 ${esc(out.warning||'We could not read any medicines. Try a clearer, well-lit photo, or add reminders by hand.')}</p>`;return}
+  const fam=MEM.family||[];
+  box.innerHTML=`<div class="card" style="padding:12px 14px;margin-top:10px"><b>💊 We found ${meds.length} medicine${meds.length>1?'s':''}. Please check every line</b>
+    <p style="font-size:12.5px;color:var(--mute);margin:4px 0 8px">Handwriting can be misread. Compare with the paper and ask your doctor or pharmacist if anything is unclear. Never change a dose on your own.${out.warning?'<br>⚠️ '+esc(out.warning):''}</p>
+    ${meds.map((m,i)=>`<div class="fam" style="flex-wrap:wrap;margin-bottom:6px"><label style="display:flex;gap:8px;align-items:center;flex:1 1 100%"><input type="checkbox" data-rxon="${i}" ${m.times.length?'checked':''}> <b>${esc(m.name)}</b> ${esc([m.strength,m.dose].filter(Boolean).join(' · '))}</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;width:100%"><label>Times <input data-rxt="${i}" value="${esc(m.times.join(', '))}" placeholder="e.g. 08:00, 20:00" style="width:140px"></label>
+      <label>Days <input data-rxd="${i}" type="number" min="0" max="365" value="${m.days||''}" placeholder="ongoing" style="width:80px"></label>
+      <span style="color:var(--mute)">${esc([RX_FOOD[m.food]||'',m.note].filter(Boolean).join(' · '))}</span></div></div>`).join('')}
+    ${fam.length?`<label style="font-size:13px">For <select id="rxFor"><option value="">Me</option>${fam.map(f=>`<option>${esc(f.name)}</option>`).join('')}</select></label>`:''}
+    <div style="margin-top:8px"><button class="btn primary sm" type="button" id="rxAdd">⏰ Add these reminders</button> <span id="rxMsg" style="font-size:13px"></span></div></div>`;
+  $('#rxAdd').onclick=async()=>{const who=($('#rxFor')||{}).value;let n=0,bad=[];const today=new Date();
+    for(const [i,m] of meds.entries()){if(!document.querySelector(`[data-rxon="${i}"]`).checked)continue;
+      const times=document.querySelector(`[data-rxt="${i}"]`).value.split(/[,\s]+/).filter(Boolean);const days=+document.querySelector(`[data-rxd="${i}"]`).value||0;
+      const until=days?ymd(new Date(today.getFullYear(),today.getMonth(),today.getDate()+days-1)):'';
+      for(const at of times){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(at)){bad.push(at);continue}
+        try{await mapi('reminder/save',{kind:'medicine',title:((who?who+': ':'')+m.name+(m.strength?' '+m.strength:'')).slice(0,80),at,days:127,until,lead:0,
+          note:[m.dose,RX_FOOD[m.food],m.note].filter(Boolean).join(' · ').slice(0,200),email:false,tz:remTZ()});n++}catch(e){bad.push(m.name+': '+e.message)}}}
+    renderAccount();const c=$('#remCard');if(c){c.open=true;const b=$('#rxBox');if(b)b.innerHTML=`<p class="teal" style="font-size:13.5px">✅ Added ${n} reminder${n===1?'':'s'}.${bad.length?' Skipped: '+esc(bad.join('; ')):''}</p>`}}}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
