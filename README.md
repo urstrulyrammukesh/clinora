@@ -31,6 +31,16 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 - 🍔 **Food Scan**: photograph any food or packet label and the AI says if it's OK for you (allergies, conditions, diet), with calories and a healthier swap
 - 📚 **Bookworm**: free medical books (Open Library, Google Books, OpenStax, NCBI, WHO and more)
 
+## New for doctors and patients
+- 📅 **Book real doctors**: free slots, video or in-clinic, online payment (Razorpay Route split), automatic refunds
+- 📹 **Visit flow**: Join button for video visits, printable prescriptions, one-tap medicine reminders, review requests
+- 🎫 **Clinic queue tokens** with turn alerts and a waiting-room TV screen
+- 🏥 **Clinics with several doctors**, a **doctor dashboard** and **invite links**
+- 📁 **Encrypted health records**, shared with one doctor for one visit
+- ⏰ **Reminders** by bell, phone push, email, SMS and WhatsApp; 📷 prescription photo → reminders; 💊 cheaper generic medicines
+- 💬 **Clinora on WhatsApp**, 🎤 **voice input**, 👨‍👩‍👧 **family members**
+- 🛡️ Verified doctors, confirmed emails, report & block, daily backups, strict CSP, automatic tests
+
 ## Put it live
 Step-by-step: **[docs/go-live.md](docs/go-live.md)** (Render + your own domain, about 1–2 hours). Check readiness any time with `python server.py --check`.
 

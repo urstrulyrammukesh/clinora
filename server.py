@@ -2338,6 +2338,11 @@ def launch_check():
     social = [n for n, on in (("Google", GOOGLE_CLIENT_ID), ("Facebook", FACEBOOK_APP_ID), ("X", X_CLIENT_ID)) if on]
     line("✅" if social else "⚠️", "Social login: " + (", ".join(social) if social else "off (email login works)"), "" if social else "Optional. See docs/social-login.md")
     line("✅" if S3_ON else "⚠️", "Cloud copy of backups is on" if S3_ON else "Backups stay on the server disk only", "" if S3_ON else "Strongly recommended. See docs/backups.md")
+    rk = bool(os.environ.get("RECORDS_KEY"))
+    line("✅" if rk else "⚠️", "RECORDS_KEY is set (health records key kept outside the disk)" if rk else "Health records key is stored on the server disk",
+         "" if rk else "Set RECORDS_KEY to a random 32-byte base64 value, e.g. python3 -c \"import os,base64;print(base64.b64encode(os.urandom(32)).decode())\". Keep a copy safe; set it BEFORE the first upload.")
+    line("✅" if WA_ON else "⚠️", "WhatsApp assistant is on" if WA_ON else "WhatsApp assistant is off", "" if WA_ON else "Optional. See docs/whatsapp.md")
+    line("✅" if (SMS_ON or WA_REMINDERS_ON) else "⚠️", "SMS / WhatsApp reminders are on" if (SMS_ON or WA_REMINDERS_ON) else "SMS reminders are off", "" if (SMS_ON or WA_REMINDERS_ON) else "Optional. See docs/sms.md")
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         probe = DATA_DIR / ".write-test"
