@@ -1,5 +1,7 @@
 # ✚ Clinora
 
+[![Tests](https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml/badge.svg)](https://github.com/urstrulyrammukesh/clinora/actions/workflows/tests.yml)
+
 **AI receptionist for clinics, built for patients anywhere in the world.**
 
 Patients can chat with an AI receptionist (powered by Claude) to book in-clinic visits or video consultations, find doctors, hospitals, labs and medical colleges in any city, see who is open right now on a 3D map, pay in their own currency, and book a cab to the hospital. Clinics get a private dashboard with doctor logins.
@@ -31,6 +33,14 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 
 ## Put it live
 Step-by-step: **[docs/go-live.md](docs/go-live.md)** (Render + your own domain, about 1–2 hours). Check readiness any time with `python server.py --check`.
+
+## Tests
+The `tests/` folder starts a real Clinora server with an empty database and checks accounts, email confirmation, password reset, booking, reminders, verification, reports, blocking, push notifications, backups, statistics, security headers and the live-site safeguards.
+```bash
+pip install -r requirements.txt pytest
+pytest -q tests
+```
+GitHub runs them on every push (see the badge above).
 
 ## Run it on your computer (macOS)
 1. Double-click **`start.command`**. The first run sets everything up.
