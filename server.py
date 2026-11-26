@@ -3480,6 +3480,56 @@ def record_for_viewer(conn, rid, me):
     return None
 
 
+# ---------------------------------------------------------------- cheaper medicines: brand -> generic (Jan Aushadhi)
+# A small hand-checked list of common Indian brands; anything else is looked up by the AI (when it is on).
+# Clinora never tells anyone to switch: it shows the generic name to ask the doctor or pharmacist about.
+GENERICS = {
+    "crocin": ("Paracetamol", "500 mg / 650 mg"), "dolo": ("Paracetamol", "650 mg"), "calpol": ("Paracetamol", "500 mg"),
+    "combiflam": ("Ibuprofen + Paracetamol", "400 mg + 325 mg"), "zerodol": ("Aceclofenac", "100 mg"), "brufen": ("Ibuprofen", "400 mg"),
+    "augmentin": ("Amoxicillin + Clavulanic acid", "625 mg"), "mox": ("Amoxicillin", "500 mg"), "azithral": ("Azithromycin", "500 mg"),
+    "azee": ("Azithromycin", "500 mg"), "ciplox": ("Ciprofloxacin", "500 mg"), "taxim-o": ("Cefixime", "200 mg"),
+    "pan": ("Pantoprazole", "40 mg"), "pantocid": ("Pantoprazole", "40 mg"), "omez": ("Omeprazole", "20 mg"), "razo": ("Rabeprazole", "20 mg"),
+    "glycomet": ("Metformin", "500 mg"), "januvia": ("Sitagliptin", "100 mg"), "galvus": ("Vildagliptin", "50 mg"), "amaryl": ("Glimepiride", "1 mg / 2 mg"),
+    "telma": ("Telmisartan", "40 mg"), "amlong": ("Amlodipine", "5 mg"), "amlokind": ("Amlodipine", "5 mg"), "losar": ("Losartan", "50 mg"),
+    "atorva": ("Atorvastatin", "10 mg / 20 mg"), "rozavel": ("Rosuvastatin", "10 mg"), "ecosprin": ("Aspirin (low dose)", "75 mg"),
+    "clopilet": ("Clopidogrel", "75 mg"), "thyronorm": ("Levothyroxine", "25 / 50 / 100 mcg"), "eltroxin": ("Levothyroxine", "25 / 50 / 100 mcg"),
+    "cetzine": ("Cetirizine", "10 mg"), "allegra": ("Fexofenadine", "120 mg / 180 mg"), "montair lc": ("Montelukast + Levocetirizine", "10 mg + 5 mg"),
+    "levocet": ("Levocetirizine", "5 mg"), "shelcal": ("Calcium carbonate + Vitamin D3", "500 mg + 250 IU"), "becosules": ("Vitamin B-complex + Vitamin C", "capsule"),
+    "limcee": ("Vitamin C (Ascorbic acid)", "500 mg"), "ondem": ("Ondansetron", "4 mg"), "emeset": ("Ondansetron", "4 mg"), "digene": ("Antacid (Magnesium/Aluminium hydroxide)", "tablet / gel"),
+    "liv 52": ("Herbal liver tonic (no direct generic)", ""), "sinarest": ("Paracetamol + Phenylephrine + Chlorpheniramine", "tablet"),
+}
+MED_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["found", "generic", "strength", "note"],
+              "properties": {"found": {"type": "boolean"}, "generic": {"type": "string"}, "strength": {"type": "string"}, "note": {"type": "string"}}}
+
+
+def med_find(d, ip):
+    name = str(d.get("name") or "").strip()[:60]
+    if len(name) < 2:
+        raise InputError("Type a medicine name")
+    if too_many("med", ip, 40, 3600):
+        raise AuthError("Too many searches. Please wait a little.", 429)
+    key = re.sub(r"\s+\d.*$", "", name.lower()).strip()  # "Dolo 650" -> "dolo"
+    hit = GENERICS.get(key) or GENERICS.get(name.lower())
+    out = None
+    if hit:
+        out = {"found": True, "generic": hit[0], "strength": hit[1], "note": "", "source": "list"}
+    elif client is not None:
+        r = client.beta.messages.create(
+            model=MODEL, max_tokens=500, system="You map medicine brand names (mostly Indian) to their generic salt names. If you are not sure it is a real "
+            "medicine, set found=false. Never recommend switching; the note may say one short practical tip (e.g. 'ask for the same strength'). JSON only.",
+            messages=[{"role": "user", "content": f"Medicine: {name}"}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": MED_SCHEMA}}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        try:
+            out = dict(json.loads(next(b.text for b in r.content if getattr(b, "type", "") == "text")), source="ai")
+        except Exception:
+            out = None
+    if not out or not out.get("found"):
+        return {"found": False, "name": name}
+    q = urllib.parse.quote(out["generic"])
+    return dict(out, name=name, links={"janaushadhi": "https://janaushadhi.gov.in/KendraDetails.aspx",
+                                        "search": f"https://www.google.com/search?q={q}+Jan+Aushadhi+price"})
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -4690,6 +4740,17 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
                 return self.send_json(e.status, {"error": str(e)})
+        if path == "/api/medfind":
+            try:
+                data = self.read_json(2_000)
+                return self.send_json(200, med_find(data if isinstance(data, dict) else {}, self.client_ip()))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+            except Exception as e:
+                print("Medicine finder error:", repr(e)[:200], flush=True)
+                return self.send_json(502, {"error": "The medicine finder is busy. Please try again."})
         if path == "/api/rxscan":
             try:
                 data = self.read_json(2_000_000)

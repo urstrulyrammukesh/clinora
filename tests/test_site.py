@@ -66,3 +66,12 @@ def test_live_site_safeguards(tmp_path):
         assert c.post("/api/reset")[0] == 403
     finally:
         live.stop()
+
+
+def test_medicine_finder(server):
+    c = server.client()
+    s, j = c.post("/api/medfind", {"name": "Dolo 650"})
+    assert s == 200 and j["found"] and j["generic"] == "Paracetamol" and "janaushadhi" in j["links"]["janaushadhi"]
+    s, j = c.post("/api/medfind", {"name": "Zzyzx-unknown"})
+    assert s == 200 and j["found"] is False  # AI is off in tests: unknown names are not guessed
+    assert c.post("/api/medfind", {"name": "x"})[0] == 400

@@ -934,6 +934,7 @@ html{overflow-x:clip}
 .soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
 .pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
 .pw-card form{padding:0 20px 20px}
+.mic-btn{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:10px;padding:0 10px;cursor:pointer;font-size:16px;min-width:40px}.mic-btn.on{background:#ef4444;color:#fff;border-color:transparent;animation:remIn .8s infinite alternate}
 .st-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:10px 0}.st-tile{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
 .st-tile b{display:block;font-size:22px;line-height:1.2}.st-tile span{font-size:12px;color:var(--mute)}
 .st-charts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}.st-chart{border:1px solid var(--line);border-radius:12px;padding:10px 12px}
@@ -2907,6 +2908,9 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     ${myVisitsCard()}
     ${familyCard()}
     ${recordsCard()}
+    <details class="card pw-card" id="medCard"><summary>💊 Cheaper medicines <span style="font-weight:400;color:var(--mute);font-size:13px">· find the generic (Jan Aushadhi) name of a brand</span></summary>
+      <form class="form" id="medForm"><div style="display:flex;gap:8px"><input id="medName" required maxlength="60" placeholder="Medicine brand, e.g. Dolo 650" aria-label="Medicine brand" style="flex:1"><button class="btn primary sm" type="submit">Find</button></div>
+      <div id="medOut" style="font-size:14px;margin-top:8px"></div></form></details>
     ${remCard()}
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
     ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
@@ -2953,6 +2957,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
   wireReminders();wireBookings();wirePush();wireFamily();wirePhone();wireRecords();
+  const mf=$('#medForm');if(mf)mf.onsubmit=e=>{e.preventDefault();medFind($('#medName').value,$('#medOut'))};
   if(doc&&MEM.listing){renderGallery();wireVerify();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3363,9 +3368,11 @@ function rxShow(out){const box=$('#rxBox');if(!box)return;
     ${meds.map((m,i)=>`<div class="fam" style="flex-wrap:wrap;margin-bottom:6px"><label style="display:flex;gap:8px;align-items:center;flex:1 1 100%"><input type="checkbox" data-rxon="${i}" ${m.times.length?'checked':''}> <b>${esc(m.name)}</b> ${esc([m.strength,m.dose].filter(Boolean).join(' · '))}</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:13px;width:100%"><label>Times <input data-rxt="${i}" value="${esc(m.times.join(', '))}" placeholder="e.g. 08:00, 20:00" style="width:140px"></label>
       <label>Days <input data-rxd="${i}" type="number" min="0" max="365" value="${m.days||''}" placeholder="ongoing" style="width:80px"></label>
-      <span style="color:var(--mute)">${esc([RX_FOOD[m.food]||'',m.note].filter(Boolean).join(' · '))}</span></div></div>`).join('')}
+      <span style="color:var(--mute)">${esc([RX_FOOD[m.food]||'',m.note].filter(Boolean).join(' · '))}</span>
+      <button class="rv-mini" type="button" data-medgen="${esc(m.name)}">💰 Cheaper generic?</button></div><div data-medout="${i}"></div></div>`).join('')}
     ${fam.length?`<label style="font-size:13px">For <select id="rxFor"><option value="">Me</option>${fam.map(f=>`<option>${esc(f.name)}</option>`).join('')}</select></label>`:''}
     <div style="margin-top:8px"><button class="btn primary sm" type="button" id="rxAdd">⏰ Add these reminders</button> <span id="rxMsg" style="font-size:13px"></span></div></div>`;
+  box.querySelectorAll('[data-medgen]').forEach((b,i)=>b.onclick=()=>medFind(b.dataset.medgen,box.querySelector(`[data-medout="${i}"]`)));
   $('#rxAdd').onclick=async()=>{const who=($('#rxFor')||{}).value;let n=0,bad=[];const today=new Date();
     for(const [i,m] of meds.entries()){if(!document.querySelector(`[data-rxon="${i}"]`).checked)continue;
       const times=document.querySelector(`[data-rxt="${i}"]`).value.split(/[,\s]+/).filter(Boolean);const days=+document.querySelector(`[data-rxd="${i}"]`).value||0;
@@ -3524,6 +3531,27 @@ function wireRecords(){const f=$('#recForm');if(!f)return;const keep=()=>{const 
   $$('[data-recshare]').forEach(s=>s.onchange=async()=>{if(!s.value)return;if(!confirm('Share this file with that doctor until a week after the visit?')){s.value='';return}
     try{await mapi('records/share',{id:+s.dataset.recshare,booking_id:+s.value,on:true});renderAccount();keep()}catch(e){alert(e.message)}});
   $$('[data-recunshare]').forEach(b=>b.onclick=async()=>{try{await mapi('records/share',{id:+b.dataset.recunshare,booking_id:+b.dataset.bid,on:false});renderAccount();keep()}catch(e){alert(e.message)}})}
+
+/* ================= CHEAPER MEDICINES ================= */
+async function medFind(name,out){if(!out)return;out.textContent='Looking…';
+  try{const r=await fetch('/api/medfind',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const j=await r.json();if(!r.ok)throw new Error(j.error);
+    out.innerHTML=j.found?`<div class="visit" style="margin-top:6px"><b>${esc(j.name)} → ${esc(j.generic)}</b>${j.strength?`<small>Usual strength: ${esc(j.strength)}</small>`:''}${j.note?`<small>${esc(j.note)}</small>`:''}
+        <small>Generic medicines have the same salt and strength and are often much cheaper, for example at a <a class="teal" href="${esc(j.links.janaushadhi)}" target="_blank" rel="noopener">Jan Aushadhi Kendra</a>
+        (<a class="teal" href="${esc(j.links.search)}" target="_blank" rel="noopener">compare prices</a>).</small>
+        <small>⚠️ Ask your doctor or pharmacist before changing any medicine.${j.source==='ai'?' (Found by AI: double-check the name on the strip.)':''}</small></div>`
+      :`<small>😕 We don't know “${esc(j.name)}” yet. Ask your pharmacist for the generic (salt) name written on the strip.</small>`}
+  catch(e){out.innerHTML='<span class="red">'+esc(e.message)+'</span>'}}
+
+/* ================= VOICE INPUT (speak instead of type) ================= */
+(()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
+  const LANGS={en:'en-IN',hi:'hi-IN',bn:'bn-IN',ta:'ta-IN',te:'te-IN',mr:'mr-IN',gu:'gu-IN',kn:'kn-IN',ml:'ml-IN',pa:'pa-IN',ur:'ur-IN'};
+  const add=inp=>{if(!inp||inp.dataset.voice)return;inp.dataset.voice='1';const b=document.createElement('button');b.type='button';b.className='mic-btn';b.textContent='🎤';
+    b.setAttribute('aria-label','Speak instead of typing');b.title='Speak instead of typing';inp.insertAdjacentElement('afterend',b);let rec=null;
+    b.onclick=()=>{if(rec){rec.stop();return}rec=new SR();const l=(document.documentElement.lang||'en').slice(0,2);rec.lang=LANGS[l]||navigator.language||'en-IN';rec.interimResults=true;
+      b.classList.add('on');b.textContent='⏺';rec.onresult=e=>{inp.value=[...e.results].map(r=>r[0].transcript).join(' ');inp.dispatchEvent(new Event('input',{bubbles:true}))};
+      rec.onend=()=>{b.classList.remove('on');b.textContent='🎤';rec=null;if(inp.id==='chatIn'&&inp.value.trim())inp.form&&inp.form.requestSubmit()};rec.onerror=()=>{};rec.start()}};
+  const scan=()=>['#chatIn','#dirCity','#fSpec','#areaIn','#medName','#bkWhy'].forEach(s=>add($(s)));
+  new MutationObserver(()=>scan()).observe(document.body,{childList:true,subtree:true});scan()})();
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
