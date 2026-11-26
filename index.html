@@ -3668,6 +3668,22 @@ const __appStart=()=>{let app=false;try{app=matchMedia('(display-mode: standalon
   renderAppHome();setInterval(()=>{if(location.hash.replace('#','')==='home'||!location.hash)renderAppHome()},30000);
   addEventListener('hashchange',()=>{if(/^#?home$|^$/.test(location.hash))renderAppHome()})};
 document.readyState==='loading'?document.addEventListener('DOMContentLoaded',__appStart):__appStart();
+
+/* ================= PATIENT HISTORY FOR DOCTORS (EHR lite) ================= */
+async function openHistory(bid){const ov=document.createElement('div');ov.className='rp-ov';ov.innerHTML='<div class="rp-box" style="max-width:640px"><p>Loading…</p></div>';document.body.appendChild(ov);
+  const close=()=>ov.remove();ov.onclick=e=>{if(e.target===ov)close()};ov.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}});
+  let h;try{h=(await mapi('patient/history',{booking_id:bid})).result}catch(e){ov.firstChild.innerHTML=`<p class="red">${esc(e.message)}</p>`;return}
+  const cur=h.visits.find(v=>v.id===bid)||{};const age=h.birth_year?` · about ${new Date().getFullYear()-h.birth_year} yrs`:'';
+  ov.firstChild.innerHTML=`<h3>🗂 ${esc(h.name)}</h3><p style="color:var(--mute);font-size:13px;margin:0">${h.count} visit${h.count===1?'':'s'} with you${h.first_visit?' since '+bkDay(h.first_visit,{day:'numeric',month:'short',year:'numeric'}):''}${h.relation?' · '+esc(h.relation)+' of the account holder':''}${age}</p>
+    <label style="display:block;font-size:12px;color:var(--mute);margin-top:12px">YOUR PRIVATE NOTE FOR THIS VISIT (THE PATIENT NEVER SEES IT)</label>
+    <textarea id="hNote" maxlength="2000" placeholder="e.g. BP 130/85, advised low salt, review in 2 weeks">${esc(cur.note||'')}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin:6px 0 10px"><span id="hMsg" style="font-size:13px;align-self:center"></span><button class="btn primary sm" type="button" id="hSave">Save note</button></div>
+    ${h.shared.length?`<div class="visit"><b>📁 Reports shared with you</b>${h.shared.map(r=>`<small><a class="teal" href="/api/m/records/file/${r.id}" target="_blank" rel="noopener">${esc(r.title)}</a>${r.date?' · '+esc(r.date):''}</small>`).join('')}</div>`:''}
+    <div class="visit-list" style="padding:8px 0 0">${h.visits.map(v=>`<div class="visit ${v.status==='cancelled'?'past':''}"><b>${bkDay(v.date,{day:'numeric',month:'short',year:'numeric'})} · ${esc(v.time)}${v.id===bid?' · this visit':''}</b>
+      <small>${v.mode==='video'?'📹 Video':'🏥 Clinic'} · ${esc(v.status)}${v.reason?' · 📝 '+esc(v.reason):''}</small>
+      ${v.diagnosis?`<small>🩺 ${esc(v.diagnosis)}</small>`:''}${v.meds.length?`<small>💊 ${v.meds.map(esc).join(', ')}</small>`:''}${v.note&&v.id!==bid?`<small>🔒 ${esc(v.note)}</small>`:''}</div>`).join('')}</div>
+    <div style="text-align:right;margin-top:10px"><button class="btn ghost sm" type="button" id="hX">Close</button></div>`;
+  $('#hX').onclick=close;$('#hSave').onclick=async()=>{try{await mapi('visit/note',{booking_id:bid,note:$('#hNote').value});$('#hMsg').innerHTML='<span class="teal">✅ Saved</span>'}catch(e){$('#hMsg').innerHTML='<span class="red">'+esc(e.message)+'</span>'}}}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3690,6 +3706,8 @@ function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''
       ${v.rx_id?`<a class="btn ghost sm" href="/rx/${v.rx_id}" target="_blank" rel="noopener">📄 Prescription</a>${doc?'':`<button class="btn ghost sm" type="button" data-rxrem="${v.rx_id}">⏰ Add to reminders</button>`}`:''}
       ${doc&&v.status!=='cancelled'&&v.at-Date.now()<3600e3?`<button class="btn ghost sm" type="button" data-rxwrite="${v.id}" data-rxid="${v.rx_id||''}" data-rxfor="${esc(v.patient)}">💊 ${v.rx_id?'Edit':'Write'} prescription</button>`:''}
       ${!doc&&v.status==='done'?`<button class="btn ghost sm" type="button" data-rev="${v.listing_id}">⭐ Review</button>`:''}
+      ${v.status==='done'||v.pay_status==='paid'||v.pay_status==='refunded'?`<a class="btn ghost sm" href="/receipt/${v.id}" target="_blank" rel="noopener">🧾 Receipt</a>`:''}
+      ${doc&&v.status!=='cancelled'?`<button class="btn ghost sm" type="button" data-phist="${v.id}">🗂 Patient history</button>`:''}
       ${v.status!=='cancelled'?`<button class="btn ghost sm" type="button" data-vmsg="${doc?v.patient_id:v.doctor_id}" data-vlid="${doc?'':v.listing_id}">💬 Message${v.mode==='video'?' / 📹 call':''}</button>`:''}
       ${v.status==='booked'&&!past?`<button class="btn ghost sm" type="button" data-vcancel="${v.id}">Cancel visit</button>`:''}
       ${doc&&v.status!=='cancelled'&&past?`<button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="done">✅ Done</button><button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="no_show">No-show</button>`:''}</div></div>`}
@@ -3722,6 +3740,7 @@ function wireBookings(){
   $$('[data-qin]').forEach(b=>b.onclick=async()=>{try{const q=(await mapi('queue/checkin',{booking_id:+b.dataset.qin})).result;qShow(b.closest('.qbox'),q)}catch(e){alert(e.message)}});
   $$('.qbox').forEach(async box=>{try{const q=(await mapi('queue/state',{listing_id:+box.dataset.qlid})).result;if((q.mine||[]).length)qShow(box,q)}catch{}});
   $$('[data-paynow]').forEach(b=>b.onclick=()=>payVisit(+b.dataset.paynow,b.dataset.pdoc,'',+b.dataset.pfee));
+  $$('[data-phist]').forEach(b=>b.onclick=()=>openHistory(+b.dataset.phist));
   $$('[data-rxwrite]').forEach(b=>b.onclick=()=>openRxWriter(+b.dataset.rxwrite,b.dataset.rxid?+b.dataset.rxid:0,b.dataset.rxfor));
   $$('[data-rxrem]').forEach(b=>b.onclick=async()=>{try{const r=(await mapi('rx/get',{id:+b.dataset.rxrem})).result;const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}
     rxShow({readable:true,warning:'From the prescription by '+r.doctor+'. Check the times and press Add.',medicines:r.data.meds.map(m=>Object.assign({},m))})}catch(e){alert(e.message)}});

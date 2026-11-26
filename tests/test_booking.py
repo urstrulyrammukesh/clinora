@@ -267,3 +267,24 @@ def test_queue_tracking_link_and_peak_hours(server, uniq):
     assert b"your turn" in server.client().get(path)[1]
     s, j = doc.post("/api/m/doc/stats")
     assert len(j["result"]["peak"]["hours"]) == 24 and sum(j["result"]["peak"]["hours"]) >= 1
+
+
+def test_patient_history_notes_and_receipt(server, doctor, uniq):
+    doc, lid = doctor
+    p, other = server.client(), server.client()
+    p.signup("patient", "Hist Pat", uniq())
+    other.signup("patient", "Other", uniq())
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    b1 = p.post("/api/m/book", {"listing_id": lid, "date": days[5]["date"], "time": days[5]["times"][0], "mode": "clinic", "reason": "Cough"})[1]["result"]["id"]
+    doc.post("/api/m/rx/write", {"booking_id": b1, "diagnosis": "Bronchitis", "meds": [{"name": "Azithromycin", "strength": "500 mg", "times": ["09:00"], "days": 3}]})
+    assert doc.post("/api/m/visit/note", {"booking_id": b1, "note": "Smoker, advised to quit"})[0] == 200
+    assert p.post("/api/m/visit/note", {"booking_id": b1, "note": "x"})[0] == 403
+    h = doc.post("/api/m/patient/history", {"booking_id": b1})[1]["result"]
+    assert h["name"] == "Hist Pat" and h["visits"][0]["diagnosis"] == "Bronchitis" and h["visits"][0]["note"] == "Smoker, advised to quit"
+    assert "Azithromycin 500 mg" in h["visits"][0]["meds"]
+    assert "dnote" not in str(p.post("/api/m/me")[1]["bookings"]) and "Smoker" not in str(p.post("/api/m/me")[1])  # private to the doctor
+    assert p.get(f"/receipt/{b1}")[0] == 404  # not done or paid yet
+    doc.post("/api/m/booking/mark", {"id": b1, "status": "done"})
+    s, body, _ = p.get(f"/receipt/{b1}")
+    assert s == 200 and b"Receipt" in body and b"500.00 INR" in body
+    assert other.get(f"/receipt/{b1}")[0] == 404 and doc.get(f"/receipt/{b1}")[0] == 200

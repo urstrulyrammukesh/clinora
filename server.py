@@ -493,7 +493,8 @@ def init_db():
         if "track" not in {r["name"] for r in conn.execute("PRAGMA table_info(queue_items)")}:
             conn.execute("ALTER TABLE queue_items ADD COLUMN track TEXT")
         bcols = {r["name"] for r in conn.execute("PRAGMA table_info(dbookings)")}
-        for col, kind in [("pay_status", "TEXT NOT NULL DEFAULT 'none'"), ("pay_ref", "TEXT"), ("pay_amount", "INTEGER"), ("hold_until", "INTEGER")]:
+        for col, kind in [("pay_status", "TEXT NOT NULL DEFAULT 'none'"), ("pay_ref", "TEXT"), ("pay_amount", "INTEGER"), ("hold_until", "INTEGER"),
+                          ("dnote", "TEXT")]:
             if col not in bcols:
                 conn.execute(f"ALTER TABLE dbookings ADD COLUMN {col} {kind}")
         if "payout_acc" not in {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}:
@@ -3707,6 +3708,72 @@ def peak_hours(conn, lid):
     return {"hours": hours, "days": days}
 
 
+# ---------------------------------------------------------------- patient history for doctors (EHR lite) and receipts
+def _doctor_booking(conn, me, bid):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    b = conn.execute("SELECT * FROM dbookings WHERE id=? AND listing_id=?", (int(bid or 0), lst["id"] if lst else -1)).fetchone()
+    if not b:
+        raise InputError("Visit not found")
+    return lst, b
+
+
+def m_patient_history(conn, d, me):
+    """Everything this doctor has for this patient (and only from this doctor's own visits): visits, reasons,
+    prescriptions, private notes and records the patient shared."""
+    lst, b = _doctor_booking(conn, me, d.get("booking_id"))
+    rows = conn.execute("SELECT b.*, p.data AS rx FROM dbookings b LEFT JOIN prescriptions p ON p.booking_id=b.id "
+                        "WHERE b.listing_id=? AND b.patient_id=? AND b.for_name=? ORDER BY b.at DESC LIMIT 50",
+                        (lst["id"], b["patient_id"], b["for_name"])).fetchall()
+    visits = []
+    for r in rows:
+        rx = json.loads(r["rx"]) if r["rx"] else None
+        visits.append({"id": r["id"], "date": r["date"], "time": r["time"], "mode": r["mode"], "status": r["status"], "reason": r["reason"],
+                       "note": r["dnote"], "diagnosis": rx and rx.get("diagnosis"), "meds": [m["name"] + (" " + m["strength"] if m["strength"] else "") for m in (rx or {}).get("meds", [])]})
+    fam = conn.execute("SELECT relation, year FROM family WHERE member_id=? AND name=?", (b["patient_id"], b["for_name"])).fetchone()
+    return {"name": b["for_name"], "relation": fam["relation"] if fam else None, "birth_year": fam["year"] if fam else None,
+            "visits": visits, "shared": shared_records_for(conn, me, b["id"]),
+            "first_visit": visits[-1]["date"] if visits else None, "count": len([v for v in visits if v["status"] != "cancelled"])}
+
+
+def m_visit_note(conn, d, me):
+    """The doctor's private note on a visit. Patients never see it."""
+    lst, b = _doctor_booking(conn, me, d.get("booking_id"))
+    conn.execute("UPDATE dbookings SET dnote=? WHERE id=?", (text(d, "note", 2000, False), b["id"]))
+
+
+def receipt_for(conn, bid, me):
+    if not me:
+        return None
+    r = conn.execute("SELECT b.*, l.name AS doctor, l.addr, l.city, l.phone, l.owner, l.spec FROM dbookings b JOIN listings l ON l.id=b.listing_id WHERE b.id=?",
+                     (bid,)).fetchone()
+    if not r or me["id"] not in (r["patient_id"], r["owner"]) or not (r["status"] == "done" or r["pay_status"] in ("paid", "refunded")):
+        return None
+    return r
+
+
+def receipt_page(r):
+    e = html.escape
+    amount = (r["pay_amount"] or 0) / 100 if r["pay_status"] in ("paid", "refunded") else (r["fee"] or 0)
+    how = {"paid": "Paid online (Clinora / Razorpay)", "refunded": "Paid online, then refunded"}.get(r["pay_status"], "To be paid / paid at the clinic")
+    when = datetime.date.fromisoformat(r["date"]).strftime("%d %b %Y")
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt CLN-{r['listing_id']}-{r['id']}</title><meta name="robots" content="noindex">
+<style>body{{font:15px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:0;background:#f1f5f9}}main{{max-width:640px;margin:20px auto;background:#fff;padding:26px 28px;border-radius:14px}}
+table{{width:100%;border-collapse:collapse;margin:14px 0}}td{{padding:8px 6px;border-bottom:1px solid #e2e8f0}}td:last-child{{text-align:right}}.tot td{{font-weight:800;font-size:17px;border-bottom:0}}
+.btn{{background:#0d9488;color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;margin-right:8px}}
+.mu{{color:#64748b;font-size:13px}}@media print{{body{{background:#fff}}main{{margin:0}}.np{{display:none}}}}</style></head><body><main>
+<div class="np" style="margin-bottom:12px"><button class="btn" type="button" id="pr">🖨️ Print / Save as PDF</button><a class="btn" style="background:#475569" href="/#account">← Back</a></div>
+<h2 style="margin:0">Receipt</h2><div class="mu">No. CLN-{r['listing_id']}-{r['id']} · {when}</div>
+<p><b>{e(r['doctor'])}</b><br><span class="mu">{e(r['spec'] or '')} · {e(r['addr'])}, {e(r['city'])} · {e(r['phone'])}</span></p>
+<p><b>Patient:</b> {e(r['for_name'])}</p>
+<table><tr><td>{'Video consultation' if r['mode'] == 'video' else 'Clinic consultation'} · {when} {e(r['time'])}</td><td>{amount:,.2f} {e(r['cur'] or 'INR')}</td></tr>
+<tr class="tot"><td>Total</td><td>{amount:,.2f} {e(r['cur'] or 'INR')}</td></tr></table>
+<p class="mu">Payment: {e(how)}{(' · ref ' + e(r['pay_ref'])) if r['pay_ref'] and r['pay_status'] == 'paid' else ''}</p>
+<p class="mu">Issued through Clinora on behalf of the doctor named above. Not a tax invoice unless the doctor adds their GST details.</p></main>
+<script nonce="__NONCE__">document.getElementById('pr').onclick=()=>window.print()</script></body></html>"""
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3725,7 +3792,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip,
                  "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share,
                  "/api/m/team/invite": m_team_invite, "/api/m/team/answer": m_team_answer, "/api/m/team/remove": m_team_remove,
-                 "/api/m/doc/stats": m_doc_stats, "/api/m/invite": m_invite_link}
+                 "/api/m/doc/stats": m_doc_stats, "/api/m/invite": m_invite_link,
+                 "/api/m/patient/history": m_patient_history, "/api/m/visit/note": m_visit_note}
 
 
 
@@ -4699,6 +4767,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        m = re.fullmatch(r"/receipt/(\d+)", path_only)
+        if m:
+            with connect() as conn:
+                r = receipt_for(conn, int(m.group(1)), member_for_token(conn, self.member_token()))
+            if not r:
+                return self.send_text(404, "<!DOCTYPE html><title>Not found</title><p>Receipt not found, or you are not logged in. <a href='/#account'>Log in</a></p>",
+                                      "text/html; charset=utf-8")
+            nonce = secrets.token_urlsafe(16)
+            self._csp = CSP_OTHER.replace("default-src 'none'", f"default-src 'none'; script-src 'nonce-{nonce}'")
+            return self.send_text(200, receipt_page(r).replace("__NONCE__", nonce), "text/html; charset=utf-8")
         m = re.fullmatch(r"/t/([\w-]{8,20})", path_only)
         if m:
             with connect() as conn:
