@@ -21,6 +21,8 @@ Everything else (doctor accounts, directory, map, Food Scan, reminders, messages
 
 ---
 
+Before real patients, also take **`docs/legal-review.md`** to a lawyer or mentor (health data rules in India).
+
 ## Step 1: Buy a domain (10 min)
 
 1. Check a name at **https://www.namecheap.com**, **https://www.hostinger.in** or **https://www.cloudflare.com/products/registrar/** (cheapest renewals). Try `clinora.in`, `clinora.health`, `getclinora.com`, `clinora.app`.
