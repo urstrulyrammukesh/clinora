@@ -930,6 +930,9 @@ html{overflow-x:clip}
 .soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
 .pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
 .pw-card form{padding:0 20px 20px}
+.dir-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}.dir-filters input,.dir-filters select{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:10px;padding:8px 10px;font:inherit;font-size:14px}
+.dir-filters input{flex:1 1 220px}.dir-filters .day-chips{margin:0}
+.fam{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--panel2);font-size:14px}.fam .acts{margin-left:auto;display:flex;gap:6px}
 .bk-days{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px}.bk-days button{flex:0 0 auto;border:1px solid var(--line);background:none;color:inherit;border-radius:12px;padding:6px 10px;cursor:pointer;text-align:center;font-size:12.5px;line-height:1.3}
 .bk-days button b{display:block;font-size:16px}.bk-days button.on,.bk-times button.on{background:var(--teal,#14b8a6);color:#fff;border-color:transparent}
 .bk-times{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin:4px 0 10px}.bk-times button{border:1px solid var(--line);background:none;color:inherit;border-radius:9px;padding:7px 4px;cursor:pointer;font-size:13.5px}
@@ -1181,7 +1184,14 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
       <div id="uniStatus" style="margin-top:12px;color:var(--mute);font-size:14px"></div><div class="uni-res" id="uniRes"></div>
     </div>
     <div class="dir-grid">
-      <div><div id="dirStatus">Pick a city above or type any place in the world.</div><div class="dir-results" id="dirResults"></div></div>
+      <div><div id="dirStatus">Pick a city above or type any place in the world.</div>
+        <div class="dir-filters" id="dirFilters" role="group" aria-label="Filters">
+          <input id="fSpec" placeholder="Specialty, e.g. dentist, skin, child…" aria-label="Filter by specialty">
+          <div class="day-chips"><button type="button" data-f="clin">⭐ Clinora doctors</button><button type="button" data-f="ver">✓ Verified</button><button type="button" data-f="book">📅 Book online</button>
+            <button type="button" data-f="live">🟢 Online now</button><button type="button" data-f="open">🔓 Open now</button><button type="button" data-f="video">📹 Video</button><button type="button" data-f="r4">★ 4+</button></div>
+          <select id="fSort" aria-label="Sort"><option value="">Sort: best match</option><option value="rating">Top rated</option><option value="fee">Lowest fee</option><option value="reviews">Most reviews</option></select>
+          <button class="btn ghost sm" type="button" id="fAll">👨‍⚕️ Show all Clinora doctors</button></div>
+        <div class="dir-results" id="dirResults"></div></div>
       <div class="card">
         <form class="form" id="regForm">
           <h3>👨‍⚕️ Join as a doctor or clinic</h3>
@@ -2037,8 +2047,20 @@ async function dirSearch(city,name,type){
 }
 const dirTypeNow=()=>($('#dirType')||{}).value;
 function renderDirPartial(list){dirResults=list.slice();renderDir()}
-function renderDir(){
-  $('#dirResults').innerHTML=dirResults.map((p,i)=>lcard(p,i,'dir')).join('');
+const DF=new Set();
+function dirPass(p){const sp=(($('#fSpec')||{}).value||'').trim().toLowerCase();
+  if(sp&&!`${p.name} ${p.spec||''} ${p.type||''} ${(p.tags||{})['healthcare:speciality']||''}`.toLowerCase().includes(sp))return false;
+  if(DF.has('clin')&&!p.reg)return false;if(DF.has('ver')&&!p.verified)return false;if(DF.has('book')&&!p.booking)return false;
+  if(DF.has('live')&&!p.live)return false;if(DF.has('open')&&!(p.st&&p.st.open))return false;
+  if(DF.has('video')&&!(p.video||(p.booking&&p.booking.modes.includes('video'))))return false;if(DF.has('r4')&&!((p.rating||0)>=4))return false;return true}
+function renderDir(){const sort=($('#fSort')||{}).value;
+  let list=dirResults.map((p,i)=>[p,i]).filter(([p])=>dirPass(p));
+  if(sort==='rating')list.sort((a,b)=>(b[0].rating||0)-(a[0].rating||0));
+  if(sort==='reviews')list.sort((a,b)=>(b[0].reviews||0)-(a[0].reviews||0));
+  if(sort==='fee')list.sort((a,b)=>((a[0].booking||{}).fee??1e12)-((b[0].booking||{}).fee??1e12));
+  const hidden=dirResults.length-list.length;
+  $('#dirResults').innerHTML=list.map(([p,i])=>lcard(p,i,'dir')).join('')+(hidden?`<p class="empty-note">${hidden} hidden by filters. <button class="btn ghost sm" type="button" id="fClear">Clear filters</button></p>`:'');
+  const c=$('#fClear');if(c)c.onclick=()=>{DF.clear();$('#fSpec').value='';$('#fSort').value='';$$('#dirFilters [data-f]').forEach(b=>{b.classList.remove('on');b.setAttribute('aria-pressed','false')});renderDir()};
 }
 function renderRegList(){const L=regs();$('#regList').innerHTML=L.length?'<label style="display:block;margin-top:8px">LISTINGS ON CLINORA ('+L.length+')</label>'+L.slice(-8).reverse().map(r=>`<div class="reg-item"><span>${esc(r.name)} · ${esc(r.city)}</span><button type="button" data-rdel="${r.id}">Remove</button></div>`).join(''):''}
 function initDirectory(){
@@ -2047,6 +2069,9 @@ function initDirectory(){
   $('#countryList').innerHTML=ISO.map(c=>{try{return `<option value="${esc(regionNames?regionNames.of(c):c)}">`}catch{return ''}}).join('');
   $('#rCountry').value=countryName();
   $('#dirForm').onsubmit=e=>{e.preventDefault();dirSearch($('#dirCity').value.trim(),$('#dirName').value.trim(),$('#dirType').value)};
+  $$('#dirFilters [data-f]').forEach(b=>{b.setAttribute('aria-pressed','false');b.onclick=()=>{const f=b.dataset.f;DF.has(f)?DF.delete(f):DF.add(f);b.classList.toggle('on',DF.has(f));b.setAttribute('aria-pressed',String(DF.has(f)));renderDir()}});
+  $('#fSpec').oninput=()=>renderDir();$('#fSort').onchange=()=>renderDir();
+  $('#fAll').onclick=()=>{dirResults=regs().map(regToPlace);$('#dirStatus').textContent=`${dirResults.length} doctor${dirResults.length===1?'':'s'} and clinics on Clinora, worldwide.`;renderDir()};
   $('#regForm').onsubmit=async e=>{e.preventDefault();const v=id=>$(id).value.trim();
     try{readHours('rHours')}catch(err){$('#regMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>';return}
     const dg=v('#rPhone').replace(/\D/g,'');if(dg.length<7||dg.length>15){$('#regMsg').innerHTML='<span class="red">Please enter a valid phone number with country code.</span>';return}
@@ -2867,6 +2892,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <p style="font-size:12px;color:var(--mute);margin-top:8px">For your safety, this logs you out on your other phones and computers.</p></form></details>
     <div class="card" id="pushCard" style="padding:14px 18px;margin-bottom:18px;display:none"></div>
     ${myVisitsCard()}
+    ${familyCard()}
     ${remCard()}
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
     ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
@@ -2912,7 +2938,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  wireReminders();wireBookings();wirePush();
+  wireReminders();wireBookings();wirePush();wireFamily();
   if(doc&&MEM.listing){renderGallery();wireVerify()}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3210,6 +3236,7 @@ function remCard(){const R=MEM.reminders||[];const perm=('Notification' in windo
     <form class="form" id="remForm"><input type="hidden" id="remId">
       <div class="two"><div><label>TYPE</label><select id="remKind">${Object.entries(REM_KINDS).map(([k,[i,n]])=>`<option value="${k}">${i} ${n}</option>`).join('')}</select></div>
         <div><label>TIME</label><input id="remAt" type="time" required value="09:00"></div></div>
+      ${(MEM.family||[]).length?`<label>FOR</label><select id="remFor"><option value="">Me</option>${MEM.family.map(f=>`<option>${esc(f.name)}</option>`).join('')}</select>`:''}
       <label>WHAT TO REMIND *</label><input id="remTitle" required maxlength="80" placeholder="e.g. Metformin 500 mg after breakfast">
       <label>REPEAT</label><div class="day-chips" id="remDays"><button type="button" data-preset="0" class="on">Once</button><button type="button" data-preset="127">Every day</button><button type="button" data-preset="31">Weekdays</button>${REM_DAYS.map((d,i)=>`<button type="button" data-bit="${i}">${d}</button>`).join('')}</div>
       <div id="remDateRow"><label>DATE</label><input id="remDate" type="date"></div>
@@ -3227,7 +3254,8 @@ function wireReminders(){const f=$('#remForm');if(!f)return;let days=0;
   const reset=()=>{$('#remId').value='';$('#remSave').textContent='Add reminder';$('#remCancel').style.display='none'};
   $('#remCancel').onclick=()=>{f.reset();days=0;paint();$('#remDate').value=today;reset()};
   f.onsubmit=async e=>{e.preventDefault();const m=$('#remMsg');m.textContent='Saving…';
-    try{await mapi('reminder/save',{id:+$('#remId').value||0,kind:$('#remKind').value,title:$('#remTitle').value.trim(),at:$('#remAt').value,days,date:$('#remDate').value,
+    const who=($('#remFor')||{}).value,ttl=$('#remTitle').value.trim();
+    try{await mapi('reminder/save',{id:+$('#remId').value||0,kind:$('#remKind').value,title:who&&!ttl.startsWith(who+':')?(who+': '+ttl).slice(0,80):ttl,at:$('#remAt').value,days,date:$('#remDate').value,
         lead:+$('#remLead').value,note:$('#remNote').value.trim(),email:$('#remEmail').checked,tz:remTZ()});
       renderAccount();$('#remCard').open=true;$('#remMsg').innerHTML='<span class="teal">✅ Saved. We will remind you.</span>'}
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
@@ -3281,6 +3309,21 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-shar
   const url=location.origin+b.dataset.share,title=(b.dataset.sname||'Doctor')+' on Clinora';
   try{if(navigator.share){await navigator.share({title,text:'Book or message '+(b.dataset.sname||'this doctor')+' on Clinora',url});return}}catch(err){if(err.name==='AbortError')return}
   try{await navigator.clipboard.writeText(url);const o=b.textContent;b.textContent='✅ Link copied';setTimeout(()=>b.textContent=o,1800)}catch{prompt('Copy this link:',url)}},true);
+
+/* ================= FAMILY MEMBERS ================= */
+const FAM_REL={mother:'👩 Mother',father:'👨 Father',child:'🧒 Child',spouse:'💑 Spouse',sibling:'🧑‍🤝‍🧑 Sibling',grandparent:'👵 Grandparent',other:'👤 Other'};
+function familyCard(){const F=MEM.family||[];
+  return `<details class="card pw-card" id="famCard"><summary>👨‍👩‍👧 Family <span style="font-weight:400;color:var(--mute);font-size:13px">· ${F.length?F.length+' added: book visits and set reminders for them':'book visits and reminders for parents, children…'}</span></summary>
+    <div class="visit-list">${F.map(f=>`<div class="fam"><span aria-hidden="true">${(FAM_REL[f.relation]||'👤').split(' ')[0]}</span><div><b>${esc(f.name)}</b><small style="display:block;color:var(--mute)">${(FAM_REL[f.relation]||'').split(' ').slice(1).join(' ')}${f.year?' · born '+f.year:''}</small></div>
+      <div class="acts"><button class="rv-mini" type="button" data-famrm="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></div></div>`).join('')}
+    <form class="form" id="famForm" style="padding:0"><div class="two"><div><label>NAME</label><input id="famName" required maxlength="60" placeholder="e.g. Sunita Yadav"></div>
+      <div><label>RELATION</label><select id="famRel">${Object.entries(FAM_REL).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div></div>
+      <label>BIRTH YEAR (OPTIONAL)</label><input id="famYear" type="number" min="1900" max="${new Date().getFullYear()}" placeholder="e.g. 1968">
+      <button class="btn primary sm" type="submit">Add family member</button><div id="famMsg" style="font-size:13px;margin-top:6px"></div></form></div></details>`}
+function wireFamily(){const f=$('#famForm');if(!f)return;
+  f.onsubmit=async e=>{e.preventDefault();try{await mapi('family/save',{name:$('#famName').value.trim(),relation:$('#famRel').value,year:$('#famYear').value});renderAccount();$('#famCard').open=true}
+    catch(err){$('#famMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+  $$('[data-famrm]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this family member? Their visits and reminders stay.'))return;try{await mapi('family/delete',{id:+b.dataset.famrm});renderAccount();$('#famCard').open=true}catch(e){alert(e.message)}})}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}

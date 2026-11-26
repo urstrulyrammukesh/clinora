@@ -390,6 +390,8 @@ CREATE TABLE IF NOT EXISTS dbookings(id INTEGER PRIMARY KEY AUTOINCREMENT, listi
 CREATE UNIQUE INDEX IF NOT EXISTS dbook_slot ON dbookings(listing_id, date, time) WHERE status='booked';
 CREATE INDEX IF NOT EXISTS dbook_patient ON dbookings(patient_id, at);
 CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, member_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS family(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, name TEXT NOT NULL, relation TEXT NOT NULL,
+  year INTEGER, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -913,6 +915,7 @@ def member_state(conn, me):
                        "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
             "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY,
+            "family": [dict(r) for r in conn.execute("SELECT id, name, relation, year FROM family WHERE member_id=? ORDER BY id", (me["id"],))],
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"]),
                             booking=json.loads(lst["booking"] or "null")) if lst else None}
@@ -1371,6 +1374,7 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM family WHERE member_id=?", (mid,))
     for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
                                            "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
         notify(conn, owner, "booking", "❌ A patient cancelled", f"{when} · the patient deleted their account", "account")
@@ -2429,6 +2433,8 @@ def m_book(conn, d, me):
     if upcoming >= 3:
         raise InputError("You already have 3 upcoming visits with this doctor. Cancel one first.")
     for_name = text(d, "for_name", 80, False) or me["name"]
+    if for_name != me["name"] and not conn.execute("SELECT 1 FROM family WHERE member_id=? AND name=?", (me["id"], for_name)).fetchone():
+        raise InputError("Add this person under Family on your Account page first")
     reason = text(d, "reason", 300, False)
     zone = _zone(cfg["tz"])
     day = datetime.date.fromisoformat(date)
@@ -2662,6 +2668,36 @@ main{{max-width:720px;margin:0 auto;padding:24px 18px 70px}}a{{color:#5cc8ff}}.t
     return page, doctor_slug(lst)
 
 
+# ---------------------------------------------------------------- family members (book and set reminders for parents, children...)
+FAMILY_RELATIONS = {"mother", "father", "child", "spouse", "sibling", "grandparent", "other"}
+
+
+def m_family_save(conn, d, me):
+    need_member(me)
+    fid = int(d.get("id") or 0)
+    name = text(d, "name", 60)
+    if len(name) < 2:
+        raise InputError("Please write their name")
+    rel = one_of(d, "relation", FAMILY_RELATIONS)
+    year = d.get("year")
+    year = int(year) if str(year or "").isdigit() else None
+    if year and not 1900 <= year <= datetime.date.today().year:
+        raise InputError("Check the birth year")
+    if fid:
+        if not conn.execute("SELECT 1 FROM family WHERE id=? AND member_id=?", (fid, me["id"])).fetchone():
+            raise InputError("Not found")
+        conn.execute("UPDATE family SET name=?, relation=?, year=? WHERE id=?", (name, rel, year, fid))
+    else:
+        if conn.execute("SELECT COUNT(*) FROM family WHERE member_id=?", (me["id"],)).fetchone()[0] >= 10:
+            raise InputError("You can add up to 10 family members")
+        conn.execute("INSERT INTO family(member_id,name,relation,year,ts) VALUES(?,?,?,?,?)", (me["id"], name, rel, year, now_ms()))
+
+
+def m_family_delete(conn, d, me):
+    need_member(me)
+    conn.execute("DELETE FROM family WHERE id=? AND member_id=?", (int(d.get("id") or 0), me["id"]))
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2672,7 +2708,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/report": m_report, "/api/m/block": m_block, "/api/m/confirm/resend": m_confirm_resend,
                  "/api/m/booking/settings": m_booking_settings, "/api/m/book": m_book, "/api/m/booking/cancel": m_booking_cancel,
                  "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots,
-                 "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe}
+                 "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe,
+                 "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete}
 
 
 
