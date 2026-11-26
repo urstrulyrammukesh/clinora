@@ -8,6 +8,8 @@ Patients can chat with an AI receptionist (powered by Claude) to book in-clinic 
 
 📄 **[Read the Clinora Company Overview & Product Paper (PDF, 33 pages)](docs/Clinora-Company-Overview.pdf)**: what Clinora is, how it works, architecture, security, business plan and roadmap.
 
+🛠️ **[How Clinora is built](https://github.com/urstrulyrammukesh/clinora-tech-stack)**: 6 languages, 10,700+ lines of code, 125 API endpoints, 33 tables, every tool and service used.
+
 👤 Founded and built by **[Ram Mukesh Yadav](https://www.linkedin.com/in/ram-mukesh-yadav-033336412/)**, B.Tech CSE, NIT Srinagar · [Portfolio](https://urstrulyrammukesh.github.io)
 
 > ⚠️ Demo project. The clinic, doctors and sample data are placeholders. The AI does not give medical advice. In an emergency, call your local emergency number.
