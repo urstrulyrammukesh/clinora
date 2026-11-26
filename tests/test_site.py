@@ -75,3 +75,14 @@ def test_medicine_finder(server):
     s, j = c.post("/api/medfind", {"name": "Zzyzx-unknown"})
     assert s == 200 and j["found"] is False  # AI is off in tests: unknown names are not guessed
     assert c.post("/api/medfind", {"name": "x"})[0] == 400
+
+
+def test_doctor_page_themes(server, uniq):
+    doc = server.client()
+    doc.signup("doctor", "Dr Theme", uniq())
+    lid = doc.profile("Theme Clinic")
+    assert b"#06080b" in server.client().get(f"/doctor/{lid}")[1]  # default: midnight
+    assert doc.post("/api/m/page/theme", {"theme": "nope"})[0] == 400
+    assert doc.post("/api/m/page/theme", {"theme": "warm"})[0] == 200
+    body = server.client().get(f"/doctor/{lid}")[1]
+    assert b"#fff8f1" in body and b"#06080b" not in body

@@ -507,7 +507,7 @@ def init_db():
         if "sms" not in rcols:
             conn.execute("ALTER TABLE reminders ADD COLUMN sms INTEGER NOT NULL DEFAULT 0")
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
-        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0"), ("booking", "TEXT")]:
+        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0"), ("booking", "TEXT"), ("theme", "TEXT")]:
             if col not in lcols:
                 conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {kind}")
         if conn.execute("SELECT COUNT(*) FROM live").fetchone()[0] == 0:
@@ -2696,6 +2696,23 @@ def doctor_slug(lst):
     return f"{lst['id']}-{slugify(lst['name'] + ' ' + (lst['city'] or ''))}"
 
 
+PAGE_THEMES = {
+    "midnight": {"bg": "#06080b", "fg": "#e9eff3", "card": "#0c1015", "line": "#1c242e", "accent": "#14b8a6", "link": "#5cc8ff", "mute": "#8693a0", "soft": "#111821"},
+    "clean": {"bg": "#f6f8fb", "fg": "#0f172a", "card": "#ffffff", "line": "#e2e8f0", "accent": "#0d9488", "link": "#0369a1", "mute": "#64748b", "soft": "#f1f5f9"},
+    "warm": {"bg": "#fff8f1", "fg": "#3b2416", "card": "#ffffff", "line": "#f3dcc7", "accent": "#e2683c", "link": "#c2410c", "mute": "#8a6a55", "soft": "#fdeee0"},
+    "royal": {"bg": "#0f0b24", "fg": "#f1edff", "card": "#18123a", "line": "#2c2363", "accent": "#8b5cf6", "link": "#c4b5fd", "mute": "#a59ccf", "soft": "#211a4d"},
+    "fresh": {"bg": "#effbf4", "fg": "#0b2e1d", "card": "#ffffff", "line": "#cdeed9", "accent": "#16a34a", "link": "#15803d", "mute": "#4d7a62", "soft": "#e3f6ea"},
+}
+
+
+def m_page_theme(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    conn.execute("UPDATE listings SET theme=? WHERE id=?", (one_of(d, "theme", set(PAGE_THEMES)), lst["id"]))
+
+
 def doctor_page(conn, lid):
     lst = conn.execute("SELECT l.*, m.photo_ts FROM listings l LEFT JOIN members m ON m.id=l.owner WHERE l.id=? AND l.hidden=0", (lid,)).fetchone()
     if not lst:
@@ -2744,6 +2761,7 @@ def doctor_page(conn, lid):
     revs_html = revs or "<p class='mu'>No reviews yet.</p>"
     more_html = f"<p><a href='/#doctor/{lid}'>See all {rv['count']} reviews on Clinora →</a></p>" if rv["count"] > 6 else ""
     og_image = e(PUBLIC_URL + (photo or "/assets/icons/icon-512.png"))
+    th = PAGE_THEMES.get(lst["theme"] or "midnight", PAGE_THEMES["midnight"])
     team_rows = conn.execute("SELECT l.id, l.name, l.city, l.spec, l.booking FROM clinic_team t JOIN listings l ON l.id=t.doctor_id "
                              "WHERE t.clinic_id=? AND t.status='active' AND l.hidden=0 ORDER BY l.name", (lid,)).fetchall()
     team_html = ("<div class='card'><h2 style='margin-top:0'>Our doctors</h2>" + "".join(
@@ -2758,13 +2776,13 @@ def doctor_page(conn, lid):
 <meta property="og:type" content="profile"><meta property="og:title" content="{e(lst['name'])} · Clinora"><meta property="og:description" content="{e(desc)}">
 <meta property="og:url" content="{e(url)}"><meta property="og:image" content="{og_image}"><meta name="twitter:card" content="summary">
 <script type="application/ld+json">{ld_json}</script>
-<style>body{{margin:0;background:#06080b;color:#e9eff3;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}}
-main{{max-width:720px;margin:0 auto;padding:24px 18px 70px}}a{{color:#5cc8ff}}.top{{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:#e9eff3;text-decoration:none}}
-.top img{{width:32px;height:32px;border-radius:9px}}.card{{background:#0c1015;border:1px solid #1c242e;border-radius:16px;padding:20px;margin-top:18px}}
-.hd{{display:flex;gap:16px;align-items:center}}.av{{width:84px;height:84px;border-radius:50%;background:#14b8a6;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;overflow:hidden;flex:0 0 84px}}
-.av img{{width:100%;height:100%;object-fit:cover}}h1{{font-size:26px;margin:0}}.mu{{color:#8693a0}}.ok{{background:linear-gradient(90deg,#0ea5e9,#2563eb);color:#fff;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:700;vertical-align:middle}}
-.btn{{display:inline-block;background:#14b8a6;color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:12px;margin:6px 8px 0 0}}.btn.g{{background:none;border:1px solid #2a3440;color:#e9eff3}}
-.st{{color:#fbbf24}}.rv{{border-top:1px solid #1c242e;padding:12px 0}}.rv p{{margin:4px 0}}.rp{{background:#111821;border-radius:10px;padding:8px 10px;font-size:14px}}
+<style>body{{margin:0;background:{th['bg']};color:{th['fg']};font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}}
+main{{max-width:720px;margin:0 auto;padding:24px 18px 70px}}a{{color:{th['link']}}}.top{{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:{th['fg']};text-decoration:none}}
+.top img{{width:32px;height:32px;border-radius:9px}}.card{{background:{th['card']};border:1px solid {th['line']};border-radius:16px;padding:20px;margin-top:18px}}
+.hd{{display:flex;gap:16px;align-items:center}}.av{{width:84px;height:84px;border-radius:50%;background:{th['accent']};display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;overflow:hidden;flex:0 0 84px}}
+.av img{{width:100%;height:100%;object-fit:cover}}h1{{font-size:26px;margin:0}}.mu{{color:{th['mute']}}}.ok{{background:linear-gradient(90deg,#0ea5e9,#2563eb);color:#fff;border-radius:99px;padding:2px 10px;font-size:12px;font-weight:700;vertical-align:middle}}
+.btn{{display:inline-block;background:{th['accent']};color:#fff;text-decoration:none;font-weight:700;padding:11px 20px;border-radius:12px;margin:6px 8px 0 0}}.btn.g{{background:none;border:1px solid {th['line']};color:{th['fg']}}}
+.st{{color:#fbbf24}}.rv{{border-top:1px solid {th['line']};padding:12px 0}}.rv p{{margin:4px 0}}.rp{{background:{th['soft']};border-radius:10px;padding:8px 10px;font-size:14px}}
 .links a{{margin-right:12px}}.fee{{margin:10px 0 0}}</style></head><body><main>
 <a class="top" href="/"><img src="/assets/icons/icon-192.png" alt="">Clinora</a>
 <div class="card"><div class="hd"><div class="av">{av_html}</div>
@@ -3793,7 +3811,7 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share,
                  "/api/m/team/invite": m_team_invite, "/api/m/team/answer": m_team_answer, "/api/m/team/remove": m_team_remove,
                  "/api/m/doc/stats": m_doc_stats, "/api/m/invite": m_invite_link,
-                 "/api/m/patient/history": m_patient_history, "/api/m/visit/note": m_visit_note}
+                 "/api/m/patient/history": m_patient_history, "/api/m/visit/note": m_visit_note, "/api/m/page/theme": m_page_theme}
 
 
 

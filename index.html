@@ -2966,7 +2966,9 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
       ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
-      ${L&&L.id?`<div class="card" style="padding:14px 18px;margin-bottom:18px">🔗 <b>Your public page:</b> <a class="teal" href="/doctor/${L.id}" target="_blank" rel="noopener">${esc(location.host)}/doctor/${L.id}…</a> <button class="btn ghost sm" type="button" data-share="/doctor/${L.id}" data-sname="${esc(L.name)}" style="margin-left:6px">Share</button><div style="font-size:12.5px;color:var(--mute);margin-top:4px">Put this link on WhatsApp, Instagram and Google so patients can book you.</div></div>`:''}
+      ${L&&L.id?`<div class="card" style="padding:14px 18px;margin-bottom:18px">🔗 <b>Your public page:</b> <a class="teal" href="/doctor/${L.id}" target="_blank" rel="noopener">${esc(location.host)}/doctor/${L.id}…</a> <button class="btn ghost sm" type="button" data-share="/doctor/${L.id}" data-sname="${esc(L.name)}" style="margin-left:6px">Share</button><div style="font-size:12.5px;color:var(--mute);margin-top:4px">Put this link on WhatsApp, Instagram and Google so patients can book you.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><span style="font-size:12.5px;color:var(--mute)">Page design:</span>${[['midnight','🌙 Midnight','#06080b'],['clean','🤍 Clean','#f6f8fb'],['warm','🧡 Warm','#fff8f1'],['royal','💜 Royal','#18123a'],['fresh','💚 Fresh','#effbf4']]
+          .map(([k,l,c])=>`<button type="button" class="rv-mini" data-ptheme="${k}" style="border:2px solid ${(L.theme||'midnight')===k?'var(--teal,#14b8a6)':'var(--line)'};background:${c};color:${['midnight','royal'].includes(k)?'#fff':'#111'}">${l}</button>`).join('')}</div></div>`:''}
       ${L?'<details class="card pw-card" id="dashCard" open><summary>📈 Your practice <span style="font-weight:400;color:var(--mute);font-size:13px">· visits, earnings, ratings</span></summary><div id="dashBody" style="padding:0 20px 16px">Loading…</div></details>':''}
       ${L?teamCard():''}
       ${L?verifyCard(MEM.verification):''}
@@ -2999,6 +3001,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
   wireReminders();wireBookings();wirePush();wireFamily();wirePhone();wireRecords();
   const mf=$('#medForm');if(mf)mf.onsubmit=e=>{e.preventDefault();medFind($('#medName').value,$('#medOut'))};
   {const ic=$('#invCard');if(ic)ic.ontoggle=()=>{if(ic.open)invitePanel()}}
+  $$('[data-ptheme]').forEach(b=>b.onclick=async()=>{try{await mapi('page/theme',{theme:b.dataset.ptheme});renderAccount();window.open('/doctor/'+MEM.listing.id,'_blank')}catch(e){alert(e.message)}});
   if(doc&&MEM.listing){renderGallery();wireVerify();wireTeam();docDash();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
