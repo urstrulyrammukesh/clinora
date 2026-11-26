@@ -931,6 +931,15 @@ html{overflow-x:clip}
 .soc-note{font-size:11.5px;color:var(--mute);margin-top:8px}
 .pw-card{padding:0!important;margin-bottom:18px}.pw-card summary{padding:16px 20px;cursor:pointer;font-weight:700;list-style:none}.pw-card summary::-webkit-details-marker{display:none}
 .pw-card form{padding:0 20px 20px}
+.rp-ov{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.rp-box{background:var(--panel,#fff);color:inherit;border:1px solid var(--line);border-radius:18px;max-width:440px;width:100%;max-height:90vh;overflow:auto;padding:20px 20px 16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.rp-box h3{margin:0 0 4px}.rp-box .why{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.rp-box .why label{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;font-size:14px}
+.rp-box .why label:has(input:checked){border-color:var(--teal,#14b8a6);background:rgba(20,184,166,.08)}
+.rp-box textarea{width:100%;min-height:70px;border:1px solid var(--line);border-radius:10px;padding:9px;background:none;color:inherit;font:inherit;font-size:14px}
+.rp-flag{background:none;border:none;color:var(--mute);cursor:pointer;font-size:12.5px;padding:2px 4px}.rp-flag:hover{color:var(--red,#e5484d)}
+.rq-ev{background:var(--panel,#fff);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13px;max-height:180px;overflow:auto}
+.rq-ev .mm{margin:3px 0}.rq-ev .mm b{color:var(--mute);font-weight:600}
 .rem-list{display:flex;flex-direction:column;gap:8px;padding:0 20px 6px}
 .rem{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2)}
 .rem.off{opacity:.55}.rem .ic{font-size:22px}.rem b{font-size:14.5px}.rem small{display:block;color:var(--mute);font-size:12.5px}
@@ -1323,6 +1332,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
         <div class="panel-sec"><h4>🚨 EMERGENCY ALERTS</h4><div id="alerts"><div class="empty" style="padding:0">No alerts.</div></div></div>
         <div class="panel-sec team" id="teamSec" style="display:none"></div>
         <div class="panel-sec" id="verifySec" style="display:none"></div>
+        <div class="panel-sec" id="reportSec" style="display:none"></div>
         <div class="panel-sec" id="demoSec"><h4>DEMO</h4><button class="btn ghost sm" id="resetBtn">↺ Reset demo data</button></div>
       </div>
     </div>
@@ -1792,7 +1802,7 @@ function renderAuth(){
   $('#fDoc').style.display=admin?'':'none';if(!admin)$('#fDoc').value='';
   $$('[data-live]').forEach(b=>{b.disabled=!admin&&b.dataset.live!==me.doctor_id;b.title=b.disabled?'Only the clinic admin can change this':''});
   renderTeam(admin);
-  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue()}else if(!admin){window.__vqShown=false;const s=$('#verifySec');if(s)s.style.display='none'}
+  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue();renderReportQueue()}else if(!admin){window.__vqShown=false;['#verifySec','#reportSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
@@ -2853,6 +2863,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         ${hoursEditor('dpHours',L?L.hours:'')}
         <label class="chk"><input type="checkbox" id="dpVideo" ${!L||L.video?'checked':''}> I offer video consultations</label>
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
+      ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
       ${L?verifyCard(MEM.verification):''}
       ${L?`<div class="card" style="padding:22px;margin-bottom:18px"><h3>📸 Work photos &amp; reviews</h3><div id="galBox"><p style="color:var(--mute)">Loading…</p></div></div>`:''}`
     :`<h3 style="margin-bottom:10px">Doctors you follow</h3><div class="dir-results" style="margin-bottom:22px">${favs.length?favs.map(p=>lcard(p,dirResults.length+favs.indexOf(p),'fav')).join(''):'<div class="empty-note">You don’t follow anyone yet. Tap <b>Follow</b> on a Clinora doctor in the World Directory or on the Nearby map.</div>'}</div>`}
@@ -2895,10 +2906,13 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
 async function openConv(withId,listingId){openThread=withId;$$('#thrList .thr').forEach(t=>t.classList.toggle('on',+t.dataset.thr===withId));
   const c=$('#conv');if(!c)return;let th;
   try{th=(await mapi('thread',{with:withId})).result}catch(e){if(listingId){th={with:{id:withId,name:(regs().find(x=>x.id===listingId)||{}).name||'Doctor',kind:'doctor',online:null},messages:[]}}else{c.innerHTML='<div class="empty-note">'+esc(e.message)+'</div>';return}}
-  const w=th.with;c.innerHTML=`<div class="conv-h" style="flex-wrap:wrap"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}<button class="vc" type="button" data-vcallm="${w.id}">${ico('video',15)}Video call</button></div>
+  const w=th.with;c.innerHTML=`<div class="conv-h" style="flex-wrap:wrap"><div class="lc-av" style="--avh:${hash(w.name)%360};flex:0 0 34px;width:34px;height:34px;font-size:12px">${esc(initials(w.name))}${avImg(w.id,w.photo_ts)}</div>${esc(w.name)}${w.online==null?'':w.online?'<span class="lc-pill live">Online now</span>':'<span class="lc-pill">Offline</span>'}<button class="vc" type="button" data-vcallm="${w.id}">${ico('video',15)}Video call</button><button class="rp-flag" type="button" data-report="member:${w.id}" title="Report this person">⚑ Report</button><button class="rp-flag" type="button" id="blkBtn" data-blk="${w.blocked?0:1}">${w.blocked?'Unblock':'🚫 Block'}</button></div>
+    ${w.blocked?'<div class="empty-note" style="margin:8px">You blocked this person. They can’t message you. Tap Unblock to talk again.</div>':''}
     <div class="conv-m" id="convM">${th.messages.length?th.messages.map(m=>`<div class="bub ${m.from_id===MEM.me.id?'me':''}">${esc(m.body)}<small>${new Date(m.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></div>`).join(''):'<div class="empty-note">Say hello 👋 Don’t share emergencies here: call your local emergency number.</div>'}</div>
     <form class="conv-f" id="convF"><input id="convIn" maxlength="2000" placeholder="Write a message…" autocomplete="off"><button class="btn primary sm">Send</button></form>`;if(window.applyWall)applyWall();
   const M=$('#convM');M.scrollTop=M.scrollHeight;
+  $('#blkBtn').onclick=async()=>{const on=$('#blkBtn').dataset.blk==='1';if(on&&!confirm(`Block ${w.name}? They won’t be able to message you.`))return;
+    try{await mapi('block',{with:w.id,on});openConv(withId)}catch(e){alert(e.message)}};
   $('#convF').onsubmit=async e=>{e.preventDefault();const t=$('#convIn').value.trim();if(!t)return;$('#convIn').value='';
     try{await mapi('send',listingId&&!th.messages.length?{listing_id:listingId,body:t}:{to:withId,body:t});listingId=null;openConv(withId)}catch(err){alert(err.message)}};
   clearInterval(threadTimer);threadTimer=setInterval(()=>{if(!$('#v-account').classList.contains('active')||openThread!==withId||document.activeElement===$('#convIn')&&$('#convIn').value){return}
@@ -3083,7 +3097,7 @@ function closeReviews(){$('#revSheet').classList.remove('on')}
 $('#revX').onclick=closeReviews;$('#revSheet').onclick=e=>{if(e.target.id==='revSheet')closeReviews()};
 function renderReviews(){const R2=REV,l=regs().find(x=>x.id===R2.listing_id)||{name:'Doctor'};const me=MEM.me;const mine=R2.reviews.find(r=>r.mine);
   const max=Math.max(1,...Object.values(R2.dist));
-  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)} ${l.verified?'<span class="lc-pill ok" style="vertical-align:middle;font-size:11px">✓ Verified</span>':''}</h3><div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
+  $('#revBody').innerHTML=`<h3 style="padding-right:40px">${esc(l.name)} ${l.verified?'<span class="lc-pill ok" style="vertical-align:middle;font-size:11px">✓ Verified</span>':''}</h3>${R2.is_owner?'':`<button class="rp-flag" type="button" data-report="listing:${R2.listing_id}" style="float:right;margin-top:-4px">⚑ Report profile</button>`}<div style="color:var(--mute);font-size:13.5px">${esc([l.spec,l.city].filter(Boolean).join(' · '))}</div>
     <div class="rv-head"><div><div class="rv-avg">${R2.avg??'–'}</div><div class="stars">${starTxt(Math.round(R2.avg||0))}</div><div style="font-size:12.5px;color:var(--mute)">${R2.count} review${R2.count===1?'':'s'}</div></div>
       <div class="rv-dist">${[5,4,3,2,1].map(n=>`<div>${n}★<i><b style="width:${R2.dist[n]/max*100}%"></b></i>${R2.dist[n]}</div>`).join('')}</div></div>
     ${R2.photos.length?`<div class="nd-h" style="margin-left:0">PHOTOS OF THEIR WORK</div><div class="rv-photos">${R2.photos.map(g=>`<figure data-lb="${g.id}" data-cap="${esc(g.caption||'')}"><img loading="lazy" src="/api/m/gallery/${g.id}" alt="${esc(g.caption||'Work photo')}"><figcaption>${esc(g.caption||'')}</figcaption></figure>`).join('')}</div>`:''}
@@ -3101,6 +3115,7 @@ ${vidSection(R2,me)}
         <b>${esc(r.name)}</b><small>${new Date(r.ts).toLocaleDateString([], {day:'numeric',month:'short',year:'numeric'})}${r.mine?' · you':''}</small>
         <div class="stars" style="font-size:14px">${starTxt(r.stars)}</div><p>${esc(r.body)}</p>${r.gif?`<img class="gif" src="assets/gif/${esc(r.gif)}.gif" alt="">`:''}
         ${r.reply?`<div class="rv-reply"><b>Reply from the doctor</b><div>${esc(r.reply)}</div></div>`:''}
+        ${r.mine?'':`<button class="rp-flag" type="button" data-report="review:${r.id}">⚑ Report</button>`}
         ${R2.is_owner?`<button class="rv-mini" type="button" data-rep="${r.id}">${r.reply?'Edit reply':'Reply'}</button><div data-repbox="${r.id}" hidden><textarea class="fs-note" maxlength="600" placeholder="Thank them or answer kindly…">${esc(r.reply||'')}</textarea><button class="btn primary sm" type="button" data-repsend="${r.id}" style="margin-top:6px">Post reply</button></div>`:''}
       </div></div>`).join(''):'<p style="color:var(--mute);padding:14px 0;border-top:1px solid var(--line)">No reviews yet. Be the first to share your experience.</p>'}</div>`;
   const pick=$('#rvPick');if(pick){pick.onclick=e=>{const b=e.target.closest('[data-s]');if(!b)return;revDraft.stars=+b.dataset.s;pick.querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.s<=revDraft.stars))};
@@ -3127,6 +3142,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#lightbox').clas
 /* ================= VIDEOS: doctors' demo videos and patients' video reviews ================= */
 function vidCard(v,owner){return `<figure><video src="/api/m/video/${v.id}" controls preload="metadata" playsinline></video>
   <figcaption>${v.kind==='demo'?'🎬':'🎥'} ${esc(v.caption||(v.kind==='demo'?'Demo video':'Video review by '+v.name))}${v.status==='pending'?'<span class="vid-pend">WAITING FOR APPROVAL</span>':''}</figcaption>
+  ${v.mine||v.status!=='live'?'':`<button class="rp-flag" type="button" data-report="video:${v.id}">⚑ Report video</button>`}
   ${(owner&&v.status==='pending')||v.mine||owner?`<div class="vid-acts">${owner&&v.status==='pending'?`<button class="btn primary sm" type="button" data-vok="${v.id}">✓ Approve</button><button class="btn ghost sm" type="button" data-vno="${v.id}">✕ Reject</button>`:`<button class="rv-mini" type="button" data-vdel="${v.id}">Remove</button>`}</div>`:''}</figure>`}
 function vidSection(R2,me){const vids=R2.videos||[];const canAdd=me&&!R2.is_owner&&me.kind==='patient';
   const mine=vids.find(v=>v.mine&&v.kind==='review');
@@ -3208,6 +3224,63 @@ window.remAlert=n=>{const t=document.createElement('div');t.className='rem-toast
   mapi('me').then(()=>{const c=$('#remCard');if(c&&!$('#remTitle').value){const o=c.open;renderAccount();const c2=$('#remCard');if(c2)c2.open=o}}).catch(()=>{});
   try{const a=new (window.AudioContext||window.webkitAudioContext)();[0,.25].forEach(s=>{const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.setValueAtTime(.15,a.currentTime+s);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+s+.22);o.connect(g).connect(a.destination);o.start(a.currentTime+s);o.stop(a.currentTime+s+.25)})}catch{}
   try{if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body||'',icon:'/assets/icons/icon-192.png',tag:'rem'+n.id})}catch{}};
+
+/* ================= REPORTS ================= */
+const REPORT_WHY=[['fake','Fake or pretending to be someone'],['spam','Spam or advertising'],['abuse','Rude, hateful or harassing'],['unsafe','Dangerous medical advice'],
+  ['sexual','Sexual or inappropriate'],['privacy','Shares private information'],['wrong','Wrong details (address, phone…)'],['other','Something else']];
+const REPORT_WHAT={listing:'this profile',review:'this review',video:'this video',member:'this person'};
+function openReport(type,id){
+  if(!MEM.me){if(window.closeReviews)closeReviews();go('account');if(window.acctNotice)acctNotice('Log in or create a free account to report something.');return}
+  const why=type==='listing'?REPORT_WHY:REPORT_WHY.filter(x=>x[0]!=='wrong');
+  const ov=document.createElement('div');ov.className='rp-ov';ov.innerHTML=`<form class="rp-box" role="dialog" aria-modal="true" aria-label="Report">
+    <h3>⚑ Report ${REPORT_WHAT[type]}</h3><p style="color:var(--mute);font-size:13.5px;margin:0">Your report is private. ${type==='member'?'They won’t know who reported them.':'The person won’t see your name.'}</p>
+    <div class="why">${why.map(([k,n],i)=>`<label><input type="radio" name="rpWhy" value="${k}" ${i?'':'required'}> ${n}</label>`).join('')}</div>
+    <textarea id="rpDet" maxlength="500" placeholder="Anything else we should know? (optional)"></textarea>
+    ${type==='member'?`<label class="chk" style="margin-top:8px"><input type="checkbox" id="rpBlk" checked> Also block this person</label><p style="font-size:12px;color:var(--mute);margin:6px 0 0">The last 20 messages of this chat are shared with the Clinora team to check the report.</p>`:''}
+    <p style="font-size:12px;color:var(--mute);margin:8px 0 0">In danger right now? Call your local emergency number first.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn ghost sm" type="button" id="rpX">Cancel</button><button class="btn primary sm" type="submit">Send report</button></div>
+    <div id="rpMsg" style="font-size:13px;margin-top:8px"></div></form>`;
+  document.body.appendChild(ov);const close=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)close()};$('#rpX',ov).onclick=close;ov.querySelector('input').focus();
+  ov.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}});
+  ov.querySelector('form').onsubmit=async e=>{e.preventDefault();const reason=(ov.querySelector('input[name=rpWhy]:checked')||{}).value;const m=$('#rpMsg',ov);
+    if(!reason){m.innerHTML='<span class="red">Pick a reason.</span>';return}m.textContent='Sending…';
+    try{await mapi('report',{type,id,reason,details:$('#rpDet',ov).value.trim(),block:!!(($('#rpBlk',ov)||{}).checked)});
+      ov.querySelector('form').innerHTML=`<h3>✅ Thank you</h3><p style="font-size:14px;margin:8px 0 14px">We received your report. Our team checks every report, and you get a 🔔 notification when we’re done.</p><div style="text-align:right"><button class="btn primary sm" type="button" id="rpOk">Done</button></div>`;
+      $('#rpOk',ov).onclick=close;if(type==='member'&&openThread===id)openConv(id)}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-report]');if(!b)return;e.preventDefault();e.stopPropagation();const[t,i]=b.dataset.report.split(':');openReport(t,+i)},true);
+
+// clinic admin: reports in the Clinic Dashboard
+const RQ_ICON={listing:'👨‍⚕️ Doctor profile',review:'⭐ Review',video:'🎥 Video',member:'👤 Person (chat)'};
+function rqEvidence(g){const e=g.evidence||{};
+  if(g.type==='listing')return `<b>${esc(e.name||'')}</b> · ${esc([e.spec,e.city,e.phone].filter(Boolean).join(' · '))}`;
+  if(g.type==='review')return `${'★'.repeat(e.stars||0)} on <b>${esc(e.on||'')}</b><br>${esc(e.body||'')}`;
+  if(g.type==='video')return `${e.kind==='demo'?'Demo video':'Video review'}: ${esc(e.caption||'(no caption)')}${g.state==='live'?` · <a class="teal" href="/api/m/video/${g.target_id}" target="_blank" rel="noopener">Watch ↗</a>`:''}`;
+  return `<b>${esc(e.name||'')}</b> (${esc(e.kind||'')})${(e.messages||[]).length?(e.messages||[]).map(m=>`<div class="mm"><b>${m.from_id===g.target_id?esc(e.name):'Reporter'}:</b> ${esc(m.body)}</div>`).join(''):'<div class="mm">No messages between them.</div>'}`}
+async function renderReportQueue(){const sec=$('#reportSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
+  let q;try{q=(await api('/api/report/list')).created}catch(e){sec.innerHTML='<h4>⚑ REPORTS</h4><p class="red">'+esc(e.message)+'</p>';return}
+  const items=q.reports||[];
+  sec.innerHTML=`<h4>⚑ REPORTS ${q.open?`<span class="vstat rejected" style="margin-left:6px">${q.open} to check</span>`:''}</h4>
+    <p style="font-size:12.5px;color:var(--mute)">Reports from patients and doctors. Check each one, then remove the content, hide a profile, suspend an account, or dismiss it. The reporters get a notification.</p>
+    ${items.length?items.map(g=>{const o=g.owner,open=g.status==='open';const acts=[];
+      if(open&&g.state!=='gone'&&(g.type==='review'||g.type==='video'))acts.push(['remove','🗑 Remove '+g.type,'primary']);
+      if(g.type==='listing'&&g.state==='live')acts.push(['hide','🙈 Hide profile','primary']);
+      if(g.type==='listing'&&g.state==='hidden')acts.push(['unhide','👁 Show profile again','ghost']);
+      if(o&&!o.suspended&&open)acts.push(['suspend','⛔ Suspend account','ghost']);
+      if(o&&o.suspended)acts.push(['unsuspend','Restore account','ghost']);
+      if(open)acts.push(['dismiss','✓ No problem, dismiss','ghost']);
+      return `<div class="vq-item"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${RQ_ICON[g.type]}</b>
+        <span class="vstat ${open?'rejected':'verified'}">${open?`${g.reports.length} report${g.reports.length>1?'s':''}`:({dismiss:'dismissed',remove:'removed',hide:'hidden',unhide:'shown again',suspend:'suspended',unsuspend:'restored'})[g.action]||esc(g.status)}</span></div>
+        <div class="rq-ev">${rqEvidence(g)}${g.state==='gone'?'<div class="mm"><i>Already deleted</i></div>':g.state==='hidden'?'<div class="mm"><i>Hidden from patients</i></div>':''}</div>
+        <dl><dt>Owner</dt><dd>${o?`${esc(o.name)} · ${esc(o.email)}${o.suspended?' · <b class="red">suspended</b>':''}`:'–'}</dd>
+          ${g.reports.map(r=>`<dt>Reported</dt><dd><b>${esc(r.reason)}</b>${r.details?' · '+esc(r.details):''}<br><small style="color:var(--mute)">by ${esc(r.reporter||'deleted account')} · ${new Date(r.ts).toLocaleString([], {dateStyle:'short',timeStyle:'short'})}</small></dd>`).join('')}
+          ${g.reviewer?`<dt>Checked by</dt><dd>${esc(g.reviewer)}</dd>`:''}</dl>
+        ${acts.length?`<div class="acts">${acts.map(([a,l,c])=>`<button class="btn ${c} sm" type="button" data-rqid="${g.id}" data-rqact="${a}">${l}</button>`).join('')}</div>`:''}</div>`}).join('')
+      :'<p style="font-size:13px;color:var(--mute)">No reports. 🎉</p>'}`;
+  sec.querySelectorAll('[data-rqact]').forEach(b=>b.onclick=async()=>{const a=b.dataset.rqact;
+    const ask={remove:'Delete this content for good?',hide:'Hide this doctor profile from patients?',suspend:'Suspend this account? They are logged out and can’t log in until you restore it.'}[a];
+    if(ask&&!confirm(ask))return;try{await api('/api/report/decide',{id:+b.dataset.rqid,action:a});renderReportQueue()}catch(e){alert(e.message)}})}
 /* ================= DOCTOR VERIFICATION ================= */
 const COUNCILS=["National Medical Commission (NMC)","Dental Council of India (DCI)","Andhra Pradesh Medical Council","Arunachal Pradesh Medical Council","Assam Medical Council","Bihar Medical Council","Chhattisgarh Medical Council","Delhi Medical Council","Goa Medical Council","Gujarat Medical Council","Haryana Medical Council","Himachal Pradesh Medical Council","Jammu & Kashmir Medical Council","Jharkhand Medical Council","Karnataka Medical Council","Kerala (Travancore-Cochin) Medical Council","Madhya Pradesh Medical Council","Maharashtra Medical Council","Manipur Medical Council","Meghalaya Medical Council","Mizoram Medical Council","Nagaland Medical Council","Odisha Council of Medical Registration","Punjab Medical Council","Rajasthan Medical Council","Sikkim Medical Council","Tamil Nadu Medical Council","Telangana State Medical Council","Tripura State Medical Council","Uttar Pradesh Medical Council","Uttarakhand Medical Council","West Bengal Medical Council","State Dental Council","Medical council outside India"];
 const VSTAT={verified:'✓ Verified',pending:'⏳ Under review',rejected:'❌ Not approved yet'};

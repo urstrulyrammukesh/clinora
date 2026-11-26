@@ -379,6 +379,11 @@ CREATE TABLE IF NOT EXISTS reminders(id INTEGER PRIMARY KEY AUTOINCREMENT, membe
   title TEXT NOT NULL, note TEXT, at TEXT NOT NULL, days INTEGER NOT NULL DEFAULT 0, date TEXT, tz TEXT NOT NULL, lead INTEGER NOT NULL DEFAULT 0,
   email INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, next_at INTEGER, last_sent INTEGER, created INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS reminder_due ON reminders(active, next_at);
+CREATE TABLE IF NOT EXISTS reports(id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL, target_type TEXT NOT NULL,
+  target_id INTEGER NOT NULL, owner_id INTEGER, reason TEXT NOT NULL, details TEXT, evidence TEXT, status TEXT NOT NULL DEFAULT 'open',
+  action TEXT, ts INTEGER NOT NULL, reviewed INTEGER, reviewer TEXT);
+CREATE INDEX IF NOT EXISTS report_target ON reports(target_type, target_id, status);
+CREATE TABLE IF NOT EXISTS blocks(member_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY(member_id, blocked_id));
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
 
@@ -449,9 +454,11 @@ def init_db():
         for col in ("provider", "provider_id"):
             if col not in mcols:
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
+        if "suspended" not in mcols:
+            conn.execute("ALTER TABLE members ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
         conn.executescript(EXTRA_SCHEMA)
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
-        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT")]:
+        for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0")]:
             if col not in lcols:
                 conn.execute(f"ALTER TABLE listings ADD COLUMN {col} {kind}")
         if conn.execute("SELECT COUNT(*) FROM live").fetchone()[0] == 0:
@@ -622,6 +629,7 @@ def snapshot(conn, user=None):
             data["users"] = [dict(r) for r in conn.execute(
                 "SELECT id, email, name, role, doctor_id, created FROM users ORDER BY created")]
             data["verify_pending"] = conn.execute("SELECT COUNT(*) FROM verifications WHERE status='pending'").fetchone()[0]
+            data["reports_open"] = conn.execute("SELECT COUNT(DISTINCT target_type || target_id) FROM reports WHERE status='open'").fetchone()[0]
         else:
             rows = conn.execute("SELECT * FROM appointments WHERE doc=? ORDER BY date, time", (user["doctor_id"],))
         data["appointments"] = [dict(r) for r in rows]
@@ -798,7 +806,7 @@ def public_listings(conn):
         "(SELECT COUNT(*) FROM reviews r WHERE r.listing_id = l.id) AS reviews, "
         "(SELECT COUNT(*) FROM gallery g WHERE g.listing_id = l.id) AS photos, "
         "(SELECT COUNT(*) FROM verifications v WHERE v.listing_id = l.id AND v.status = 'verified') AS verified "
-        "FROM listings l LEFT JOIN members m ON m.id = l.owner ORDER BY l.ts")
+        "FROM listings l LEFT JOIN members m ON m.id = l.owner WHERE l.hidden = 0 ORDER BY l.ts")
     out = []
     for r in rows:
         d = dict(r)
@@ -820,7 +828,7 @@ def member_for_token(conn, token):
         return None
     row = conn.execute(
         "SELECT m.id, m.email, m.name, m.kind, m.city, m.online, m.photo_ts FROM member_sessions s JOIN members m ON m.id = s.member_id "
-        "WHERE s.token = ? AND s.expires > ?", (token_hash(token), now_ms())).fetchone()
+        "WHERE s.token = ? AND s.expires > ? AND m.suspended = 0", (token_hash(token), now_ms())).fetchone()
     if not row:
         return None
     conn.execute("UPDATE members SET last_seen=? WHERE id=?", (now_ms(), row["id"]))
@@ -894,6 +902,8 @@ def m_login(conn, d, me, ip):
     if not row or not check_password(str(d.get("password") or ""), row["pw"]):
         FAILED_LOGINS.setdefault(ip, []).append(time.time())
         raise AuthError("Wrong email or password.", 401)
+    if conn.execute("SELECT suspended FROM members WHERE id=?", (row["id"],)).fetchone()[0]:
+        raise AuthError("This account is suspended after reports from other users. Contact support if you think this is a mistake.", 403)
     return row["id"]
 
 
@@ -949,6 +959,10 @@ def m_send(conn, d, me):
         raise InputError("Can't send to this person")
     # patients can message doctors; doctors can reply to anyone who wrote to them
     other_kind = conn.execute("SELECT kind FROM members WHERE id=?", (to,)).fetchone()["kind"]
+    if conn.execute("SELECT 1 FROM blocks WHERE member_id=? AND blocked_id=?", (me["id"], to)).fetchone():
+        raise InputError("You blocked this person. Unblock them to send a message.")
+    if conn.execute("SELECT 1 FROM blocks WHERE member_id=? AND blocked_id=?", (to, me["id"])).fetchone():
+        raise AuthError("You can't message this person.")
     if me["kind"] == "patient" and other_kind != "doctor":
         raise AuthError("Patients can message doctors only.")
     if me["kind"] == "doctor" and other_kind == "patient" and not conn.execute(
@@ -973,7 +987,8 @@ def m_thread(conn, d, me):
         "SELECT id, from_id, body, ts FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) ORDER BY id DESC LIMIT 200",
         (me["id"], other, other, me["id"]))][::-1]
     online = bool(o["online"]) and o["last_seen"] > now_ms() - ONLINE_WINDOW_MS if o["kind"] == "doctor" else None
-    return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online, "photo_ts": o["photo_ts"]}, "messages": msgs}
+    blocked = bool(conn.execute("SELECT 1 FROM blocks WHERE member_id=? AND blocked_id=?", (me["id"], other)).fetchone())
+    return {"with": {"id": o["id"], "name": o["name"], "kind": o["kind"], "online": online, "photo_ts": o["photo_ts"], "blocked": blocked}, "messages": msgs}
 
 
 AVATAR_DIR = DATA_DIR / "avatars"
@@ -1310,6 +1325,8 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM notifs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM verifications WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM reports WHERE reporter_id=?", (mid,))
+    conn.execute("DELETE FROM blocks WHERE member_id=? OR blocked_id=?", (mid, mid))
     (VERIFY_DIR / f"{mid}.jpg").unlink(missing_ok=True)
     for (lid,) in conn.execute("SELECT id FROM listings WHERE owner=?", (mid,)).fetchall():
         for (gid,) in conn.execute("SELECT id FROM gallery WHERE listing_id=?", (lid,)).fetchall():
@@ -1580,6 +1597,13 @@ def oauth_redirect_uri(prov):
 
 
 def social_member(conn, prov, pid, email, name, kind):
+    mid = _social_member(conn, prov, pid, email, name, kind)
+    if conn.execute("SELECT suspended FROM members WHERE id=?", (mid,)).fetchone()[0]:
+        raise AuthError("This account is suspended after reports from other users. Contact support if you think this is a mistake.", 403)
+    return mid
+
+
+def _social_member(conn, prov, pid, email, name, kind):
     """Find the account for this Google / Facebook / X user, link it to an existing email account, or create one."""
     pid = str(pid or "").strip()
     if not pid:
@@ -1752,13 +1776,171 @@ def video_visible(conn, vid, me):
     return None
 
 
+# ---------------------------------------------------------------- reports & blocking
+# Anyone logged in can report a doctor profile, a review, a video or a person who messaged them.
+# The clinic admin reviews reports in the Clinic Dashboard and can remove the content, hide a profile or suspend an account.
+REPORT_TYPES = {"listing", "review", "video", "member"}
+REPORT_REASONS = {"fake": "Fake or pretending to be someone", "spam": "Spam or advertising", "abuse": "Rude, hateful or harassing",
+                  "unsafe": "Dangerous medical advice", "sexual": "Sexual or inappropriate", "privacy": "Shares private information",
+                  "wrong": "Wrong details (address, phone...)", "other": "Something else"}
+
+
+def _report_target(conn, kind, tid, me):
+    """Returns (owner member id, evidence dict) for something that can be reported, or raises."""
+    if kind == "listing":
+        r = conn.execute("SELECT name, spec, city, phone, owner FROM listings WHERE id=?", (tid,)).fetchone()
+        if not r:
+            raise InputError("This profile no longer exists")
+        return r["owner"], {"name": r["name"], "spec": r["spec"], "city": r["city"], "phone": r["phone"]}
+    if kind == "review":
+        r = conn.execute("SELECT r.member_id, r.stars, r.body, r.gif, l.name AS listing FROM reviews r JOIN listings l ON l.id=r.listing_id "
+                         "WHERE r.id=?", (tid,)).fetchone()
+        if not r:
+            raise InputError("This review no longer exists")
+        return r["member_id"], {"stars": r["stars"], "body": r["body"], "gif": r["gif"], "on": r["listing"]}
+    if kind == "video":
+        v = video_visible(conn, tid, me)
+        if not v:
+            raise InputError("This video no longer exists")
+        return v["member_id"], {"kind": v["kind"], "caption": v["caption"]}
+    o = conn.execute("SELECT id, name, kind FROM members WHERE id=?", (tid,)).fetchone()
+    if not o:
+        raise InputError("This account no longer exists")
+    # the last messages between the two people go with the report, so the admin can see what happened
+    msgs = [dict(m) for m in conn.execute(
+        "SELECT from_id, body, ts FROM messages WHERE (from_id=? AND to_id=?) OR (from_id=? AND to_id=?) ORDER BY id DESC LIMIT 20",
+        (me["id"], tid, tid, me["id"]))][::-1]
+    return o["id"], {"name": o["name"], "kind": o["kind"], "messages": msgs}
+
+
+def m_report(conn, d, me):
+    need_member(me)
+    if too_many("report", str(me["id"]), 20, 86400):
+        raise AuthError("You have sent many reports today. Please try again tomorrow.", 429)
+    kind = one_of(d, "type", REPORT_TYPES)
+    reason = one_of(d, "reason", set(REPORT_REASONS))
+    tid = int(d.get("id") or 0)
+    details = text(d, "details", 500, False)
+    if reason == "other" and len(details) < 5:
+        raise InputError("Please tell us a little about the problem")
+    owner, evidence = _report_target(conn, kind, tid, me)
+    if owner == me["id"]:
+        raise InputError("You can't report your own content")
+    old = conn.execute("SELECT id FROM reports WHERE reporter_id=? AND target_type=? AND target_id=? AND status='open'",
+                       (me["id"], kind, tid)).fetchone()
+    if old:
+        conn.execute("UPDATE reports SET reason=?, details=?, evidence=?, ts=? WHERE id=?",
+                     (reason, details, json.dumps(evidence), now_ms(), old["id"]))
+    else:
+        conn.execute("INSERT INTO reports(reporter_id,target_type,target_id,owner_id,reason,details,evidence,ts) VALUES(?,?,?,?,?,?,?,?)",
+                     (me["id"], kind, tid, owner, reason, details, json.dumps(evidence), now_ms()))
+    if kind == "member" and d.get("block"):
+        conn.execute("INSERT OR IGNORE INTO blocks VALUES(?,?,?)", (me["id"], tid, now_ms()))
+    return {"reported": True}
+
+
+def m_block(conn, d, me):
+    need_member(me)
+    other = int(d.get("with") or 0)
+    if other == me["id"] or not conn.execute("SELECT 1 FROM members WHERE id=?", (other,)).fetchone():
+        raise InputError("Can't block this person")
+    if d.get("on"):
+        conn.execute("INSERT OR IGNORE INTO blocks VALUES(?,?,?)", (me["id"], other, now_ms()))
+    else:
+        conn.execute("DELETE FROM blocks WHERE member_id=? AND blocked_id=?", (me["id"], other))
+    return {"blocked": bool(d.get("on"))}
+
+
+def _target_state(conn, kind, tid, owner):
+    if kind == "listing":
+        r = conn.execute("SELECT hidden FROM listings WHERE id=?", (tid,)).fetchone()
+        st = "gone" if not r else "hidden" if r["hidden"] else "live"
+    elif kind == "review":
+        st = "live" if conn.execute("SELECT 1 FROM reviews WHERE id=?", (tid,)).fetchone() else "gone"
+    elif kind == "video":
+        st = "live" if conn.execute("SELECT 1 FROM videos WHERE id=?", (tid,)).fetchone() else "gone"
+    else:
+        st = "live"
+    o = conn.execute("SELECT name, email, kind, suspended FROM members WHERE id=?", (owner,)).fetchone() if owner else None
+    return st, (dict(o) if o else None)
+
+
+def report_queue(conn, d, user):
+    """Reports grouped by what was reported, open ones first."""
+    need_admin(user)
+    groups = {}
+    for r in conn.execute("SELECT r.*, m.name AS reporter, m.email AS reporter_email FROM reports r LEFT JOIN members m ON m.id=r.reporter_id "
+                          "ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END, r.ts DESC LIMIT 400"):
+        key = (r["target_type"], r["target_id"], r["status"] == "open")
+        g = groups.get(key)
+        if not g:
+            st, owner = _target_state(conn, r["target_type"], r["target_id"], r["owner_id"])
+            g = groups[key] = {"id": r["id"], "type": r["target_type"], "target_id": r["target_id"], "owner_id": r["owner_id"], "owner": owner,
+                               "state": st, "status": r["status"], "action": r["action"], "reviewer": r["reviewer"],
+                               "evidence": json.loads(r["evidence"] or "{}"), "ts": r["ts"], "reports": []}
+        g["reports"].append({"reporter": r["reporter"], "reporter_email": r["reporter_email"],
+                             "reason": REPORT_REASONS.get(r["reason"], r["reason"]), "details": r["details"], "ts": r["ts"]})
+    items = list(groups.values())[:100]
+    return {"reports": items, "open": sum(1 for g in items if g["status"] == "open")}
+
+
+REPORT_ACTIONS = {"dismiss", "remove", "hide", "unhide", "suspend", "unsuspend"}
+
+
+def report_decide(conn, d, user):
+    need_admin(user)
+    r = conn.execute("SELECT * FROM reports WHERE id=?", (int(d.get("id") or 0),)).fetchone()
+    if not r:
+        raise InputError("Report not found")
+    action = one_of(d, "action", REPORT_ACTIONS)
+    kind, tid, owner = r["target_type"], r["target_id"], r["owner_id"]
+    if action == "remove":
+        if kind == "review":
+            conn.execute("DELETE FROM reviews WHERE id=?", (tid,))
+            notify(conn, owner, "security", "Your review was removed",
+                   "It broke the Clinora rules after a report. You can write a new, respectful review.", "account")
+        elif kind == "video":
+            v = conn.execute("SELECT mime FROM videos WHERE id=?", (tid,)).fetchone()
+            if v:
+                conn.execute("DELETE FROM videos WHERE id=?", (tid,))
+                video_file(tid, v["mime"]).unlink(missing_ok=True)
+            notify(conn, owner, "security", "Your video was removed", "It broke the Clinora rules after a report.", "account")
+        else:
+            raise InputError("Use hide or suspend for this report")
+    elif action in ("hide", "unhide"):
+        if kind != "listing":
+            raise InputError("Only doctor profiles can be hidden")
+        conn.execute("UPDATE listings SET hidden=? WHERE id=?", (1 if action == "hide" else 0, tid))
+        notify(conn, owner, "security", "Your profile is hidden" if action == "hide" else "Your profile is visible again",
+               "Patients can't find it after reports. Please update your details or contact support." if action == "hide" else "", "account")
+    elif action in ("suspend", "unsuspend"):
+        if not owner:
+            raise InputError("No account to suspend")
+        conn.execute("UPDATE members SET suspended=? WHERE id=?", (1 if action == "suspend" else 0, owner))
+        if action == "suspend":
+            conn.execute("DELETE FROM member_sessions WHERE member_id=?", (owner,))
+    if action in ("unhide", "unsuspend"):  # undoing an earlier decision: the reports stay closed
+        conn.execute("UPDATE reports SET action=?, reviewer=?, reviewed=? WHERE target_type=? AND target_id=?",
+                     (action, user["name"], now_ms(), kind, tid))
+        return report_queue(conn, d, user)
+    reporters = [x[0] for x in conn.execute("SELECT DISTINCT reporter_id FROM reports WHERE target_type=? AND target_id=? AND status='open'", (kind, tid))]
+    conn.execute("UPDATE reports SET status=?, action=?, reviewed=?, reviewer=? WHERE target_type=? AND target_id=? AND status='open'",
+                 ("dismissed" if action == "dismiss" else "actioned", action, now_ms(), user["name"], kind, tid))
+    for rid in reporters:
+        notify(conn, rid, "security", "Thanks for your report",
+               "We checked it and did not find a rule break this time." if action == "dismiss"
+               else "We checked it and took action. Thank you for keeping Clinora safe.", "")
+    return report_queue(conn, d, user)
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
                  "/api/m/review/reply": m_review_reply, "/api/m/gallery/add": m_gallery_add, "/api/m/gallery/delete": m_gallery_delete,
                  "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete,
                  "/api/m/verify/submit": m_verify_submit, "/api/m/reminder/save": m_reminder_save,
-                 "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete}
+                 "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete,
+                 "/api/m/report": m_report, "/api/m/block": m_block}
 
 
 
@@ -2350,6 +2532,8 @@ ROUTES = {
     "/api/pay/refund": pay_refund,
     "/api/reset": reset_demo,
     "/api/verify/list": verify_queue,
+    "/api/report/list": report_queue,
+    "/api/report/decide": report_decide,
     "/api/verify/decide": verify_decide,
 }
 
