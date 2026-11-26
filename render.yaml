@@ -42,6 +42,16 @@ services:
         sync: false
       - key: PAYPAL_WEBHOOK_ID
         sync: false
+      - key: BACKUP_S3_ENDPOINT  # cloud copy of the daily backup (docs/backups.md)
+        sync: false
+      - key: BACKUP_S3_BUCKET
+        sync: false
+      - key: BACKUP_S3_REGION
+        sync: false
+      - key: BACKUP_S3_KEY_ID
+        sync: false
+      - key: BACKUP_S3_SECRET
+        sync: false
       - key: TWA_PACKAGE         # Android app id after you make the Play Store app, e.g. com.clinora.app
         sync: false
       - key: TWA_SHA256          # "App signing key certificate" SHA-256 from Play Console

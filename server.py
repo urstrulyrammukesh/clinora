@@ -1933,6 +1933,205 @@ def report_decide(conn, d, user):
     return report_queue(conn, d, user)
 
 
+# ---------------------------------------------------------------- database backups
+# Every BACKUP_EVERY_HOURS (default 24) a safe copy of the database plus profile photos, work photos and
+# verification certificates is packed into data/backups/clinora-<date>-<time>.tar.gz. The newest BACKUP_KEEP
+# (default 14) are kept. With the BACKUP_S3_* settings each backup is also uploaded to cloud storage
+# (Cloudflare R2, Backblaze B2, AWS S3...), so a lost server disk doesn't lose your data. See docs/backups.md.
+BACKUP_DIR = Path(os.environ.get("BACKUP_DIR") or (DATA_DIR / "backups"))
+BACKUP_EVERY_H = max(1.0, float(os.environ.get("BACKUP_EVERY_HOURS") or 24))
+BACKUP_KEEP = max(2, int(os.environ.get("BACKUP_KEEP") or 14))
+BACKUP_VIDEOS = os.environ.get("BACKUP_VIDEOS", "").strip() == "1"
+S3_ENDPOINT = os.environ.get("BACKUP_S3_ENDPOINT", "").strip().rstrip("/")
+S3_BUCKET = os.environ.get("BACKUP_S3_BUCKET", "").strip()
+S3_KEY_ID = os.environ.get("BACKUP_S3_KEY_ID", "").strip()
+S3_SECRET = os.environ.get("BACKUP_S3_SECRET", "").strip()
+S3_REGION = os.environ.get("BACKUP_S3_REGION", "").strip() or "auto"
+S3_ON = bool(S3_ENDPOINT.startswith("https://") and S3_BUCKET and S3_KEY_ID and S3_SECRET)
+BACKUP_NAME_RE = re.compile(r"^clinora-\d{8}-\d{6}\.tar\.gz$")
+BACKUP_FOLDERS = ("avatars", "gallery", "verify")
+BACKUP_LOCK = threading.Lock()
+
+
+def _backup_status(update=None):
+    f = BACKUP_DIR / "status.json"
+    try:
+        st = json.loads(f.read_text())
+    except Exception:
+        st = {}
+    if update:
+        st.update(update)
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(st))
+    return st
+
+
+def list_backups():
+    if not BACKUP_DIR.is_dir():
+        return []
+    out = [{"name": f.name, "size": f.stat().st_size, "ts": int(f.stat().st_mtime * 1000)}
+           for f in BACKUP_DIR.iterdir() if BACKUP_NAME_RE.match(f.name)]
+    return sorted(out, key=lambda b: b["name"], reverse=True)
+
+
+def s3_put(key, path):
+    """Uploads one file with AWS Signature V4 (works with S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO)."""
+    import urllib.parse
+    import urllib.request
+    body = Path(path).read_bytes()
+    payload_hash = hashlib.sha256(body).hexdigest()
+    host = urllib.parse.urlparse(S3_ENDPOINT).netloc
+    now = datetime.datetime.now(datetime.timezone.utc)
+    amz_date, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
+    uri = "/" + urllib.parse.quote(S3_BUCKET, safe="") + "/" + urllib.parse.quote(key, safe="/")
+    signed = "content-type;host;x-amz-content-sha256;x-amz-date"
+    canonical = "\n".join(["PUT", uri, "", "content-type:application/gzip", f"host:{host}",
+                           f"x-amz-content-sha256:{payload_hash}", f"x-amz-date:{amz_date}", "", signed, payload_hash])
+    scope = f"{day}/{S3_REGION}/s3/aws4_request"
+    to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+    k = hmac.new(("AWS4" + S3_SECRET).encode(), day.encode(), hashlib.sha256).digest()
+    for part in (S3_REGION, "s3", "aws4_request"):
+        k = hmac.new(k, part.encode(), hashlib.sha256).digest()
+    sig = hmac.new(k, to_sign.encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(S3_ENDPOINT + uri, data=body, method="PUT", headers={
+        "Content-Type": "application/gzip", "x-amz-content-sha256": payload_hash, "x-amz-date": amz_date,
+        "Authorization": f"AWS4-HMAC-SHA256 Credential={S3_KEY_ID}/{scope}, SignedHeaders={signed}, Signature={sig}"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        if r.status not in (200, 201):
+            raise RuntimeError(f"storage answered {r.status}")
+
+
+def make_backup(reason="auto"):
+    """Creates one backup file and returns its info. Safe to run while Clinora is serving people."""
+    import tarfile
+    if not BACKUP_LOCK.acquire(blocking=False):
+        raise InputError("A backup is already running. Try again in a minute.")
+    try:
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        name = "clinora-" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S") + ".tar.gz"
+        snap, part = BACKUP_DIR / ".snapshot.db", BACKUP_DIR / (name + ".part")
+        snap.unlink(missing_ok=True)
+        src, dst = sqlite3.connect(DB_PATH, timeout=30), sqlite3.connect(snap)
+        try:
+            src.backup(dst)  # SQLite's own online backup: a consistent copy even while people use the site
+            if dst.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise RuntimeError("the database copy failed its integrity check")
+            counts = {t: dst.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+                      for (t,) in dst.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+        finally:
+            src.close()
+            dst.close()
+        manifest = json.dumps({"app": "clinora", "created": now_ms(), "reason": reason, "rows": counts,
+                               "videos": BACKUP_VIDEOS}, indent=1).encode()
+        with tarfile.open(part, "w:gz") as tar:
+            tar.add(snap, arcname=DB_PATH.name)
+            info = tarfile.TarInfo("manifest.json")
+            info.size, info.mtime = len(manifest), time.time()
+            import io
+            tar.addfile(info, io.BytesIO(manifest))
+            for folder in BACKUP_FOLDERS + (("videos",) if BACKUP_VIDEOS else ()):
+                d = DATA_DIR / folder
+                if d.is_dir():
+                    tar.add(d, arcname=folder)
+        part.rename(BACKUP_DIR / name)
+        snap.unlink(missing_ok=True)
+        for old in list_backups()[BACKUP_KEEP:]:
+            (BACKUP_DIR / old["name"]).unlink(missing_ok=True)
+        size = (BACKUP_DIR / name).stat().st_size
+        _backup_status({"last_ok": now_ms(), "last_name": name, "last_error": None})
+        print(f"[backup] {name} ({size // 1024} KB, {reason})", flush=True)
+        if S3_ON:
+            try:
+                s3_put("clinora-backups/" + name, BACKUP_DIR / name)
+                _backup_status({"upload_ok": now_ms(), "upload_name": name, "upload_error": None})
+                print(f"[backup] uploaded {name} to cloud storage", flush=True)
+            except Exception as e:
+                _backup_status({"upload_error": f"{type(e).__name__}: {e}"[:300], "upload_error_ts": now_ms()})
+                print(f"[backup] UPLOAD FAILED: {type(e).__name__}: {e}", flush=True)
+        return {"name": name, "size": size}
+    except InputError:
+        raise
+    except Exception as e:
+        _backup_status({"last_error": f"{type(e).__name__}: {e}"[:300], "last_error_ts": now_ms()})
+        print(f"[backup] FAILED: {type(e).__name__}: {e}", flush=True)
+        raise
+    finally:
+        for f in BACKUP_DIR.glob("*.part"):
+            f.unlink(missing_ok=True)
+        BACKUP_LOCK.release()
+
+
+def backup_loop():
+    time.sleep(60)  # let the server start first
+    while True:
+        try:
+            latest = list_backups()
+            if not latest or time.time() * 1000 - latest[0]["ts"] >= BACKUP_EVERY_H * 3600_000:
+                make_backup("auto")
+        except Exception:
+            pass  # already logged; tried again next round
+        time.sleep(600)
+
+
+def backup_info(conn, d, user):
+    need_admin(user)
+    return {"backups": list_backups(), "status": _backup_status(), "every_h": BACKUP_EVERY_H, "keep": BACKUP_KEEP,
+            "offsite": S3_ON, "videos": BACKUP_VIDEOS, "folder": str(BACKUP_DIR)}
+
+
+def backup_now(conn, d, user):
+    need_admin(user)
+    if too_many("backup", str(user["id"]), 6, 3600):
+        raise AuthError("Too many backups this hour. Please wait a little.", 429)
+    if BACKUP_LOCK.locked():
+        raise InputError("A backup is already running. Try again in a minute.")
+    threading.Thread(target=lambda: make_backup("manual by " + user["name"]), daemon=True).start()
+    return {"started": True}
+
+
+def restore_backup(path):
+    """python server.py --restore data/backups/clinora-....tar.gz   (stop Clinora first)"""
+    import socket
+    import tarfile
+    src = Path(path)
+    if not src.is_file():
+        sys.exit(f"File not found: {src}")
+    try:
+        with socket.create_connection(("127.0.0.1", PORT), timeout=1):
+            sys.exit(f"Clinora is still running on port {PORT}. Stop it first (Ctrl+C in its window), then run this again.")
+    except OSError:
+        pass
+    allowed = (DB_PATH.name, "manifest.json")
+    with tarfile.open(src, "r:gz") as tar:
+        members = tar.getmembers()
+        for m in members:
+            parts = Path(m.name).parts
+            bad = m.name.startswith("/") or ".." in parts or not (m.isfile() or m.isdir())
+            if bad or not (m.name in allowed or (parts and parts[0] in BACKUP_FOLDERS + ("videos",))):
+                sys.exit(f"Refusing this file: it contains an unexpected item ({m.name}).")
+        if DB_PATH.name not in [m.name for m in members]:
+            sys.exit("This is not a Clinora backup (no database inside).")
+        try:
+            made = json.loads(tar.extractfile("manifest.json").read()).get("created")
+            print("Backup made on:", datetime.datetime.fromtimestamp(made / 1000).strftime("%d %b %Y, %H:%M"))
+        except Exception:
+            pass
+        keep = DATA_DIR / ("before-restore-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        keep.mkdir(parents=True)
+        for f in [DB_PATH, DB_PATH.with_name(DB_PATH.name + "-wal"), DB_PATH.with_name(DB_PATH.name + "-shm")] + \
+                 [DATA_DIR / x for x in BACKUP_FOLDERS + (("videos",) if "videos" in {Path(m.name).parts[0] for m in members} else ())]:
+            if f.exists():
+                f.rename(keep / f.name)
+        for m in members:
+            if m.name != "manifest.json":
+                try:
+                    tar.extract(m, DATA_DIR, filter="data")  # newer Python: extra safety checks
+                except TypeError:
+                    tar.extract(m, DATA_DIR)
+    print(f"Restored from {src.name}. Your previous data was moved to {keep} (delete it once all is well).")
+    print("Now start Clinora again.")
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2533,6 +2732,8 @@ ROUTES = {
     "/api/reset": reset_demo,
     "/api/verify/list": verify_queue,
     "/api/report/list": report_queue,
+    "/api/backup/list": backup_info,
+    "/api/backup/now": backup_now,
     "/api/report/decide": report_decide,
     "/api/verify/decide": verify_decide,
 }
@@ -2791,6 +2992,23 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "private, no-store")
             self.end_headers()
             self.wfile.write(body)
+            return
+        if path_only.startswith("/api/backup/file/"):
+            name = path_only.rsplit("/", 1)[1]
+            with connect() as conn:
+                user = user_for_token(conn, self.session_token())
+            f = BACKUP_DIR / name
+            if not user or user["role"] != "admin" or not BACKUP_NAME_RE.match(name) or not f.is_file():
+                return self.send_json(404, {"error": "not found"})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/gzip")
+            self.send_header("Content-Length", str(f.stat().st_size))
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Cache-Control", "private, no-store")
+            self.end_headers()
+            with f.open("rb") as fh:
+                while chunk := fh.read(1 << 20):
+                    self.wfile.write(chunk)
             return
         if path_only.startswith("/api/m/video/") and path_only.rsplit("/", 1)[1].isdigit():
             return self.send_video(int(path_only.rsplit("/", 1)[1]))
@@ -3181,6 +3399,13 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "--restore":
+        restore_backup(sys.argv[2])
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "--backup":
+        init_db()
+        print(make_backup("command line"))
+        sys.exit(0)
     if len(sys.argv) > 2 and sys.argv[1] == "--translate":
         # Pre-translate languages ahead of time:  python server.py --translate all   (or: --translate bn,ur,sw)
         wanted = [c for c in language_catalog() if c not in BUILTIN_LANGS] if sys.argv[2] == "all" else sys.argv[2].split(",")
@@ -3201,4 +3426,6 @@ if __name__ == "__main__":
     if PRODUCTION and not PUBLIC_URL.startswith("https://"):
         print("WARNING: APP_ENV=production but PUBLIC_URL is not https://. Real payments must only run over HTTPS.")
     threading.Thread(target=reminder_loop, daemon=True).start()
+    threading.Thread(target=backup_loop, daemon=True).start()
+    print("Backups:", f"every {BACKUP_EVERY_H:g} h, keeping {BACKUP_KEEP}, in {BACKUP_DIR}" + (" + cloud copy" if S3_ON else " (this computer/disk only)"))
     ThreadingHTTPServer((os.environ.get("HOST", "127.0.0.1"), PORT), Handler).serve_forever()

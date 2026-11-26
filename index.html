@@ -1333,6 +1333,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
         <div class="panel-sec team" id="teamSec" style="display:none"></div>
         <div class="panel-sec" id="verifySec" style="display:none"></div>
         <div class="panel-sec" id="reportSec" style="display:none"></div>
+        <div class="panel-sec" id="backupSec" style="display:none"></div>
         <div class="panel-sec" id="demoSec"><h4>DEMO</h4><button class="btn ghost sm" id="resetBtn">↺ Reset demo data</button></div>
       </div>
     </div>
@@ -1802,7 +1803,7 @@ function renderAuth(){
   $('#fDoc').style.display=admin?'':'none';if(!admin)$('#fDoc').value='';
   $$('[data-live]').forEach(b=>{b.disabled=!admin&&b.dataset.live!==me.doctor_id;b.title=b.disabled?'Only the clinic admin can change this':''});
   renderTeam(admin);
-  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue();renderReportQueue()}else if(!admin){window.__vqShown=false;['#verifySec','#reportSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
+  if(admin&&!window.__vqShown){window.__vqShown=true;renderVerifyQueue();renderReportQueue();renderBackups()}else if(!admin){window.__vqShown=false;['#verifySec','#reportSec','#backupSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
@@ -3281,6 +3282,28 @@ async function renderReportQueue(){const sec=$('#reportSec');if(!sec)return;cons
   sec.querySelectorAll('[data-rqact]').forEach(b=>b.onclick=async()=>{const a=b.dataset.rqact;
     const ask={remove:'Delete this content for good?',hide:'Hide this doctor profile from patients?',suspend:'Suspend this account? They are logged out and can’t log in until you restore it.'}[a];
     if(ask&&!confirm(ask))return;try{await api('/api/report/decide',{id:+b.dataset.rqid,action:a});renderReportQueue()}catch(e){alert(e.message)}})}
+
+/* ================= BACKUPS (clinic admin) ================= */
+const bkSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+const bkWhen=ts=>ts?new Date(ts).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}):'never';
+async function renderBackups(poll){const sec=$('#backupSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
+  let b;try{b=(await api('/api/backup/list')).created}catch(e){sec.innerHTML='<h4>💾 BACKUPS</h4><p class="red">'+esc(e.message)+'</p>';return}
+  const st=b.status||{},last=b.backups[0];const old=!last||Date.now()-last.ts>(b.every_h+2)*3600e3;
+  const failed=st.last_error&&(!st.last_ok||st.last_error_ts>st.last_ok);const upFail=b.offsite&&st.upload_error&&(!st.upload_ok||st.upload_error_ts>st.upload_ok);
+  sec.innerHTML=`<h4>💾 BACKUPS ${failed||old?'<span class="vstat rejected" style="margin-left:6px">needs attention</span>':'<span class="vstat verified" style="margin-left:6px">✓ OK</span>'}</h4>
+    <p style="font-size:12.5px;color:var(--mute)">A full copy of the database, profile photos, work photos and verification certificates is made every ${b.every_h} h. The newest ${b.keep} are kept${b.videos?' (videos included)':' (videos not included)'}.</p>
+    <dl style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:8px 0">
+      <dt style="color:var(--mute)">Last backup</dt><dd>${last?`${bkWhen(last.ts)} · ${bkSize(last.size)}`:'none yet'}</dd>
+      ${failed?`<dt style="color:var(--mute)">Last error</dt><dd class="red">${esc(st.last_error)}</dd>`:''}
+      <dt style="color:var(--mute)">Cloud copy</dt><dd>${b.offsite?(upFail?`<span class="red">failed: ${esc(st.upload_error)}</span>`:st.upload_ok?`✓ ${bkWhen(st.upload_ok)}`:'waiting for the first backup'):'<span style="color:var(--amber)">Off: backups stay on this server only. Turn on a cloud copy (docs/backups.md).</span>'}</dd></dl>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary sm" type="button" id="bkNow">💾 Back up now</button><span id="bkMsg" style="font-size:13px;align-self:center"></span></div>
+    ${b.backups.length?`<div style="margin-top:10px;font-size:13px">${b.backups.map((x,i)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)"><span>${i?'':'🆕 '}${bkWhen(x.ts)} <span style="color:var(--mute)">· ${bkSize(x.size)}</span></span><a class="teal" href="/api/backup/file/${encodeURIComponent(x.name)}" download>Download</a></div>`).join('')}</div>`:''}
+    <p style="font-size:12px;color:var(--mute);margin-top:8px">Backups contain private patient data. Keep downloaded files safe and never share them. To restore one, see docs/backups.md.</p>`;
+  $('#bkNow').onclick=async()=>{const m=$('#bkMsg');m.textContent='Backing up…';$('#bkNow').disabled=true;
+    try{await api('/api/backup/now');const before=last?last.name:'';for(let i=0;i<30;i++){await new Promise(r=>setTimeout(r,1500));
+        const j=(await api('/api/backup/list')).created;if(j.backups[0]&&j.backups[0].name!==before){renderBackups();return}
+        if(j.status.last_error_ts&&j.status.last_error_ts>Date.now()-60000){renderBackups();return}}
+      m.textContent='Still running. Check again in a minute.'}catch(e){m.innerHTML='<span class="red">'+esc(e.message)+'</span>'}finally{const b2=$('#bkNow');if(b2)b2.disabled=false}}}
 /* ================= DOCTOR VERIFICATION ================= */
 const COUNCILS=["National Medical Commission (NMC)","Dental Council of India (DCI)","Andhra Pradesh Medical Council","Arunachal Pradesh Medical Council","Assam Medical Council","Bihar Medical Council","Chhattisgarh Medical Council","Delhi Medical Council","Goa Medical Council","Gujarat Medical Council","Haryana Medical Council","Himachal Pradesh Medical Council","Jammu & Kashmir Medical Council","Jharkhand Medical Council","Karnataka Medical Council","Kerala (Travancore-Cochin) Medical Council","Madhya Pradesh Medical Council","Maharashtra Medical Council","Manipur Medical Council","Meghalaya Medical Council","Mizoram Medical Council","Nagaland Medical Council","Odisha Council of Medical Registration","Punjab Medical Council","Rajasthan Medical Council","Sikkim Medical Council","Tamil Nadu Medical Council","Telangana State Medical Council","Tripura State Medical Council","Uttar Pradesh Medical Council","Uttarakhand Medical Council","West Bengal Medical Council","State Dental Council","Medical council outside India"];
 const VSTAT={verified:'✓ Verified',pending:'⏳ Under review',rejected:'❌ Not approved yet'};

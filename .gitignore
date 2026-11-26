@@ -24,3 +24,9 @@ assets/hero-doctor-brain.png
 # Profile photos people upload (private user data): never upload
 data/avatars/
 data/gallery/
+
+# Private uploads and backups: never upload
+data/verify/
+data/videos/
+data/backups/
+data/before-restore-*/
