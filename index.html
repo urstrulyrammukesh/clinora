@@ -26,6 +26,30 @@
 .skip:focus{left:8px}
 :focus-visible{outline:3px solid #38bdf8!important;outline-offset:2px!important;border-radius:6px}
 #app-main:focus{outline:none}
+
+/* ================= PHONE APP INTERFACE (only when opened as the installed app) ================= */
+#appHome,#appTabs,#appSplash{display:none}
+html.app #appHome{display:block;padding:14px 16px 8px}
+html.app #v-home>*:not(#appHome){display:none!important}
+html.app nav .tabs,html.app footer,html.app #fxBtn,html.app .fxwrap{display:none!important}
+html.app nav{padding:10px 14px;gap:10px}html.app nav .brand small{display:none}
+html.app body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+html.app #appTabs{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:90;background:var(--panel,#0c1015);border-top:1px solid var(--line);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around}
+#appTabs button{flex:1;background:none;border:0;color:var(--mute);font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;cursor:pointer}
+#appTabs button em{font-style:normal;font-size:21px;line-height:1}#appTabs button.on{color:var(--teal,#14b8a6);font-weight:700}
+html.app .chat-fab,html.app #aiFab,html.app .sos-float{bottom:calc(84px + env(safe-area-inset-bottom))!important}
+#appSplash{position:fixed;inset:0;z-index:100000;background:#06080b;align-items:center;justify-content:center;flex-direction:column;gap:14px;transition:opacity .35s}
+html.app #appSplash{display:flex}#appSplash.gone{opacity:0;pointer-events:none}
+#appSplash .lg{width:84px;height:84px;border-radius:22px;background:linear-gradient(135deg,#14b8a6,#2563eb);display:flex;align-items:center;justify-content:center;font-size:44px;color:#fff;font-weight:900}
+#appSplash b{color:#fff;font-size:26px;letter-spacing:.5px}#appSplash small{color:#8693a0}
+.ah-hi{font-size:22px;font-weight:800;margin:4px 0 2px}.ah-sub{color:var(--mute);font-size:13.5px;margin-bottom:12px}
+.ah-search{display:flex;gap:8px;margin-bottom:14px}.ah-search input{flex:1;border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:14px;padding:12px 14px;font:inherit;font-size:15px}
+.ah-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.ah-grid button{background:var(--panel2,#111821);border:1px solid var(--line);border-radius:16px;padding:12px 4px;color:inherit;font:inherit;font-size:11.5px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.ah-grid button em{font-style:normal;font-size:26px}
+.ah-card{border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;background:var(--panel2,#111821)}.ah-card h4{margin:0 0 6px;font-size:13px;color:var(--mute);letter-spacing:.06em}
+.ah-sos{width:100%;border:0;border-radius:16px;padding:14px;background:linear-gradient(90deg,#dc2626,#f97316);color:#fff;font:inherit;font-weight:800;font-size:15px;cursor:pointer}
 :root{
   --bg:#06080b;--panel:#0c1015;--panel2:#11161d;--line:#1c242e;--text:#e9eff3;--mute:#8693a0;
   --h:170;--teal:hsl(var(--h),78%,50%);--teal2:hsl(var(--h),84%,38%);--accent2:hsl(calc(var(--h) + 45),90%,64%);--accent3:hsl(calc(var(--h) + 95),85%,66%);--red:#ff3d55;--amber:#ffb547;--green:#2ee07a;
@@ -1048,6 +1072,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
 <!-- ================= HOME ================= -->
 <div id="app-main" tabindex="-1"></div>
 <div class="view" id="v-home">
+<section id="appHome" aria-label="Clinora app home"></section>
   <header class="hero">
     <div class="grid-bg"></div>
     <div class="hud tl">CLINORA // ONLINE</div>
@@ -2833,6 +2858,7 @@ async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'PO
   if(!r.ok||j.error)throw new Error(j.error||'Server error');
   if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();
   if('notif_unread' in j&&window.setBell)setBell(j.notif_unread);if('me' in j&&window.bellRefresh)bellRefresh();
+  if(window.renderAppHome)renderAppHome();
   if(j.me&&window.__afterLogin){const f=window.__afterLogin;window.__afterLogin=null;setTimeout(f,400)}return j}
 function updateAcctBtn(){const b=$('#acctBtn');if(!b)return;const me=MEM.me;b.classList.toggle('in',!!me);b.firstChild.nodeValue=me?initials(me.name)||'👤':'👤';
   let im=b.querySelector('img');if(me&&me.photo_ts){if(!im){im=document.createElement('img');b.appendChild(im)}const src=`/api/m/avatar/${me.id}?v=${me.photo_ts}`;if(im.getAttribute('src')!==src)im.src=src}else if(im)im.remove();
@@ -3604,6 +3630,41 @@ async function invitePanel(){const box=$('#invBody');if(!box)return;let j;try{j=
     <div style="display:flex;gap:6px;flex-wrap:wrap"><input readonly value="${esc(j.url)}" aria-label="Your invite link" style="flex:1;min-width:200px"><button class="btn ghost sm" type="button" data-share="${esc(j.url.replace(location.origin,''))}" data-sname="Clinora">🔗 Share</button>
       <a class="btn primary sm" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">WhatsApp</a></div>
     <p style="font-size:13px;color:var(--mute);margin-top:8px">${n?`🎉 ${j.joined.doctor||0} doctor${(j.joined.doctor||0)===1?'':'s'} and ${j.joined.patient||0} patient${(j.joined.patient||0)===1?'':'s'} joined with your link.`:'Nobody has joined with your link yet.'}</p>`}
+
+/* ================= PHONE APP INTERFACE ================= */
+// Installed app (Play Store app, or "Add to Home screen") gets an app-style home, bottom tabs and a splash screen.
+// The normal website in a browser stays exactly as it is.
+const __appStart=()=>{let app=false;try{app=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true||/[?&](source|mode)=app\b/.test(location.search)||document.referrer.startsWith('android-app://');
+    if(app)sessionStorage.setItem('cl_app','1');else app=sessionStorage.getItem('cl_app')==='1'}catch{}
+  if(!app)return;document.documentElement.classList.add('app');
+  const sp=document.getElementById('appSplash');setTimeout(()=>{sp&&sp.classList.add('gone');setTimeout(()=>sp&&sp.remove(),400)},900);
+  const tabs=document.getElementById('appTabs');
+  const mark=v=>tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.at===v||(b.dataset.at==='visits'&&v==='account'&&window.__visitsTab)));
+  tabs.onclick=e=>{const b=e.target.closest('[data-at]');if(!b)return;const v=b.dataset.at;window.__visitsTab=v==='visits';
+    if(v==='visits'){go('account');setTimeout(()=>{const c=$('#visitsCard')||$('#docVisits');if(c){c.open=true;c.scrollIntoView({block:'start'})}},150)}
+    else if(v==='directory'){go('directory');setTimeout(()=>{const a=$('#fAll');if(a&&!dirResults.length)a.click()},300)}else go(v);mark(v)};
+  addEventListener('hashchange',()=>{const v=location.hash.slice(1).split('/')[0]||'home';if(['home','directory','demo','account'].includes(v))mark(v==='account'&&window.__visitsTab?'visits':v)});
+  const hour=new Date().getHours(),greet=hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
+  window.renderAppHome=()=>{const box=document.getElementById('appHome');if(!box)return;const me=MEM&&MEM.me;
+    const up=(((MEM||{}).bookings||{}).as_patient||[]).filter(v=>v.status==='booked'&&v.at>Date.now()).sort((a,b)=>a.at-b.at)[0];
+    const rem=((MEM||{}).reminders||[]).filter(r=>r.active&&r.next_at).sort((a,b)=>a.next_at-b.next_at)[0];
+    box.innerHTML=`<div class="ah-hi">${greet}${me?', '+esc(me.name.split(' ')[0]):''} 👋</div><div class="ah-sub">How can Clinora help you today?</div>
+      <form class="ah-search" id="ahSearch"><input id="ahQ" placeholder="Search doctor, specialty or city…" aria-label="Search doctors"><button class="btn primary sm" type="submit">Search</button></form>
+      <div class="ah-grid">${[['directory','📅','Book doctor'],['nearby','📍','Nearby'],['demo','💬','Ask AI'],['food','🍔','Food Scan'],['reminders','⏰','Reminders'],['records','📁','Records'],['medicines','💊','Medicines'],['books','📚','Books']]
+        .map(([k,e,l])=>`<button type="button" data-ah="${k}"><em>${e}</em>${l}</button>`).join('')}</div>
+      ${up?`<div class="ah-card"><h4>NEXT VISIT</h4><b>${esc(up.doctor)}</b><div style="font-size:13.5px">${bkDay(up.date)} · ${esc(up.time)} · ${up.mode==='video'?'📹 Video':'🏥 In clinic'}</div></div>`:''}
+      ${rem?`<div class="ah-card"><h4>NEXT REMINDER</h4><b>${esc(rem.title)}</b><div style="font-size:13.5px">${new Date(rem.next_at).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}</div></div>`:''}
+      ${me?'':`<div class="ah-card"><h4>WELCOME</h4><div style="font-size:14px;margin-bottom:8px">Log in to book doctors, get reminders and keep your records.</div><button class="btn primary sm" type="button" data-ah="account">Log in or sign up</button></div>`}
+      <button class="ah-sos" type="button" id="ahSos">🚑 Emergency: call ${esc((document.getElementById('ndSosNum')||{}).textContent||'112').replace(/^Emergency\s*/,'')}</button>`;
+    box.querySelector('#ahSearch').onsubmit=e=>{e.preventDefault();const q=box.querySelector('#ahQ').value.trim();go('directory');
+      setTimeout(()=>{const a=$('#fAll');if(a)a.click();const s=$('#fSpec');if(s){s.value=q;s.dispatchEvent(new Event('input'))}},300);mark('directory')};
+    box.querySelectorAll('[data-ah]').forEach(b=>b.onclick=()=>{const k=b.dataset.ah;
+      if(k==='records'||k==='medicines'){go('account');setTimeout(()=>{const c=$(k==='records'?'#recCard':'#medCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}},200)}
+      else if(k==='directory'){tabs.querySelector('[data-at="directory"]').click()}else go(k)});
+    const sos=box.querySelector('#ahSos');sos.onclick=()=>{const b=document.getElementById('ndSos');if(b)b.click()}};
+  renderAppHome();setInterval(()=>{if(location.hash.replace('#','')==='home'||!location.hash)renderAppHome()},30000);
+  addEventListener('hashchange',()=>{if(/^#?home$|^$/.test(location.hash))renderAppHome()})};
+document.readyState==='loading'?document.addEventListener('DOMContentLoaded',__appStart):__appStart();
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -4042,5 +4103,9 @@ go(location.hash.slice(1)||'home');
   document.addEventListener('click',e=>{if(!e.target.closest('#wallPanel')&&e.target!==btn)panel.classList.remove('on')});
   window.applyWall=apply;apply()})();
 </script>
+<div id="appSplash" aria-hidden="true"><div class="lg">✚</div><b>Clinora</b><small>Your health, one tap away</small></div>
+<div id="appTabs" role="tablist" aria-label="App sections">
+  <button type="button" data-at="home" class="on"><em>🏠</em>Home</button><button type="button" data-at="directory"><em>🔍</em>Doctors</button>
+  <button type="button" data-at="visits"><em>📅</em>Visits</button><button type="button" data-at="demo"><em>💬</em>Ask AI</button><button type="button" data-at="account"><em>👤</em>Me</button></div>
 </body>
 </html>
