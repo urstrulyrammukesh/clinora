@@ -56,15 +56,14 @@ def cross(w, l, z0, z1):
     for x0, y0, x1, y1 in [(-h, -h, h, h), (-h, h, h, l), (-h, -l, h, -h), (h, -h, l, h), (-l, -h, -h, h)]:
         tris.append(((x0, y0, z1), (x1, y0, z1), (x1, y1, z1)))
         tris.append(((x0, y0, z1), (x1, y1, z1), (x0, y1, z1)))
-        tris.append(((x0, y0, z0), (x1, y1, z0), (x1, y0, z0)))
-        tris.append(((x0, y0, z0), (x0, y1, z0), (x1, y1, z0)))
+        # no bottom faces: the cross sits sunk into the tile, so nothing overlaps or flickers
     return tris
 
 
 def build():
     tris = []
     tris += prism(rounded_square(20, 7), 0, 3)          # the app-icon tile
-    tris += cross(11, 15, 3, 13)                         # the raised medical cross
+    tris += cross(11, 15, 1.5, 14)                       # the raised medical cross, sunk 1.5 into the tile
     lines = ["solid clinora_logo"]
     for a, b, c in tris:
         n = norm(a, b, c)

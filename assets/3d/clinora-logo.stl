@@ -1009,310 +1009,240 @@ solid clinora_logo
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 5.500 -15.000 3.000
-      vertex 5.500 -5.500 3.000
-      vertex 5.500 -5.500 13.000
+      vertex 5.500 -15.000 1.500
+      vertex 5.500 -5.500 1.500
+      vertex 5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 5.500 -15.000 3.000
-      vertex 5.500 -5.500 13.000
-      vertex 5.500 -15.000 13.000
+      vertex 5.500 -15.000 1.500
+      vertex 5.500 -5.500 14.000
+      vertex 5.500 -15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex 5.500 -5.500 3.000
-      vertex 15.000 -5.500 3.000
-      vertex 15.000 -5.500 13.000
+      vertex 5.500 -5.500 1.500
+      vertex 15.000 -5.500 1.500
+      vertex 15.000 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex 5.500 -5.500 3.000
-      vertex 15.000 -5.500 13.000
-      vertex 5.500 -5.500 13.000
+      vertex 5.500 -5.500 1.500
+      vertex 15.000 -5.500 14.000
+      vertex 5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 15.000 -5.500 3.000
-      vertex 15.000 5.500 3.000
-      vertex 15.000 5.500 13.000
+      vertex 15.000 -5.500 1.500
+      vertex 15.000 5.500 1.500
+      vertex 15.000 5.500 14.000
     endloop
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 15.000 -5.500 3.000
-      vertex 15.000 5.500 13.000
-      vertex 15.000 -5.500 13.000
+      vertex 15.000 -5.500 1.500
+      vertex 15.000 5.500 14.000
+      vertex 15.000 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 0.0000
     outer loop
-      vertex 15.000 5.500 3.000
-      vertex 5.500 5.500 3.000
-      vertex 5.500 5.500 13.000
+      vertex 15.000 5.500 1.500
+      vertex 5.500 5.500 1.500
+      vertex 5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 -0.0000
     outer loop
-      vertex 15.000 5.500 3.000
-      vertex 5.500 5.500 13.000
-      vertex 15.000 5.500 13.000
+      vertex 15.000 5.500 1.500
+      vertex 5.500 5.500 14.000
+      vertex 15.000 5.500 14.000
     endloop
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 5.500 5.500 3.000
-      vertex 5.500 15.000 3.000
-      vertex 5.500 15.000 13.000
+      vertex 5.500 5.500 1.500
+      vertex 5.500 15.000 1.500
+      vertex 5.500 15.000 14.000
     endloop
   endfacet
   facet normal 1.0000 0.0000 0.0000
     outer loop
-      vertex 5.500 5.500 3.000
-      vertex 5.500 15.000 13.000
-      vertex 5.500 5.500 13.000
+      vertex 5.500 5.500 1.500
+      vertex 5.500 15.000 14.000
+      vertex 5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 0.0000
     outer loop
-      vertex 5.500 15.000 3.000
-      vertex -5.500 15.000 3.000
-      vertex -5.500 15.000 13.000
+      vertex 5.500 15.000 1.500
+      vertex -5.500 15.000 1.500
+      vertex -5.500 15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 -0.0000
     outer loop
-      vertex 5.500 15.000 3.000
-      vertex -5.500 15.000 13.000
-      vertex 5.500 15.000 13.000
+      vertex 5.500 15.000 1.500
+      vertex -5.500 15.000 14.000
+      vertex 5.500 15.000 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -5.500 15.000 3.000
-      vertex -5.500 5.500 3.000
-      vertex -5.500 5.500 13.000
+      vertex -5.500 15.000 1.500
+      vertex -5.500 5.500 1.500
+      vertex -5.500 5.500 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -5.500 15.000 3.000
-      vertex -5.500 5.500 13.000
-      vertex -5.500 15.000 13.000
+      vertex -5.500 15.000 1.500
+      vertex -5.500 5.500 14.000
+      vertex -5.500 15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 0.0000
     outer loop
-      vertex -5.500 5.500 3.000
-      vertex -15.000 5.500 3.000
-      vertex -15.000 5.500 13.000
+      vertex -5.500 5.500 1.500
+      vertex -15.000 5.500 1.500
+      vertex -15.000 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 1.0000 -0.0000
     outer loop
-      vertex -5.500 5.500 3.000
-      vertex -15.000 5.500 13.000
-      vertex -5.500 5.500 13.000
+      vertex -5.500 5.500 1.500
+      vertex -15.000 5.500 14.000
+      vertex -5.500 5.500 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -15.000 5.500 3.000
-      vertex -15.000 -5.500 3.000
-      vertex -15.000 -5.500 13.000
+      vertex -15.000 5.500 1.500
+      vertex -15.000 -5.500 1.500
+      vertex -15.000 -5.500 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -15.000 5.500 3.000
-      vertex -15.000 -5.500 13.000
-      vertex -15.000 5.500 13.000
+      vertex -15.000 5.500 1.500
+      vertex -15.000 -5.500 14.000
+      vertex -15.000 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex -15.000 -5.500 3.000
-      vertex -5.500 -5.500 3.000
-      vertex -5.500 -5.500 13.000
+      vertex -15.000 -5.500 1.500
+      vertex -5.500 -5.500 1.500
+      vertex -5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex -15.000 -5.500 3.000
-      vertex -5.500 -5.500 13.000
-      vertex -15.000 -5.500 13.000
+      vertex -15.000 -5.500 1.500
+      vertex -5.500 -5.500 14.000
+      vertex -15.000 -5.500 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -5.500 -5.500 3.000
-      vertex -5.500 -15.000 3.000
-      vertex -5.500 -15.000 13.000
+      vertex -5.500 -5.500 1.500
+      vertex -5.500 -15.000 1.500
+      vertex -5.500 -15.000 14.000
     endloop
   endfacet
   facet normal -1.0000 0.0000 0.0000
     outer loop
-      vertex -5.500 -5.500 3.000
-      vertex -5.500 -15.000 13.000
-      vertex -5.500 -5.500 13.000
+      vertex -5.500 -5.500 1.500
+      vertex -5.500 -15.000 14.000
+      vertex -5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex -5.500 -15.000 3.000
-      vertex 5.500 -15.000 3.000
-      vertex 5.500 -15.000 13.000
+      vertex -5.500 -15.000 1.500
+      vertex 5.500 -15.000 1.500
+      vertex 5.500 -15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 -1.0000 0.0000
     outer loop
-      vertex -5.500 -15.000 3.000
-      vertex 5.500 -15.000 13.000
-      vertex -5.500 -15.000 13.000
+      vertex -5.500 -15.000 1.500
+      vertex 5.500 -15.000 14.000
+      vertex -5.500 -15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 -5.500 13.000
-      vertex 5.500 -5.500 13.000
-      vertex 5.500 5.500 13.000
+      vertex -5.500 -5.500 14.000
+      vertex 5.500 -5.500 14.000
+      vertex 5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 -5.500 13.000
-      vertex 5.500 5.500 13.000
-      vertex -5.500 5.500 13.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 -5.500 3.000
-      vertex 5.500 5.500 3.000
-      vertex 5.500 -5.500 3.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 -5.500 3.000
-      vertex -5.500 5.500 3.000
-      vertex 5.500 5.500 3.000
+      vertex -5.500 -5.500 14.000
+      vertex 5.500 5.500 14.000
+      vertex -5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 5.500 13.000
-      vertex 5.500 5.500 13.000
-      vertex 5.500 15.000 13.000
+      vertex -5.500 5.500 14.000
+      vertex 5.500 5.500 14.000
+      vertex 5.500 15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 5.500 13.000
-      vertex 5.500 15.000 13.000
-      vertex -5.500 15.000 13.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 5.500 3.000
-      vertex 5.500 15.000 3.000
-      vertex 5.500 5.500 3.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 5.500 3.000
-      vertex -5.500 15.000 3.000
-      vertex 5.500 15.000 3.000
+      vertex -5.500 5.500 14.000
+      vertex 5.500 15.000 14.000
+      vertex -5.500 15.000 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 -15.000 13.000
-      vertex 5.500 -15.000 13.000
-      vertex 5.500 -5.500 13.000
+      vertex -5.500 -15.000 14.000
+      vertex 5.500 -15.000 14.000
+      vertex 5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -5.500 -15.000 13.000
-      vertex 5.500 -5.500 13.000
-      vertex -5.500 -5.500 13.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 -15.000 3.000
-      vertex 5.500 -5.500 3.000
-      vertex 5.500 -15.000 3.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -5.500 -15.000 3.000
-      vertex -5.500 -5.500 3.000
-      vertex 5.500 -5.500 3.000
+      vertex -5.500 -15.000 14.000
+      vertex 5.500 -5.500 14.000
+      vertex -5.500 -5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex 5.500 -5.500 13.000
-      vertex 15.000 -5.500 13.000
-      vertex 15.000 5.500 13.000
+      vertex 5.500 -5.500 14.000
+      vertex 15.000 -5.500 14.000
+      vertex 15.000 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex 5.500 -5.500 13.000
-      vertex 15.000 5.500 13.000
-      vertex 5.500 5.500 13.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex 5.500 -5.500 3.000
-      vertex 15.000 5.500 3.000
-      vertex 15.000 -5.500 3.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex 5.500 -5.500 3.000
-      vertex 5.500 5.500 3.000
-      vertex 15.000 5.500 3.000
+      vertex 5.500 -5.500 14.000
+      vertex 15.000 5.500 14.000
+      vertex 5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -15.000 -5.500 13.000
-      vertex -5.500 -5.500 13.000
-      vertex -5.500 5.500 13.000
+      vertex -15.000 -5.500 14.000
+      vertex -5.500 -5.500 14.000
+      vertex -5.500 5.500 14.000
     endloop
   endfacet
   facet normal 0.0000 0.0000 1.0000
     outer loop
-      vertex -15.000 -5.500 13.000
-      vertex -5.500 5.500 13.000
-      vertex -15.000 5.500 13.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -15.000 -5.500 3.000
-      vertex -5.500 5.500 3.000
-      vertex -5.500 -5.500 3.000
-    endloop
-  endfacet
-  facet normal 0.0000 0.0000 -1.0000
-    outer loop
-      vertex -15.000 -5.500 3.000
-      vertex -15.000 5.500 3.000
-      vertex -5.500 5.500 3.000
+      vertex -15.000 -5.500 14.000
+      vertex -5.500 5.500 14.000
+      vertex -15.000 5.500 14.000
     endloop
   endfacet
 endsolid clinora_logo
