@@ -3252,12 +3252,25 @@ TWA_PACKAGE = os.environ.get("TWA_PACKAGE", "").strip()          # Android app i
 TWA_SHA256 = os.environ.get("TWA_SHA256", "").strip()            # signing key fingerprint from Play Console
 
 
+# Content-Security-Policy: the browser only runs scripts from our own page (with the per-load nonce) and the
+# few services we use, so injected <script> or onclick=... code is blocked even if something slipped through.
+CSP_PAGE = ("default-src 'self'; script-src 'self' 'nonce-{n}' https://unpkg.com https://accounts.google.com https://checkout.razorpay.com; "
+            "style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com; img-src 'self' data: blob: https:; "
+            "font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: mediastream:; worker-src 'self' blob:; "
+            "child-src 'self' blob:; frame-src https://accounts.google.com https://*.razorpay.com; object-src 'none'; base-uri 'self'; "
+            "form-action 'self' https:; frame-ancestors 'none'; manifest-src 'self'")
+CSP_OTHER = "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+_INDEX_CACHE = {}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
+        self._cache = self._csp = None
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", getattr(self, "_cache", None) or "no-store")
+        self.send_header("Content-Security-Policy", getattr(self, "_csp", None) or CSP_OTHER)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -3287,8 +3300,52 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_index(self):
+        """The home page: a fresh CSP nonce on every script tag, gzip-compressed (about 380 KB → 90 KB)."""
+        import gzip
+        f = ROOT / "index.html"
+        mt = f.stat().st_mtime
+        if _INDEX_CACHE.get("mt") != mt:
+            _INDEX_CACHE.update(mt=mt, html=f.read_text(encoding="utf-8"))
+        nonce = secrets.token_urlsafe(16)
+        body = _INDEX_CACHE["html"].replace("<script", f'<script nonce="{nonce}"').encode()
+        gz = "gzip" in (self.headers.get("Accept-Encoding") or "")
+        if gz:
+            body = gzip.compress(body, 6)
+        self._cache, self._csp = "no-cache", CSP_PAGE.format(n=nonce)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Vary", "Accept-Encoding")
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def send_static_gz(self, rel, ctype):
+        import gzip
+        body = (ROOT / rel).read_bytes()
+        gz = "gzip" in (self.headers.get("Accept-Encoding") or "") and len(body) > 1500
+        if gz:
+            body = gzip.compress(body, 6)
+        self._cache = "no-cache"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Vary", "Accept-Encoding")
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        self._cache = self._csp = None
         path_only = self.path.split("?")[0]
+        if path_only in ("/", "/index.html"):
+            return self.send_index()
+        if path_only == "/i18n.js":
+            return self.send_static_gz("i18n.js", "text/javascript; charset=utf-8")
         if path_only == "/api/prices":
             cur = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("currency", [CURRENCY])[0].lower()
             if cur not in FX_PER_USD:
@@ -3385,6 +3442,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if not self.is_public_file():
             return self.send_json(404, {"error": "not found"})
+        if path_only.startswith("/assets/"):  # images, icons, GIFs: cache a week (change the ?v= to refresh)
+            self._cache = "public, max-age=604800"
+        else:
+            self._cache = "no-cache"
         return super().do_GET()
 
     def do_HEAD(self):
@@ -3444,6 +3505,7 @@ class Handler(SimpleHTTPRequestHandler):
             raise InputError("Bad JSON")
 
     def do_POST(self):
+        self._cache = self._csp = None
         path = self.path.split("?")[0]
         if path in ("/api/pay/razorpay-webhook", "/api/pay/paypal-webhook"):
             length = int(self.headers.get("Content-Length") or 0)

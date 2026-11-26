@@ -20,8 +20,7 @@
 <meta property="og:image" content="/assets/hero-doctor-brain.jpg?v=2">
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Clinora","applicationCategory":"HealthApplication","operatingSystem":"Web, Android","description":"Find doctors and hospitals near you, book visits and video consultations, AI health assistant, food scan and free medical books.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" integrity="sha384-MinO0mNliZ3vwppuPOUnGa+iq619pfMhLVUXfC4LHwSCvF9H+6P/KO4Q7qBOYV5V" crossorigin="anonymous">
 <style>
 :root{
   --bg:#06080b;--panel:#0c1015;--panel2:#11161d;--line:#1c242e;--text:#e9eff3;--mute:#8693a0;
@@ -1960,6 +1959,8 @@ function setupMap(){
   if(map){const c=map.getCenter();const far=dist({lat:c.lat,lon:c.lng},userLoc)>100;
     const opt={center:[userLoc.lon,userLoc.lat],zoom:14.5,pitch:pitched?60:0,bearing:pitched?-17:0};
     far?map.jumpTo(opt):map.flyTo(opt);return}
+  if(!window.maplibregl&&!window.__mlTried){window.__mlTried=true;const s=document.createElement('script');s.src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    s.integrity='sha384-SYKAG6cglRMN0RVvhNeBY0r3FYKNOJtznwA0v7B5Vp9tr31xAHsZC0DqkQ/pZDmj';s.crossOrigin='anonymous';s.onload=()=>setupMap();s.onerror=()=>setupMap();document.head.appendChild(s);return}
   if(!window.maplibregl){$('#map').innerHTML='<div class="map-fallback">🗺️ The map did not load (check your internet). The list still works.</div>';return}
   try{
     map=new maplibregl.Map({container:'map',style:'https://tiles.openfreemap.org/styles/liberty',center:[userLoc.lon,userLoc.lat],zoom:14.5,pitch:60,bearing:-17,maxPitch:75});
@@ -2111,7 +2112,7 @@ async function openPay(route){
         <div class="row"><span>Paid with</span><span>${METHOD_ICON[p.pay_method]||''} ${esc(METHOD_NAME[p.pay_method]||p.pay_method||'-')}</span></div>
         <div class="row"><span>Reference</span><span class="mono">${esc(p.pay_ref||'-')}</span></div>
         <div class="btns">${p.mode==='video'&&p.call?`<a class="btn primary" href="#call/${esc(p.id)}.${esc(p.call)}">📹 Join video call</a>`:''}
-        <button class="btn ghost" onclick="window.print()">🖨️ Print receipt</button></div>
+        <button class="btn ghost" data-print>🖨️ Print receipt</button></div>
         <p class="secure">${p.pay_mode==='demo'?'<span class="demo-flag">DEMO · NO REAL MONEY</span>':'Paid securely.'} Keep this page's link to come back to your receipt.</p>`;
       return}
     if(p.status==='Cancelled'){box.innerHTML=`<h2>This appointment was cancelled</h2>${payRows(p)}`;return}
@@ -2350,11 +2351,11 @@ function openProfile(p){window.__profPlace=p;
      <div class="prow"><span>📍</span><span>${esc(p.addr||'No address in the public data')}${userLoc?` · ${fmtD(p.d||0)} away`:''}</span></div>
      <div class="links" style="margin-top:12px">${tel?`<a class="lk" href="tel:${esc(tel)}"><i style="background:var(--green)">📞</i>Call</a>`:''}
        <a class="lk" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}"><i style="background:#4aa3ff">🧭</i>Directions</a>
-       <a class="lk" href="#" data-ride-prof onclick="return false"><i style="background:#f5b800;color:#000">🚕</i>Book a ride</a>
+       <a class="lk" href="#" data-ride-prof data-nonav><i style="background:#f5b800;color:#000">🚕</i>Book a ride</a>
        ${p.partner?`<a class="lk on" href="#demo"><i style="background:var(--teal)">📅</i>Book with AI</a>`:''}</div></div>
    ${p.team?`<div class="psec"><h4>DOCTORS (DEMO PROFILES)</h4>${p.team.map(docCard).join('')}</div>`:''}
    <div class="psec"><h4>OFFICIAL WEBSITE & SOCIAL MEDIA</h4>
-     ${p.demoSocial?`<div class="links">${[['Website','🌐','#3a4654'],['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div><div class="pnote">Demo links. A real partner clinic adds its own links from the dashboard.</div>`
+     ${p.demoSocial?`<div class="links">${[['Website','🌐','#3a4654'],['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2']].map(x=>`<a class="lk on" href="#" data-nonav><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div><div class="pnote">Demo links. A real partner clinic adds its own links from the dashboard.</div>`
        :soc.length?`<div class="links">${soc.map(l=>lkHtml(l,1)).join('')}</div><div class="pnote">✓ These links come from OpenStreetMap public data.</div>`
        :'<div class="pnote">No official links found on OpenStreetMap. Search online below 👇</div>'}</div>
    <div class="psec"><h4>FIND ONLINE (REVIEWS, PROFILES)</h4><div class="links">${searchLinks(p.name,area).map(l=>lkHtml(l)).join('')}</div>
@@ -2365,9 +2366,9 @@ function openProfile(p){window.__profPlace=p;
 function openDocProfile(id){const d=docById(id);
   $('#profBody').innerHTML=`<div class="phead"><div class="pav">${initials(d.name)}</div><div><h3>${d.name}</h3><span class="badge v">${CLINIC.name.toUpperCase()}</span></div></div>
    <div class="psec"><h4>PROFILE (DEMO)</h4>${docCard(d)}</div>
-   <div class="psec"><h4>SOCIAL MEDIA</h4><div class="links">${[['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2'],['Doctor directory','★','#6b7785']].map(x=>`<a class="lk on" href="#" onclick="return false"><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div>
+   <div class="psec"><h4>SOCIAL MEDIA</h4><div class="links">${[['Instagram','IG','#d62976'],['Facebook','f','#1877f2'],['Telegram','✈','#229ED9'],['YouTube','▶','#ff0000'],['LinkedIn','in','#0a66c2'],['Doctor directory','★','#6b7785']].map(x=>`<a class="lk on" href="#" data-nonav><i style="background:${x[2]}">${x[1]}</i>${x[0]}</a>`).join('')}</div>
      <div class="pnote">Demo links. In the real version, doctors add their own profile links from the dashboard.</div></div>
-   <div class="psec"><button class="btn primary sm" onclick="$('#prof').classList.remove('on');user('Book an appointment with ${d.dept}')">📅 Book an appointment with ${d.name}</button></div>`;
+   <div class="psec"><button class="btn primary sm" data-profbook="${esc(d.dept)}">📅 Book an appointment with ${d.name}</button></div>`;
   $('#prof').classList.add('on');
 }
 $('#profX').onclick=()=>$('#prof').classList.remove('on');
@@ -2767,7 +2768,7 @@ function wireHours(id){const el=$('#'+id);if(!el)return;
 (()=>{const v=$('#rVideo');if(v){const w=document.createElement('div');w.innerHTML=hoursEditor('rHours','');v.closest('label').before(w.firstElementChild);wireHours('rHours')}})();
 
 /* ================= ACCOUNTS: patients & doctors ================= */
-const avImg=(id,ts)=>id&&ts?`<img src="/api/m/avatar/${id}?v=${ts}" alt="" loading="lazy" onerror="this.remove()">`:'';
+const avImg=(id,ts)=>id&&ts?`<img src="/api/m/avatar/${id}?v=${ts}" alt="" loading="lazy" data-rmerr>`:'';
 async function pickPhoto(file){if(!file)return;const msg=$('#phMsg');if(msg)msg.textContent='Uploading photo…';
   try{const url=URL.createObjectURL(file);const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>bad(new Error('That file is not a photo we can read. Try a JPG or PNG.'));i.src=url});
     const side=Math.min(img.naturalWidth,img.naturalHeight),S=Math.min(400,side);const c=document.createElement('canvas');c.width=c.height=S;
@@ -3031,7 +3032,7 @@ function fsRender(j){const v=VERD[j.verdict]||VERD.unclear;const sc=Math.max(1,M
     </div>
     <p class="fs-disc">Confidence: ${esc(j.confidence||'?')}. A photo can't detect germs, toxins or hidden ingredients: check the smell, expiry date and allergy labels too. If you feel unwell after eating, or have trouble breathing or swelling, call <b>${esc(emNums()[0][0])}</b> now.</p>
     <div class="fs-btns"><button class="btn ghost sm" type="button" data-fsask="${esc(j.name||'food')}">💬 Ask the AI about this</button>
-      <button class="btn ghost sm" type="button" onclick="document.getElementById('fsRetake').click()">📷 Scan another food</button></div>`;
+      <button class="btn ghost sm" type="button" data-clickid="fsRetake">📷 Scan another food</button></div>`;
   $('#fsRes').scrollIntoView({behavior:'smooth',block:'start'})}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-fsask]');if(b){openChat();$('#chatIn').value='About the '+b.dataset.fsask+' I just scanned: ';$('#chatIn').focus()}});
 
@@ -3244,6 +3245,13 @@ window.remAlert=n=>{const t=document.createElement('div');t.className='rem-toast
   try{if('Notification' in window&&Notification.permission==='granted')new Notification(n.title,{body:n.body||'',icon:'/assets/icons/icon-192.png',tag:'rem'+n.id})}catch{}};
 
 
+/* ================= small shared click helpers (no inline onclick, so the strict CSP works) ================= */
+document.addEventListener('click',e=>{const t=e.target.closest('[data-print],[data-nonav],[data-profbook],[data-clickid]');if(!t)return;
+  if(t.hasAttribute('data-print')){window.print();return}
+  if(t.hasAttribute('data-nonav'))e.preventDefault();
+  if(t.dataset.profbook){$('#prof').classList.remove('on');user('Book an appointment with '+t.dataset.profbook)}
+  if(t.dataset.clickid){const x=document.getElementById(t.dataset.clickid);if(x)x.click()}});
+document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.hasAttribute('data-rmerr'))t.remove()},true);
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3595,7 +3603,7 @@ async function bookSearch(){const q=$('#bookQ').value.trim();if(!q)return;const 
   if(out.length<8){await ol(q);if(tok!==bookTok)return}
   const seen=new Set();const list=out.filter(b=>b.t&&b.u&&safeUrl(b.u)&&!seen.has(b.t.toLowerCase())&&seen.add(b.t.toLowerCase()));
   $('#bookStatus').textContent=list.length?`${list.length} free books about "${q}" you can read online.`:`No free books found for "${q}" right now. Try a broader word, or open a shelf below.`;
-  $('#bookRes').innerHTML=list.slice(0,30).map(b=>`<a class="book" target="_blank" rel="noopener" href="${esc(b.u)}"><div class="cv" style="--avh:${hash(b.t)%360}">${b.img?`<img loading="lazy" src="${esc(b.img)}" alt="" onerror="this.remove()">`:'📕'}</div>
+  $('#bookRes').innerHTML=list.slice(0,30).map(b=>`<a class="book" target="_blank" rel="noopener" href="${esc(b.u)}"><div class="cv" style="--avh:${hash(b.t)%360}">${b.img?`<img loading="lazy" src="${esc(b.img)}" alt="" data-rmerr>`:'📕'}</div>
     <b>${esc(b.t)}</b><span>${esc([b.a,b.y].filter(Boolean).join(' · '))}</span><span>${b.src}</span><span class="rd">Read free ↗</span></a>`).join('');
 }
 
