@@ -1356,6 +1356,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
         <div class="panel-sec team" id="teamSec" style="display:none"></div>
         <div class="panel-sec" id="statsSec" style="display:none"></div>
         <div class="panel-sec" id="verifySec" style="display:none"></div>
+        <div class="panel-sec" id="payoutSec" style="display:none"></div>
         <div class="panel-sec" id="reportSec" style="display:none"></div>
         <div class="panel-sec" id="backupSec" style="display:none"></div>
         <div class="panel-sec" id="demoSec"><h4>DEMO</h4><button class="btn ghost sm" id="resetBtn">↺ Reset demo data</button></div>
@@ -1833,7 +1834,7 @@ function renderAuth(){
   $('#fDoc').style.display=admin?'':'none';if(!admin)$('#fDoc').value='';
   $$('[data-live]').forEach(b=>{b.disabled=!admin&&b.dataset.live!==me.doctor_id;b.title=b.disabled?'Only the clinic admin can change this':''});
   renderTeam(admin);
-  if(admin&&!window.__vqShown){window.__vqShown=true;renderStats();renderVerifyQueue();renderReportQueue();renderBackups()}else if(!admin){window.__vqShown=false;['#statsSec','#verifySec','#reportSec','#backupSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
+  if(admin&&!window.__vqShown){window.__vqShown=true;renderStats();renderVerifyQueue();renderPayouts();renderReportQueue();renderBackups()}else if(!admin){window.__vqShown=false;['#statsSec','#verifySec','#payoutSec','#reportSec','#backupSec'].forEach(x=>{const s=$(x);if(s)s.style.display='none'})}
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
@@ -3432,6 +3433,31 @@ async function openRxWriter(bid,rxId,forName){let d={diagnosis:'',advice:'',test
       try{const j=await mapi('rx/write',Object.assign({booking_id:bid},d,{meds:d.meds.filter(m=>m.name)}));close();renderAccount();const dv=$('#docVisits');if(dv)dv.open=true;
         window.open('/rx/'+j.result.rx_id,'_blank')}catch(err){$('#rxWM').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}};
   draw()}
+
+/* ================= PAY A DOCTOR ONLINE ================= */
+async function payVisit(id,docName,when,fee){
+  const ov=document.createElement('div');ov.className='rp-ov';ov.innerHTML='<div class="rp-box"><p>Opening payment…</p></div>';document.body.appendChild(ov);
+  const done=()=>{ov.remove();go('account');setTimeout(()=>{const v=$('#visitsCard');if(v){v.open=true;v.scrollIntoView({block:'start'})}},150)};
+  try{const p=(await mapi('book/pay',{id})).result;
+    if(p.demo){ov.firstChild.innerHTML=`<h3>💳 Pay for your visit</h3><p style="font-size:14px">${esc(docName)}${when?' · '+esc(when):''}<br><b style="font-size:22px">${bkMoney(fee,'INR')}</b></p>
+        <p style="font-size:12.5px;color:var(--mute)">Demo mode: no money moves. On the live site this opens Razorpay (UPI, cards, net banking). The time is held for 15 minutes.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost sm" type="button" id="pyLater">Pay later</button><button class="btn primary sm" type="button" id="pyGo">Pay ${bkMoney(fee,'INR')} (demo)</button></div><div id="pyM" style="font-size:13px;margin-top:6px"></div>`;
+      $('#pyLater').onclick=done;
+      $('#pyGo').onclick=async()=>{try{await mapi('book/pay/demo',{id});ov.firstChild.innerHTML=`<h3>✅ Paid and booked!</h3><p style="font-size:14px">${esc(docName)}${when?' · '+esc(when):''}. The doctor was told, and we’ll remind you before the visit.</p><div style="text-align:right"><button class="btn primary sm" type="button" id="pyOk">See my visits</button></div>`;$('#pyOk').onclick=done}
+        catch(e){$('#pyM').innerHTML='<span class="red">'+esc(e.message)+'</span>'}};return}
+    await loadScript('https://checkout.razorpay.com/v1/checkout.js');ov.remove();
+    new window.Razorpay({...p.razorpay,theme:{color:'#14b8a6'},
+      handler:async r=>{try{await mapi('book/pay/verify',Object.assign({id},r));alert('✅ Paid and booked!')}catch(e){alert(e.message)}done()},
+      modal:{ondismiss:()=>{alert('Payment not finished. Your time is held for 15 minutes: tap “Pay now” in My visits.');done()}}}).open()}
+  catch(e){ov.firstChild.innerHTML=`<p class="red">${esc(e.message)}</p><div style="text-align:right"><button class="btn ghost sm" type="button" id="pyX">Close</button></div>`;$('#pyX').onclick=done}}
+async function renderPayouts(){const sec=$('#payoutSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
+  let q;try{q=(await api('/api/payout/list')).created}catch(e){sec.innerHTML='<h4>💸 DOCTOR PAYOUTS</h4><p class="red">'+esc(e.message)+'</p>';return}
+  sec.innerHTML=`<h4>💸 DOCTOR PAYOUTS</h4><p style="font-size:12.5px;color:var(--mute)">${q.live?'Razorpay is live.':'Demo mode (no Razorpay keys): payments are pretend.'} Clinora keeps ${q.fee_pct}% of each online fee; the rest goes to the doctor's
+    Razorpay <b>linked account</b> (create it in Razorpay → Route → Linked accounts after checking their bank details), then paste its id (acc_…) here. Paid visits so far: ${q.paid[0]} · ${bkMoney(Math.round(q.paid[1]/100),'INR')}.</p>
+    ${q.doctors.length?q.doctors.map(d=>`<div class="vq-item" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>${esc(d.name)}</b> <small style="color:var(--mute)">${esc(d.city)} · ${esc(d.email)}${d.ver==='verified'?' · ✓ verified':''}</small></div>
+      <input data-acc="${d.id}" value="${esc(d.payout_acc||'')}" placeholder="acc_XXXXXXXXXXXX" aria-label="Linked account id for ${esc(d.name)}" style="width:190px"><button class="btn ghost sm" type="button" data-accsave="${d.id}">Save</button></div>`).join('')
+      :'<p style="font-size:13px;color:var(--mute)">No doctor profiles yet.</p>'}`;
+  sec.querySelectorAll('[data-accsave]').forEach(b=>b.onclick=async()=>{try{await api('/api/payout/set',{listing_id:+b.dataset.accsave,acc:sec.querySelector(`[data-acc="${b.dataset.accsave}"]`).value.trim()});renderPayouts()}catch(e){alert(e.message)}})}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3445,7 +3471,8 @@ function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''
     <small>${doc?`👤 ${esc(v.patient)}${v.patient!==v.account?` (booked by ${esc(v.account)})`:''}`:`👨‍⚕️ ${esc(v.doctor)}${v.patient!==MEM.me.name?` · for ${esc(v.patient)}`:''}`} · ${v.mode==='video'?'📹 Video visit':'🏥 In clinic'}${v.fee?' · '+bkMoney(v.fee,v.cur):''}</small>
     ${!doc&&v.mode!=='video'&&v.addr?`<small>📍 ${esc(v.addr)}</small>`:''}${v.reason?`<small>📝 ${esc(v.reason)}</small>`:''}
     ${v.status==='cancelled'?`<small>Cancelled${v.cancel_reason?': '+esc(v.cancel_reason):''}</small>`:''}
-    <div class="acts">${(()=>{const now=Date.now(),open=v.status==='booked'&&v.mode==='video'&&now>v.at-10*60e3&&now<v.at+((v.slot||30)+30)*60e3;
+    ${{paid:'<small>💳 Paid online</small>',pending:'<small>⏳ Waiting for payment: the time is held for 15 minutes</small>',refunded:'<small>↩️ Refunded</small>',refund_due:'<small>↩️ Refund in progress</small>'}[v.pay_status]||''}
+    <div class="acts">${!doc&&v.status==='booked'&&v.pay_status==='pending'?`<button class="btn primary sm" type="button" data-paynow="${v.id}" data-pdoc="${esc(v.doctor)}" data-pfee="${v.fee}">💳 Pay now</button>`:''}${(()=>{const now=Date.now(),open=v.status==='booked'&&v.pay_status!=='pending'&&v.mode==='video'&&now>v.at-10*60e3&&now<v.at+((v.slot||30)+30)*60e3;
         return open?`<button class="btn primary sm" type="button" data-vcallm="${doc?v.patient_id:v.doctor_id}">📹 Join video visit</button>`
           :v.status==='booked'&&v.mode==='video'&&!past?'<small style="width:100%">📹 The <b>Join</b> button appears here 10 minutes before the visit.</small>':''})()}
       ${v.rx_id?`<a class="btn ghost sm" href="/rx/${v.rx_id}" target="_blank" rel="noopener">📄 Prescription</a>${doc?'':`<button class="btn ghost sm" type="button" data-rxrem="${v.rx_id}">⏰ Add to reminders</button>`}`:''}
@@ -3471,6 +3498,8 @@ function bookSettingsCard(L){const b=L.booking||{};const on=!!b.on;const days=b.
       <div class="two"><div><label>EACH VISIT</label><select id="bkSlot">${[10,15,20,30,45,60].map(m=>`<option value="${m}" ${(b.slot||20)===m?'selected':''}>${m} minutes</option>`).join('')}</select></div>
         <div><label>VISIT TYPES</label><label class="chk" style="margin:6px 0 0"><input type="checkbox" id="bkClinic" ${!b.modes||b.modes.includes('clinic')?'checked':''}> 🏥 In clinic</label><label class="chk" style="margin:4px 0 0"><input type="checkbox" id="bkVideo" ${b.modes&&b.modes.includes('video')?'checked':''}> 📹 Video</label></div></div>
       <div class="two"><div><label>FEE (0 = FREE)</label><input type="number" id="bkFee" min="0" value="${b.fee??500}"></div><div><label>CURRENCY</label><select id="bkCur">${BK_CUR.map(c=>`<option ${(b.cur||'INR')===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+      <label class="chk"><input type="checkbox" id="bkPre" ${b.prepay?'checked':''}> 💳 Patients pay online when booking (INR, via Razorpay). Paid straight to your bank, minus Clinora's small fee.</label>
+      <p style="font-size:12px;color:var(--mute);margin:-4px 0 6px">${L.payout_acc?'✅ Payout account connected.':'Needs a payout account: the Clinora admin connects your bank account after a quick check.'} Refunds: full if you cancel, or if the patient cancels 24 h or more before.</p>
       <label>NOTE FOR PATIENTS (OPTIONAL)</label><input id="bkNote" maxlength="200" value="${esc(b.note||'')}" placeholder="e.g. Bring old reports. Fee paid at the clinic.">
       <p style="font-size:12px;color:var(--mute);margin:6px 0">Times are in your time zone: <b>${esc(b.tz||tzNow)}</b>. Patients need at least 1 hour notice. The fee is paid to you directly (at the clinic or as you tell them).</p>
       <button class="btn primary sm" type="submit">Save booking settings</button><div id="bkMsg" style="font-size:13px;margin-top:8px"></div></form></details>`}
@@ -3478,6 +3507,7 @@ function wireBookings(){
   $$('[data-vmsg]').forEach(b=>b.onclick=()=>{openConv(+b.dataset.vmsg,b.dataset.vlid?+b.dataset.vlid:undefined);const c=$('#conv');if(c)c.scrollIntoView({block:'center'})});
   $$('[data-vcancel]').forEach(b=>b.onclick=async()=>{const r=prompt('Cancel this visit? You can add a short reason (optional):','');if(r===null)return;
     try{await mapi('booking/cancel',{id:+b.dataset.vcancel,reason:r});renderAccount()}catch(e){alert(e.message)}});
+  $$('[data-paynow]').forEach(b=>b.onclick=()=>payVisit(+b.dataset.paynow,b.dataset.pdoc,'',+b.dataset.pfee));
   $$('[data-rxwrite]').forEach(b=>b.onclick=()=>openRxWriter(+b.dataset.rxwrite,b.dataset.rxid?+b.dataset.rxid:0,b.dataset.rxfor));
   $$('[data-rxrem]').forEach(b=>b.onclick=async()=>{try{const r=(await mapi('rx/get',{id:+b.dataset.rxrem})).result;const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}
     rxShow({readable:true,warning:'From the prescription by '+r.doctor+'. Check the times and press Add.',medicines:r.data.meds.map(m=>Object.assign({},m))})}catch(e){alert(e.message)}});
@@ -3487,7 +3517,7 @@ function wireBookings(){
   f.onsubmit=async e=>{e.preventDefault();const m=$('#bkMsg');m.textContent='Saving…';
     try{await mapi('booking/settings',{on:$('#bkOn').checked,days,start:$('#bkStart').value,end:$('#bkEnd').value,brk:$('#bkBrkOn').checked?[$('#bkB1').value,$('#bkB2').value]:null,
         slot:+$('#bkSlot').value,modes:[$('#bkClinic').checked&&'clinic',$('#bkVideo').checked&&'video'].filter(Boolean),fee:+$('#bkFee').value||0,cur:$('#bkCur').value,
-        note:$('#bkNote').value.trim(),tz:(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch{return 'UTC'}})()});
+        prepay:$('#bkPre').checked,note:$('#bkNote').value.trim(),tz:(()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone}catch{return 'UTC'}})()});
       renderAccount();const s=$('#bkSet');if(s){s.open=true;$('#bkMsg').innerHTML='<span class="teal">✅ Saved. '+($('#bkOn').checked?'Patients can now book you.':'Online booking is off.')+'</span>'}}
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
 // the booking window patients use
@@ -3498,7 +3528,7 @@ async function openBooking(lid){
   let S;try{S=(await mapi('slots',{listing_id:lid})).result}catch(e){ov.firstChild.innerHTML=`<p class="red">${esc(e.message)}</p><div style="text-align:right"><button class="btn ghost sm" type="button" id="bkX">Close</button></div>`;$('#bkX').onclick=close;return}
   const c=S.cfg;let mode=c.modes[0],day=S.days[0]&&S.days[0].date,time=null;const fam=(MEM.family||[]);
   const draw=()=>{const D=S.days.find(x=>x.date===day);
-    ov.firstChild.innerHTML=`<h3>📅 Book a visit</h3><p style="font-weight:700;margin:2px 0">${esc(S.name)}</p><p style="color:var(--mute);font-size:13px;margin:0">${bkMoney(c.fee,c.cur)} · ${c.slot} min · times in ${esc(c.tz)}${c.note?`<br>ℹ️ ${esc(c.note)}`:''}</p>
+    ov.firstChild.innerHTML=`<h3>📅 Book a visit</h3><p style="font-weight:700;margin:2px 0">${esc(S.name)}</p><p style="color:var(--mute);font-size:13px;margin:0">${bkMoney(c.fee,c.cur)}${c.prepay?' paid online when booking':''} · ${c.slot} min · times in ${esc(c.tz)}${c.note?`<br>ℹ️ ${esc(c.note)}`:''}</p>
       ${c.modes.length>1?`<div class="day-chips" style="margin-top:10px">${c.modes.map(m=>`<button type="button" data-mode="${m}" class="${m===mode?'on':''}">${m==='video'?'📹 Video':'🏥 In clinic'}</button>`).join('')}</div>`:`<p style="font-size:13.5px;margin:8px 0 0">${mode==='video'?'📹 Video visit':'🏥 In-clinic visit'}</p>`}
       ${S.days.length?`<label style="display:block;font-size:12px;color:var(--mute);margin-top:10px">DAY</label><div class="bk-days">${S.days.map(x=>`<button type="button" data-day="${x.date}" class="${x.date===day?'on':''}">${bkDay(x.date,{weekday:'short'})}<b>${bkDay(x.date,{day:'numeric'})}</b>${bkDay(x.date,{month:'short'})}</button>`).join('')}</div>
         <label style="display:block;font-size:12px;color:var(--mute)">TIME</label><div class="bk-times">${D.times.map(h=>`<button type="button" data-time="${h}" class="${h===time?'on':''}">${fmtHM(h)}</button>`).join('')}</div>
@@ -3513,6 +3543,7 @@ async function openBooking(lid){
     ov.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{const w=$('#bkWhy')?.value,f=$('#bkFor')?.value;time=b.dataset.time;draw();if(w)$('#bkWhy').value=w;if(f)$('#bkFor').value=f});
     const go2=$('#bkGo');if(go2)go2.onclick=async()=>{go2.disabled=true;$('#bkM').textContent='Booking…';
       try{const j=await mapi('book',{listing_id:lid,date:day,time,mode,reason:$('#bkWhy').value.trim(),for_name:$('#bkFor').value});
+        if(j.result.pay){close();payVisit(j.result.id,S.name,j.result.when,c.fee);return}
         ov.firstChild.innerHTML=`<h3>✅ Booked!</h3><p style="font-size:14px;margin:8px 0">${esc(S.name)} · ${esc(j.result.when)} (${esc(c.tz)})<br>${mode==='video'?'📹 Video visit: message or call the doctor from <b>My visits</b> at the time.':'🏥 In clinic.'}</p>
           <p style="font-size:13px;color:var(--mute)">⏰ We’ll remind you a day before and an hour before. The doctor was notified.</p><div style="text-align:right"><button class="btn primary sm" type="button" id="bkOk">See my visits</button></div>`;
         $('#bkOk').onclick=()=>{close();if(window.closeReviews)closeReviews();go('account');setTimeout(()=>{const v=$('#visitsCard');if(v){v.open=true;v.scrollIntoView({block:'start'})}},120)}}

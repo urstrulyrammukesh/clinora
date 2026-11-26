@@ -476,6 +476,12 @@ def init_db():
             conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE members SET email_ok=1")
         conn.executescript(EXTRA_SCHEMA)
+        bcols = {r["name"] for r in conn.execute("PRAGMA table_info(dbookings)")}
+        for col, kind in [("pay_status", "TEXT NOT NULL DEFAULT 'none'"), ("pay_ref", "TEXT"), ("pay_amount", "INTEGER"), ("hold_until", "INTEGER")]:
+            if col not in bcols:
+                conn.execute(f"ALTER TABLE dbookings ADD COLUMN {col} {kind}")
+        if "payout_acc" not in {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}:
+            conn.execute("ALTER TABLE listings ADD COLUMN payout_acc TEXT")
         rcols = {r["name"] for r in conn.execute("PRAGMA table_info(reminders)")}
         if "ref" not in rcols:
             conn.execute("ALTER TABLE reminders ADD COLUMN ref TEXT")
@@ -852,7 +858,8 @@ def public_listings(conn):
         d["video"] = bool(d["video"])
         d["verified"] = bool(d.get("verified"))
         cfg = booking_cfg(d)
-        d["booking"] = {k: cfg[k] for k in ("fee", "cur", "modes", "slot")} if cfg else None
+        d["booking"] = dict({k: cfg[k] for k in ("fee", "cur", "modes", "slot")}, prepay=bool(cfg.get("prepay"))) if cfg else None
+        d.pop("payout_acc", None)  # private
         d["page"] = "/doctor/" + doctor_slug(d)
         try:
             d["social"] = json.loads(d.get("social") or "{}")
@@ -1358,6 +1365,7 @@ def reminder_loop():
         try:
             with DB_LOCK, connect() as conn:
                 fire_due_reminders(conn)
+                release_unpaid(conn)
         except Exception as e:
             print(f"[reminders] {type(e).__name__}: {e}", flush=True)
         time.sleep(20)
@@ -2362,8 +2370,11 @@ def m_booking_settings(conn, d, me):
     tz = str(d.get("tz") or lst["tz"] or "UTC")[:64]
     if not TZ_RE.match(tz) or _zone(tz) is datetime.timezone.utc:
         tz = "UTC"
+    prepay = bool(d.get("prepay")) and fee > 0
+    if prepay and not doctor_pay_ready(lst, cur):
+        raise InputError("Online payment needs INR fees and a payout account. Ask the Clinora admin to connect your bank account first.")
     cfg = {"on": 1, "days": days, "start": start, "end": end, "brk": brk, "slot": slot, "modes": modes, "fee": fee, "cur": cur, "tz": tz,
-           "note": text(d, "note", 200, False)}
+           "note": text(d, "note", 200, False), "prepay": prepay}
     conn.execute("UPDATE listings SET booking=? WHERE id=?", (json.dumps(cfg), lst["id"]))
     return {"on": True}
 
@@ -2400,7 +2411,7 @@ def m_slots(conn, d, me):
     cfg = booking_cfg(lst)
     if not cfg:
         raise InputError("This doctor doesn't take online bookings yet. Send a message instead.")
-    pub = {k: cfg[k] for k in ("slot", "modes", "fee", "cur", "tz", "note")}
+    pub = dict({k: cfg[k] for k in ("slot", "modes", "fee", "cur", "tz", "note")}, prepay=bool(cfg.get("prepay")))
     return {"listing_id": lst["id"], "name": lst["name"], "cfg": pub, "days": free_slots(conn, lst, cfg)}
 
 
@@ -2408,7 +2419,8 @@ def _booking_view(r, side):
     return {"id": r["id"], "listing_id": r["listing_id"], "doctor": r["doctor_name"], "doctor_id": r["doctor_id"], "patient": r["for_name"],
             "patient_id": r["patient_id"], "account": r["patient_name"], "date": r["date"], "time": r["time"], "tz": r["tz"], "mode": r["mode"],
             "reason": r["reason"], "status": r["status"], "fee": r["fee"], "cur": r["cur"], "at": r["at"], "side": side,
-            "cancel_reason": r["cancel_reason"], "addr": r["addr"], "rx_id": r["rx_id"], "slot": r["slot"]}
+            "cancel_reason": r["cancel_reason"], "addr": r["addr"], "rx_id": r["rx_id"], "slot": r["slot"], "pay_status": r["pay_status"],
+            "hold_until": r["hold_until"]}
 
 
 def my_bookings(conn, me):
@@ -2452,16 +2464,33 @@ def m_book(conn, d, me):
     zone = _zone(cfg["tz"])
     day = datetime.date.fromisoformat(date)
     at = int(datetime.datetime(day.year, day.month, day.day, *map(int, tm.split(":")), tzinfo=zone).timestamp() * 1000)
+    prepay = bool(cfg.get("prepay")) and cfg["fee"] > 0 and doctor_pay_ready(lst, cfg["cur"])
     try:
-        bid = conn.execute("INSERT INTO dbookings(listing_id,patient_id,for_name,date,time,tz,at,mode,reason,status,fee,cur,ts) "
-                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (lst["id"], me["id"], for_name, date, tm, cfg["tz"], at, mode, reason,
-                                                                "booked", cfg["fee"], cfg["cur"], now_ms())).lastrowid
+        bid = conn.execute("INSERT INTO dbookings(listing_id,patient_id,for_name,date,time,tz,at,mode,reason,status,fee,cur,ts,pay_status,hold_until) "
+                           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (lst["id"], me["id"], for_name, date, tm, cfg["tz"], at, mode, reason,
+                                                                    "booked", cfg["fee"], cfg["cur"], now_ms(),
+                                                                    "pending" if prepay else "none", now_ms() + HOLD_MIN * 60_000 if prepay else None)).lastrowid
     except sqlite3.IntegrityError:
         raise InputError("That time was just taken. Please pick another time.")
     nice = f"{day.strftime('%a %d %b')} at {tm}"
+    if prepay:
+        return {"id": bid, "when": nice, "pay": True, "hold_min": HOLD_MIN}
+    booking_confirmed(conn, bid)
+    return {"id": bid, "when": nice}
+
+
+def booking_confirmed(conn, bid):
+    """Tell the doctor and set the patient's reminders (right away, or once an online payment arrives)."""
+    b = conn.execute("SELECT * FROM dbookings WHERE id=?", (bid,)).fetchone()
+    lst = conn.execute("SELECT * FROM listings WHERE id=?", (b["listing_id"],)).fetchone()
+    me = conn.execute("SELECT id, name FROM members WHERE id=?", (b["patient_id"],)).fetchone()
+    date, tm, mode, reason, for_name = b["date"], b["time"], b["mode"], b["reason"] or "", b["for_name"]
+    day = datetime.date.fromisoformat(date)
+    nice = f"{day.strftime('%a %d %b')} at {tm}"
+    cfg = {"tz": b["tz"]}
     who = for_name if for_name == me["name"] else f"{for_name} (booked by {me['name']})"
     notify(conn, lst["owner"], "booking", f"📅 New booking: {who}", f"{nice} · {'Video' if mode == 'video' else 'In clinic'}"
-           + (f" · {reason[:80]}" if reason else ""), "account")
+           + (" · 💳 paid online" if b["pay_status"] == "paid" else "") + (f" · {reason[:80]}" if reason else ""), "account")
     for lead in (1440, 60):
         r = {"at": tm, "days": 0, "date": date, "tz": cfg["tz"], "lead": lead}
         nxt = reminder_next(r, now_ms())
@@ -2470,7 +2499,6 @@ def m_book(conn, d, me):
                          ("appointment", f"{lst['name']}" + (f" · {for_name}" if for_name != me["name"] else ""),
                           ("Video visit: open Clinora and message or call the doctor." if mode == "video" else f"In clinic: {lst['addr']}, {lst['city']}")[:200],
                           tm, 0, date, cfg["tz"], lead, 1, nxt, me["id"], now_ms(), f"dbook:{bid}"))
-    return {"id": bid, "when": nice}
 
 
 def m_booking_cancel(conn, d, me):
@@ -2486,12 +2514,21 @@ def m_booking_cancel(conn, d, me):
     reason = text(d, "reason", 200, False)
     by_doctor = me["id"] == r["owner"]
     conn.execute("UPDATE dbookings SET status='cancelled', cancel_by=?, cancel_reason=? WHERE id=?", ("doctor" if by_doctor else "patient", reason, r["id"]))
+    refund_note = ""
+    if r["pay_status"] == "paid":
+        if by_doctor or r["at"] - now_ms() >= REFUND_HOURS * 3600_000:
+            refund_note = " · " + refund_booking(conn, r)
+        else:
+            refund_note = f" · no refund (cancelled less than {REFUND_HOURS} h before)"
+    elif r["pay_status"] == "pending":
+        conn.execute("UPDATE dbookings SET pay_status='none' WHERE id=?", (r["id"],))
     conn.execute("DELETE FROM reminders WHERE ref=?", (f"dbook:{r['id']}",))
     when = f"{datetime.date.fromisoformat(r['date']).strftime('%a %d %b')} at {r['time']}"
     if by_doctor:
-        notify(conn, r["patient_id"], "booking", f"❌ {r['lname']} cancelled your visit", f"{when}" + (f" · {reason}" if reason else " · Please book another time."), "account")
+        notify(conn, r["patient_id"], "booking", f"❌ {r['lname']} cancelled your visit", f"{when}" + (f" · {reason}" if reason else " · Please book another time.") + refund_note, "account")
     else:
-        notify(conn, r["owner"], "booking", f"❌ {r['for_name']} cancelled", when + (f" · {reason}" if reason else ""), "account")
+        notify(conn, r["owner"], "booking", f"❌ {r['for_name']} cancelled", when + (f" · {reason}" if reason else "") + refund_note, "account")
+    return {"refund": refund_note.strip(" ·")}
 
 
 def m_booking_mark(conn, d, me):
@@ -2857,6 +2894,125 @@ Follow your doctor's advice; contact them if anything is unclear. In an emergenc
 <script nonce="__NONCE__">document.getElementById('pr').onclick=()=>window.print()</script></body></html>"""
 
 
+# ---------------------------------------------------------------- online payment to doctors (Razorpay Route)
+# The patient pays when booking; Razorpay sends the fee minus Clinora's share straight to the doctor's linked account.
+# Without Razorpay keys (on your own computer) a demo payment button is shown instead. INR only (Route works in India).
+PLATFORM_FEE_PCT = max(0.0, min(30.0, float(os.environ.get("PLATFORM_FEE_PCT") or 5)))
+HOLD_MIN = 15
+REFUND_HOURS = 24
+ACC_RE = re.compile(r"^acc_[A-Za-z0-9]{8,30}$")
+
+
+def doctor_pay_ready(lst, cur):
+    if cur != "INR":
+        return False
+    if RAZORPAY_ON:
+        return bool(lst["payout_acc"])
+    return ALLOW_DEMO_PAYMENTS
+
+
+def _paid_booking(conn, bid, me):
+    b = conn.execute("SELECT b.*, l.name AS lname, l.payout_acc, l.owner FROM dbookings b JOIN listings l ON l.id=b.listing_id WHERE b.id=?", (bid,)).fetchone()
+    if not b or b["patient_id"] != me["id"]:
+        raise InputError("Booking not found")
+    if b["status"] != "booked" or b["pay_status"] != "pending":
+        raise InputError("This visit doesn't need a payment now")
+    if (b["hold_until"] or 0) < now_ms():
+        raise InputError("The 15 minutes to pay have passed, so the time was released. Please book again.")
+    return b
+
+
+def m_book_pay(conn, d, me):
+    need_member(me)
+    b = _paid_booking(conn, int(d.get("id") or 0), me)
+    amount = int(b["fee"]) * 100
+    if not RAZORPAY_ON:
+        if not ALLOW_DEMO_PAYMENTS:
+            raise InputError("Online payment isn't available yet.")
+        return {"demo": True, "amount": amount, "cur": "INR"}
+    share = int(round(amount * (1 - PLATFORM_FEE_PCT / 100)))
+    order = http_json("POST", "https://api.razorpay.com/v1/orders", {
+        "amount": amount, "currency": "INR", "receipt": f"dbook-{b['id']}", "notes": {"dbooking_id": str(b["id"])},
+        "transfers": [{"account": b["payout_acc"], "amount": share, "currency": "INR", "on_hold": 0,
+                       "notes": {"dbooking_id": str(b["id"])}}]}, auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    conn.execute("UPDATE dbookings SET pay_ref=?, pay_amount=? WHERE id=?", (order["id"], amount, b["id"]))
+    return {"razorpay": {"key": RAZORPAY_KEY_ID, "order_id": order["id"], "amount": amount, "currency": "INR", "name": "Clinora",
+                         "description": f"Visit with {b['lname']} · {b['date']} {b['time']}", "prefill": {"name": me["name"], "email": me["email"]}}}
+
+
+def mark_booking_paid(conn, bid, ref, amount):
+    b = conn.execute("SELECT * FROM dbookings WHERE id=?", (bid,)).fetchone()
+    if not b or b["pay_status"] == "paid":
+        return
+    conn.execute("UPDATE dbookings SET pay_status='paid', pay_ref=?, pay_amount=?, hold_until=NULL WHERE id=?", (ref, amount, bid))
+    if b["status"] == "booked":
+        booking_confirmed(conn, bid)
+    else:  # paid after the hold ran out and the time was released: give the money back
+        refund_booking(conn, conn.execute("SELECT * FROM dbookings WHERE id=?", (bid,)).fetchone())
+
+
+def m_book_pay_demo(conn, d, me):
+    need_member(me)
+    if RAZORPAY_ON or not ALLOW_DEMO_PAYMENTS:
+        raise AuthError("Demo payments are switched off on this website.")
+    b = _paid_booking(conn, int(d.get("id") or 0), me)
+    mark_booking_paid(conn, b["id"], "demo_" + secrets.token_hex(6), int(b["fee"]) * 100)
+    return {"paid": True}
+
+
+def m_book_pay_verify(conn, d, me):
+    need_member(me)
+    b = conn.execute("SELECT * FROM dbookings WHERE id=? AND patient_id=?", (int(d.get("id") or 0), me["id"])).fetchone()
+    if not b or not RAZORPAY_ON:
+        raise InputError("Booking not found")
+    order_id, pay_id = text(d, "razorpay_order_id", 60), text(d, "razorpay_payment_id", 60)
+    expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), f"{order_id}|{pay_id}".encode(), hashlib.sha256).hexdigest()
+    if order_id != b["pay_ref"] or not hmac.compare_digest(expected, str(d.get("razorpay_signature") or "")):
+        raise AuthError("The payment could not be verified.")
+    pay = http_json("GET", f"https://api.razorpay.com/v1/payments/{pay_id}", auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    if pay.get("order_id") != order_id or pay.get("status") not in ("captured", "authorized") or pay.get("amount") != b["pay_amount"]:
+        raise AuthError("The payment could not be confirmed.")
+    mark_booking_paid(conn, b["id"], pay_id, pay.get("amount"))
+    return {"paid": True}
+
+
+def refund_booking(conn, b):
+    ref = b["pay_ref"] or ""
+    if RAZORPAY_ON and ref.startswith("pay_"):
+        try:  # reverse_all also takes back the doctor's share from their linked account
+            http_json("POST", f"https://api.razorpay.com/v1/payments/{ref}/refund", {"reverse_all": 1}, auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        except Exception as e:
+            conn.execute("UPDATE dbookings SET pay_status='refund_due' WHERE id=?", (b["id"],))
+            print(f"[pay] refund failed for visit {b['id']}: {e}", flush=True)
+            return "refund pending (the clinic team will finish it)"
+    conn.execute("UPDATE dbookings SET pay_status='refunded' WHERE id=?", (b["id"],))
+    return "full refund sent (3–7 working days)" if ref.startswith("pay_") else "demo payment refunded"
+
+
+def release_unpaid(conn):
+    """Frees time slots whose online payment wasn't finished within 15 minutes."""
+    for r in conn.execute("SELECT id, patient_id FROM dbookings WHERE status='booked' AND pay_status='pending' AND hold_until < ?", (now_ms(),)).fetchall():
+        conn.execute("UPDATE dbookings SET status='cancelled', cancel_by='system', cancel_reason='Payment not finished in time', pay_status='none' WHERE id=?", (r["id"],))
+        notify(conn, r["patient_id"], "booking", "⏳ Visit not booked", "The payment wasn't finished in 15 minutes, so the time was released. Please book again.", "account")
+
+
+def payout_list(conn, d, user):
+    need_admin(user)
+    rows = conn.execute("SELECT l.id, l.name, l.city, l.payout_acc, m.email, (SELECT status FROM verifications v WHERE v.member_id=l.owner) AS ver "
+                        "FROM listings l JOIN members m ON m.id=l.owner WHERE l.hidden=0 ORDER BY l.name")
+    return {"doctors": [dict(r) for r in rows], "fee_pct": PLATFORM_FEE_PCT, "live": RAZORPAY_ON,
+            "paid": conn.execute("SELECT COUNT(*), COALESCE(SUM(pay_amount),0) FROM dbookings WHERE pay_status='paid'").fetchone()[:]}
+
+
+def payout_set(conn, d, user):
+    need_admin(user)
+    acc = str(d.get("acc") or "").strip()
+    if acc and not ACC_RE.match(acc):
+        raise InputError("A Razorpay linked account id looks like acc_XXXXXXXXXXXX")
+    conn.execute("UPDATE listings SET payout_acc=? WHERE id=?", (acc or None, int(d.get("listing_id") or 0)))
+    return payout_list(conn, d, user)
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2868,7 +3024,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/booking/settings": m_booking_settings, "/api/m/book": m_book, "/api/m/booking/cancel": m_booking_cancel,
                  "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots,
                  "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe,
-                 "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete, "/api/m/rx/write": m_rx_write, "/api/m/rx/get": m_rx_get}
+                 "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete, "/api/m/rx/write": m_rx_write, "/api/m/rx/get": m_rx_get,
+                 "/api/m/book/pay": m_book_pay, "/api/m/book/pay/demo": m_book_pay_demo, "/api/m/book/pay/verify": m_book_pay_verify}
 
 
 
@@ -3460,6 +3617,9 @@ def razorpay_webhook(conn, payload, signature):
     pay = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
     row = conn.execute("SELECT * FROM appointments WHERE pay_ref=? OR pay_ref=?", (pay.get("order_id"), pay.get("id"))).fetchone()
     if not row:
+        b = conn.execute("SELECT * FROM dbookings WHERE pay_ref=?", (pay.get("order_id"),)).fetchone()
+        if b and pay.get("status") == "captured" and pay.get("amount") == b["pay_amount"]:
+            mark_booking_paid(conn, b["id"], pay.get("id"), pay.get("amount"))
         return
     if pay.get("status") == "captured" and amount_matches(row, pay.get("amount", -1), pay.get("currency", "")):
         mark_paid(conn, row["id"], pay.get("id"), "razorpay", pay.get("amount"), pay.get("currency"))
@@ -3525,6 +3685,8 @@ ROUTES = {
     "/api/report/list": report_queue,
     "/api/backup/list": backup_info,
     "/api/stats/overview": stats_overview,
+    "/api/payout/list": payout_list,
+    "/api/payout/set": payout_set,
     "/api/backup/now": backup_now,
     "/api/report/decide": report_decide,
     "/api/verify/decide": verify_decide,

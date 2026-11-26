@@ -32,7 +32,7 @@ def test_public_listing_shows_only_summary(server, doctor):
     assert all(not ("13:00" <= t < "14:00") for d in j["result"]["days"] for t in d["times"])  # lunch break
     s, j = server.client().post("/api/m/me")
     listing = next(x for x in j["listings"] if x["id"] == lid)
-    assert listing["booking"] == {"fee": 500, "cur": "INR", "modes": ["clinic", "video"], "slot": 30}
+    assert listing["booking"] == {"fee": 500, "cur": "INR", "modes": ["clinic", "video"], "slot": 30, "prepay": False}
 
 
 def test_book_cancel_and_rebook(server, doctor, uniq):
@@ -102,3 +102,44 @@ def test_prescription_and_review_request(server, doctor, uniq):
     assert any("How was your visit" in n["title"] for n in p.post("/api/m/notifs")[1]["notifs"])
     v = p.post("/api/m/me")[1]["bookings"]["as_patient"][0]
     assert v["rx_id"] == rx and v["slot"] == 30
+
+
+def test_online_payment_demo_hold_and_refund(server, admin, uniq):
+    doc = server.client()
+    doc.signup("doctor", "Dr Pay", uniq())
+    lid = doc.profile("Pay Clinic")
+    base = {"on": True, "days": 127, "start": "00:00", "end": "23:45", "slot": 30, "modes": ["clinic"], "fee": 600, "cur": "USD", "tz": "Asia/Kolkata"}
+    assert doc.post("/api/m/booking/settings", dict(base, prepay=True))[0] == 400  # INR only
+    assert doc.post("/api/m/booking/settings", dict(base, cur="INR", prepay=True))[0] == 200  # demo mode on a dev computer
+    p = server.client()
+    p.signup("patient", "Payer", uniq())
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    day, tm = days[2]["date"], days[2]["times"][0]
+    s, j = p.post("/api/m/book", {"listing_id": lid, "date": day, "time": tm, "mode": "clinic"})
+    assert s == 200 and j["result"]["pay"] is True
+    bid = j["result"]["id"]
+    assert not any("New booking" in n["title"] for n in doc.post("/api/m/notifs")[1]["notifs"])  # only after payment
+    assert server.client().post("/api/m/book", {"listing_id": lid, "date": day, "time": tm, "mode": "clinic"})[0] in (400, 401)  # held
+    assert p.post("/api/m/book/pay", {"id": bid})[1]["result"]["demo"] is True
+    assert p.post("/api/m/book/pay/demo", {"id": bid})[0] == 200
+    v = p.post("/api/m/me")[1]["bookings"]["as_patient"][0]
+    assert v["pay_status"] == "paid" and any("New booking" in n["title"] and "paid online" in n["body"] for n in doc.post("/api/m/notifs")[1]["notifs"])
+    s, j = doc.post("/api/m/booking/cancel", {"id": bid, "reason": "Sick"})
+    assert s == 200 and "refund" in j["result"]["refund"]
+    assert p.post("/api/m/me")[1]["bookings"]["as_patient"][0]["pay_status"] == "refunded"
+    # unpaid holds are released after 15 minutes
+    s, j = p.post("/api/m/book", {"listing_id": lid, "date": day, "time": days[2]["times"][1], "mode": "clinic"})
+    with server.db() as c:
+        c.execute("UPDATE dbookings SET hold_until=1 WHERE id=?", (j["result"]["id"],))
+    import time
+    for _ in range(40):
+        st = server.db().execute("SELECT status FROM dbookings WHERE id=?", (j["result"]["id"],)).fetchone()[0]
+        if st == "cancelled":
+            break
+        time.sleep(1)
+    assert st == "cancelled"
+    # admin connects a payout account
+    assert admin.post("/api/payout/set", {"listing_id": lid, "acc": "bad"})[0] == 400
+    s, j = admin.post("/api/payout/set", {"listing_id": lid, "acc": "acc_ABCDEFGH1234"})
+    assert s == 200 and any(d["payout_acc"] == "acc_ABCDEFGH1234" for d in j["created"]["doctors"])
+    assert all("payout_acc" not in x for x in server.client().post("/api/m/me")[1]["listings"])  # private
