@@ -175,3 +175,34 @@ def test_clinic_queue(server, uniq):
     assert q["mine"][0]["ahead"] == 1 and "items" not in q  # patients don't see other names
     s, body, _ = server.client().get(f"/queue/{lid}")
     assert s == 200 and b"#2" in body and b"Asha" not in body
+
+
+def test_health_records_encrypted_and_shared(server, doctor, uniq):
+    import base64
+    from conftest import JPEG_DATA_URL
+    doc, lid = doctor
+    p, stranger = server.client(), server.client()
+    p.signup("patient", "Rec User", uniq())
+    stranger.signup("patient", "Nosy", uniq())
+    pdf = "data:application/pdf;base64," + base64.b64encode(b"%PDF-1.4 secret blood test result").decode()
+    assert p.post("/api/m/records/add", {"file": "data:text/html;base64," + base64.b64encode(b"<script>").decode(), "title": "x", "kind": "lab"})[0] == 400
+    s, j = p.post("/api/m/records/add", {"file": pdf, "title": "CBC blood test", "kind": "lab", "date": "2026-11-01"})
+    assert s == 200
+    rid = j["result"]["id"]
+    p.post("/api/m/records/add", {"file": JPEG_DATA_URL, "title": "Chest X-ray", "kind": "scan"})
+    raw = (server.data_dir / "records" / f"{rid}.bin").read_bytes()
+    assert b"secret blood" not in raw  # encrypted on disk
+    s, body, h = p.get(f"/api/m/records/file/{rid}")
+    assert s == 200 and body.startswith(b"%PDF") and h["Content-Type"] == "application/pdf"
+    assert stranger.get(f"/api/m/records/file/{rid}")[0] == 404 and doc.get(f"/api/m/records/file/{rid}")[0] == 404
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    bid = p.post("/api/m/book", {"listing_id": lid, "date": days[3]["date"], "time": days[3]["times"][0], "mode": "clinic"})[1]["result"]["id"]
+    assert stranger.post("/api/m/records/share", {"id": rid, "booking_id": bid})[0] == 400
+    assert p.post("/api/m/records/share", {"id": rid, "booking_id": bid})[0] == 200
+    assert doc.get(f"/api/m/records/file/{rid}")[0] == 200  # the doctor of that visit can open it now
+    v = next(x for x in doc.post("/api/m/me")[1]["bookings"]["as_doctor"] if x["id"] == bid)
+    assert [r["title"] for r in v["shared"]] == ["CBC blood test"]
+    p.post("/api/m/records/share", {"id": rid, "booking_id": bid, "on": False})
+    assert doc.get(f"/api/m/records/file/{rid}")[0] == 404
+    p.post("/api/m/records/delete", {"id": rid})
+    assert not (server.data_dir / "records" / f"{rid}.bin").exists()

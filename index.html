@@ -2906,6 +2906,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     ${phoneCard()}
     ${myVisitsCard()}
     ${familyCard()}
+    ${recordsCard()}
     ${remCard()}
     ${me.photo_ts?'':`<div class="ph-prompt">${ico('cam',18)}<span>${doc?'Add a profile photo so patients recognise you. Profiles with a photo get more messages.':'Add a profile photo so your doctors recognise you.'}</span></div>`}
     ${doc?`<div class="sw-row" style="margin-bottom:18px"><button class="sw ${me.online?'on':''}" id="onSw" aria-label="Online"></button><div><b>${me.online?'You are online':(L&&L.hours&&(scheduleStatus(L)||{}).open?'You are online (your hours)':'You are offline')}</b><div style="font-size:13px;color:var(--mute)">${L?(L.hours?`Your online hours: ${esc(fmtHours(L.hours,L.tz))}. You show "Online now" automatically during these hours, and any time this switch is on.`:'Patients see a green "Online now" badge while this is on and this page is open. Set your online hours below to show it automatically.'):'Fill in your public profile below first.'}</div></div></div>
@@ -2951,7 +2952,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  wireReminders();wireBookings();wirePush();wireFamily();wirePhone();
+  wireReminders();wireBookings();wirePush();wireFamily();wirePhone();wireRecords();
   if(doc&&MEM.listing){renderGallery();wireVerify();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3496,6 +3497,33 @@ async function docQueue(){const box=$('#qBody');if(!box||!MEM.listing)return;let
   $('#qNext').onclick=()=>run('queue/next',{});$('#qWalk').onsubmit=e=>{e.preventDefault();const n=$('#qName').value.trim();if(n)run('queue/walkin',{name:n})};
   box.querySelectorAll('[data-qskip]').forEach(b=>b.onclick=()=>run('queue/skip',{id:+b.dataset.qskip,skip:true}));
   box.querySelectorAll('[data-qback]').forEach(b=>b.onclick=()=>run('queue/skip',{id:+b.dataset.qback,skip:false}))}
+
+/* ================= HEALTH RECORDS FOLDER ================= */
+const REC_KIND={lab:'🧪 Lab report',scan:'🩻 X-ray / scan',rx:'💊 Prescription',discharge:'🏥 Discharge summary',vaccine:'💉 Vaccination',other:'📄 Other'};
+function recordsCard(){const R=MEM.records||[];const up=((MEM.bookings||{}).as_patient||[]).filter(v=>v.status!=='cancelled'&&v.at>Date.now()-7*864e5);const fam=MEM.family||[];
+  return `<details class="card pw-card" id="recCard"><summary>📁 Health records <span style="font-weight:400;color:var(--mute);font-size:13px">· ${R.length?R.length+' file'+(R.length>1?'s':'')+', encrypted':'lab reports, X-rays, old prescriptions, encrypted'}</span></summary>
+    <div class="visit-list">${R.map(r=>`<div class="visit"><b>${(REC_KIND[r.kind]||'📄').split(' ')[0]} ${esc(r.title)}</b>
+      <small>${esc((REC_KIND[r.kind]||'').split(' ').slice(1).join(' '))}${r.date?' · '+bkDay(r.date,{day:'numeric',month:'short',year:'numeric'}):''}${r.for_name!==MEM.me.name?' · for '+esc(r.for_name):''} · ${bkSizeRec(r.size)}</small>
+      ${r.shares.length?`<small>🔓 Shared with ${r.shares.map(s=>`${esc(s.doctor)} <button class="rv-mini" type="button" data-recunshare="${r.id}" data-bid="${s.booking_id}">stop</button>`).join(', ')}</small>`:''}
+      <div class="acts"><a class="btn ghost sm" href="/api/m/records/file/${r.id}" target="_blank" rel="noopener">👁 View</a>
+        ${up.length?`<select data-recshare="${r.id}" aria-label="Share with a doctor"><option value="">Share with a doctor…</option>${up.map(v=>`<option value="${v.id}">${esc(v.doctor)} · ${bkDay(v.date)}</option>`).join('')}</select>`:''}
+        <button class="btn ghost sm" type="button" data-recdel="${r.id}">🗑 Delete</button></div></div>`).join('')}
+    <form class="form" id="recForm" style="padding:0"><label>FILE (PHOTO OR PDF, UP TO 5 MB)</label><input type="file" id="recFile" accept="image/jpeg,image/png,application/pdf" required>
+      <div class="two"><div><label>TITLE</label><input id="recTitle" required maxlength="100" placeholder="e.g. Blood test (CBC)"></div><div><label>TYPE</label><select id="recKind">${Object.entries(REC_KIND).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></div></div>
+      <div class="two"><div><label>DATE (OPTIONAL)</label><input id="recDate" type="date"></div><div><label>FOR</label><select id="recFor"><option value="">Me</option>${fam.map(f=>`<option>${esc(f.name)}</option>`).join('')}</select></div></div>
+      <button class="btn primary sm" type="submit">⬆️ Add to my records</button><div id="recMsg" style="font-size:13px;margin-top:6px"></div>
+      <p style="font-size:12px;color:var(--mute)">Files are encrypted on our server. Only you can open them, plus a doctor you share one with for a visit (until a week after it).</p></form></div></details>`}
+const bkSizeRec=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+function wireRecords(){const f=$('#recForm');if(!f)return;const keep=()=>{const c=$('#recCard');if(c)c.open=true};
+  f.onsubmit=async e=>{e.preventDefault();const file=$('#recFile').files[0];const m=$('#recMsg');if(!file)return;
+    if(file.size>5e6){m.innerHTML='<span class="red">That file is bigger than 5 MB.</span>';return}
+    m.textContent='Uploading…';const data=await new Promise(ok=>{const r=new FileReader();r.onload=()=>ok(r.result);r.readAsDataURL(file)});
+    try{await mapi('records/add',{file:data,title:$('#recTitle').value.trim(),kind:$('#recKind').value,date:$('#recDate').value,for_name:$('#recFor').value});renderAccount();keep()}
+    catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+  $$('[data-recdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this file for good?'))return;try{await mapi('records/delete',{id:+b.dataset.recdel});renderAccount();keep()}catch(e){alert(e.message)}});
+  $$('[data-recshare]').forEach(s=>s.onchange=async()=>{if(!s.value)return;if(!confirm('Share this file with that doctor until a week after the visit?')){s.value='';return}
+    try{await mapi('records/share',{id:+s.dataset.recshare,booking_id:+s.value,on:true});renderAccount();keep()}catch(e){alert(e.message)}});
+  $$('[data-recunshare]').forEach(b=>b.onclick=async()=>{try{await mapi('records/share',{id:+b.dataset.recunshare,booking_id:+b.dataset.bid,on:false});renderAccount();keep()}catch(e){alert(e.message)}})}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3509,6 +3537,7 @@ function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''
     <small>${doc?`👤 ${esc(v.patient)}${v.patient!==v.account?` (booked by ${esc(v.account)})`:''}`:`👨‍⚕️ ${esc(v.doctor)}${v.patient!==MEM.me.name?` · for ${esc(v.patient)}`:''}`} · ${v.mode==='video'?'📹 Video visit':'🏥 In clinic'}${v.fee?' · '+bkMoney(v.fee,v.cur):''}</small>
     ${!doc&&v.mode!=='video'&&v.addr?`<small>📍 ${esc(v.addr)}</small>`:''}${v.reason?`<small>📝 ${esc(v.reason)}</small>`:''}
     ${v.status==='cancelled'?`<small>Cancelled${v.cancel_reason?': '+esc(v.cancel_reason):''}</small>`:''}
+    ${doc&&(v.shared||[]).length?`<small>📁 Shared with you: ${v.shared.map(r=>`<a class="teal" href="/api/m/records/file/${r.id}" target="_blank" rel="noopener">${esc(r.title)}</a>`).join(', ')}</small>`:''}
     ${{paid:'<small>💳 Paid online</small>',pending:'<small>⏳ Waiting for payment: the time is held for 15 minutes</small>',refunded:'<small>↩️ Refunded</small>',refund_due:'<small>↩️ Refund in progress</small>'}[v.pay_status]||''}
     ${!doc&&v.status==='booked'&&v.mode==='clinic'&&v.date===ymd(new Date())&&v.pay_status!=='pending'?`<div class="qbox" data-qlid="${v.listing_id}" data-qbid="${v.id}"><button class="btn primary sm" type="button" data-qin="${v.id}">🎫 I'm at the clinic: get my token</button></div>`:''}
     <div class="acts">${!doc&&v.status==='booked'&&v.pay_status==='pending'?`<button class="btn primary sm" type="button" data-paynow="${v.id}" data-pdoc="${esc(v.doctor)}" data-pfee="${v.fee}">💳 Pay now</button>`:''}${(()=>{const now=Date.now(),open=v.status==='booked'&&v.pay_status!=='pending'&&v.mode==='video'&&now>v.at-10*60e3&&now<v.at+((v.slot||30)+30)*60e3;

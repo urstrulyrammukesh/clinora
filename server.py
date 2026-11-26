@@ -398,6 +398,10 @@ CREATE TABLE IF NOT EXISTS wa_threads(phone TEXT PRIMARY KEY, history TEXT NOT N
 CREATE TABLE IF NOT EXISTS queue_items(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, day TEXT NOT NULL, token INTEGER NOT NULL,
   name TEXT NOT NULL, patient_id INTEGER, booking_id INTEGER UNIQUE, status TEXT NOT NULL, ts INTEGER NOT NULL, called_ts INTEGER);
 CREATE INDEX IF NOT EXISTS queue_day ON queue_items(listing_id, day, status);
+CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, for_name TEXT NOT NULL, kind TEXT NOT NULL,
+  title TEXT NOT NULL, date TEXT, mime TEXT NOT NULL, size INTEGER NOT NULL, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS record_shares(record_id INTEGER NOT NULL, booking_id INTEGER NOT NULL, doctor_id INTEGER NOT NULL, expires INTEGER NOT NULL,
+  PRIMARY KEY(record_id, booking_id));
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -937,7 +941,7 @@ def member_state(conn, me):
     ph = conn.execute("SELECT phone, phone_ok FROM members WHERE id=?", (me["id"],)).fetchone()
     return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw, phone=ph["phone"], phone_ok=bool(ph["phone_ok"]),
                        sms_on=SMS_ON or WA_REMINDERS_ON), "notif_unread": notif_unread,
-            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY,
+            "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY, "records": record_list(conn, me),
             "family": [dict(r) for r in conn.execute("SELECT id, name, relation, year FROM family WHERE member_id=? ORDER BY id", (me["id"],))],
             "favs": fav_ids, "threads": threads,
             "listing": dict(lst, social=json.loads(lst["social"] or "{}"), video=bool(lst["video"]),
@@ -1412,6 +1416,11 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM family WHERE member_id=?", (mid,))
     conn.execute("UPDATE queue_items SET patient_id=NULL, name='(deleted)' WHERE patient_id=?", (mid,))
+    for (rid,) in conn.execute("SELECT id FROM records WHERE member_id=?", (mid,)).fetchall():
+        _rec_path(rid).unlink(missing_ok=True)
+        conn.execute("DELETE FROM record_shares WHERE record_id=?", (rid,))
+    conn.execute("DELETE FROM records WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM record_shares WHERE doctor_id=?", (mid,))
     conn.execute("DELETE FROM prescriptions WHERE patient_id=? OR doctor_id=?", (mid, mid))
     for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
                                            "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
@@ -2093,7 +2102,7 @@ S3_SECRET = os.environ.get("BACKUP_S3_SECRET", "").strip()
 S3_REGION = os.environ.get("BACKUP_S3_REGION", "").strip() or "auto"
 S3_ON = bool(S3_ENDPOINT.startswith("https://") and S3_BUCKET and S3_KEY_ID and S3_SECRET)
 BACKUP_NAME_RE = re.compile(r"^clinora-\d{8}-\d{6}\.tar\.gz$")
-BACKUP_FOLDERS = ("avatars", "gallery", "verify")
+BACKUP_FOLDERS = ("avatars", "gallery", "verify", "records")
 BACKUP_LOCK = threading.Lock()
 
 
@@ -2171,6 +2180,8 @@ def make_backup(reason="auto"):
             tar.add(snap, arcname=DB_PATH.name)
             if VAPID_FILE.exists():
                 tar.add(VAPID_FILE, arcname=VAPID_FILE.name)
+            if (DATA_DIR / "records.key").exists():
+                tar.add(DATA_DIR / "records.key", arcname="records.key")
             info = tarfile.TarInfo("manifest.json")
             info.size, info.mtime = len(manifest), time.time()
             import io
@@ -2247,7 +2258,7 @@ def restore_backup(path):
             sys.exit(f"Clinora is still running on port {PORT}. Stop it first (Ctrl+C in its window), then run this again.")
     except OSError:
         pass
-    allowed = (DB_PATH.name, "manifest.json", "vapid_private.pem")
+    allowed = (DB_PATH.name, "manifest.json", "vapid_private.pem", "records.key")
     with tarfile.open(src, "r:gz") as tar:
         members = tar.getmembers()
         for m in members:
@@ -2449,6 +2460,8 @@ def my_bookings(conn, me):
     mine = [_booking_view(r, "patient") for r in conn.execute(q.format("b.patient_id=?"), (me["id"], since))]
     lst = my_listing(conn, me) if me["kind"] == "doctor" else None
     theirs = [_booking_view(r, "doctor") for r in conn.execute(q.format("b.listing_id=?"), (lst["id"], since))] if lst else []
+    for v in theirs:
+        v["shared"] = shared_records_for(conn, me, v["id"])
     return {"as_patient": mine, "as_doctor": theirs}
 
 
@@ -3338,6 +3351,135 @@ def queue_screen(conn, lid):
 <div class="s">{q['waiting']} waiting · {e(lst['name'])}</div></div><div class="f">Clinora · get your token on your phone: open your visit and tap “I'm at the clinic”</div></body></html>"""
 
 
+# ---------------------------------------------------------------- health records folder (encrypted files)
+# Lab reports, X-rays, old prescriptions... Files are encrypted on disk with AES-256-GCM (key in RECORDS_KEY or
+# data/records.key). A patient can share one record with the doctor of one visit; access ends 7 days after the visit.
+RECORDS_DIR = DATA_DIR / "records"
+RECORD_KINDS = {"lab": "🧪 Lab report", "scan": "🩻 X-ray / scan", "rx": "💊 Prescription", "discharge": "🏥 Discharge summary",
+                "vaccine": "💉 Vaccination", "other": "📄 Other"}
+RECORD_MAX = 5_000_000
+RECORD_TYPES = {b"\xff\xd8\xff": "image/jpeg", b"\x89PNG": "image/png", b"%PDF": "application/pdf"}
+_RKEY = []
+
+
+def _records_key():
+    if not _RKEY:
+        import base64
+        env = os.environ.get("RECORDS_KEY", "").strip()
+        if env:
+            key = base64.b64decode(env)
+        else:
+            f = DATA_DIR / "records.key"
+            if not f.exists():
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_bytes(base64.b64encode(secrets.token_bytes(32)))
+                os.chmod(f, 0o600)
+            key = base64.b64decode(f.read_bytes())
+        if len(key) != 32:
+            raise RuntimeError("RECORDS_KEY must be 32 bytes, base64")
+        _RKEY.append(key)
+    return _RKEY[0]
+
+
+def _rec_path(rid):
+    return RECORDS_DIR / f"{int(rid)}.bin"
+
+
+def record_write(rid, raw):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    RECORDS_DIR.mkdir(parents=True, exist_ok=True)
+    nonce = secrets.token_bytes(12)
+    _rec_path(rid).write_bytes(nonce + AESGCM(_records_key()).encrypt(nonce, raw, str(rid).encode()))
+
+
+def record_read(rid):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    blob = _rec_path(rid).read_bytes()
+    return AESGCM(_records_key()).decrypt(blob[:12], blob[12:], str(rid).encode())
+
+
+def record_list(conn, me):
+    out = []
+    for r in conn.execute("SELECT * FROM records WHERE member_id=? ORDER BY COALESCE(date, '') DESC, id DESC", (me["id"],)):
+        shares = [dict(s) for s in conn.execute("SELECT s.booking_id, s.expires, l.name AS doctor FROM record_shares s JOIN dbookings b ON b.id=s.booking_id "
+                                                "JOIN listings l ON l.id=b.listing_id WHERE s.record_id=? AND s.expires > ?", (r["id"], now_ms()))]
+        out.append(dict(dict(r), shares=shares))
+    return out
+
+
+def m_record_add(conn, d, me):
+    import base64
+    need_member(me)
+    need_confirmed(me)
+    if too_many("record", str(me["id"]), 30, 86400):
+        raise AuthError("You added many files today. Please try again tomorrow.", 429)
+    if conn.execute("SELECT COUNT(*) FROM records WHERE member_id=?", (me["id"],)).fetchone()[0] >= 200:
+        raise InputError("You can keep up to 200 files. Delete some old ones first.")
+    data = str(d.get("file") or "")
+    m = re.match(r"^data:[\w/+.-]+;base64,", data)
+    try:
+        raw = base64.b64decode(data[m.end():] if m else "", validate=True)
+    except ValueError:
+        raw = b""
+    mime = next((v for k, v in RECORD_TYPES.items() if raw.startswith(k)), None)
+    if not mime:
+        raise InputError("Please choose a photo (JPG, PNG) or a PDF")
+    if len(raw) > RECORD_MAX:
+        raise InputError("That file is bigger than 5 MB. Please choose a smaller one or take a photo instead.")
+    for_name = text(d, "for_name", 80, False) or me["name"]
+    if for_name != me["name"] and not conn.execute("SELECT 1 FROM family WHERE member_id=? AND name=?", (me["id"], for_name)).fetchone():
+        raise InputError("Add this person under Family first")
+    date = str(d.get("date") or "")
+    rid = conn.execute("INSERT INTO records(member_id,for_name,kind,title,date,mime,size,ts) VALUES(?,?,?,?,?,?,?,?)",
+                       (me["id"], for_name, one_of(d, "kind", set(RECORD_KINDS)), text(d, "title", 100),
+                        date if DATE_RE.match(date) else None, mime, len(raw), now_ms())).lastrowid
+    record_write(rid, raw)
+    return {"id": rid}
+
+
+def m_record_delete(conn, d, me):
+    need_member(me)
+    rid = int(d.get("id") or 0)
+    if conn.execute("DELETE FROM records WHERE id=? AND member_id=?", (rid, me["id"])).rowcount:
+        conn.execute("DELETE FROM record_shares WHERE record_id=?", (rid,))
+        _rec_path(rid).unlink(missing_ok=True)
+
+
+def m_record_share(conn, d, me):
+    need_member(me)
+    rid, bid = int(d.get("id") or 0), int(d.get("booking_id") or 0)
+    if not conn.execute("SELECT 1 FROM records WHERE id=? AND member_id=?", (rid, me["id"])).fetchone():
+        raise InputError("File not found")
+    if not d.get("on", True):
+        conn.execute("DELETE FROM record_shares WHERE record_id=? AND booking_id=?", (rid, bid))
+        return
+    b = conn.execute("SELECT b.*, l.owner, l.name FROM dbookings b JOIN listings l ON l.id=b.listing_id WHERE b.id=? AND b.patient_id=?", (bid, me["id"])).fetchone()
+    if not b or b["status"] == "cancelled":
+        raise InputError("Pick one of your visits")
+    exp = b["at"] + 7 * 86_400_000
+    if exp < now_ms():
+        raise InputError("That visit was more than a week ago")
+    conn.execute("INSERT OR REPLACE INTO record_shares VALUES(?,?,?,?)", (rid, bid, b["owner"], exp))
+    notify(conn, b["owner"], "booking", f"📁 {b['for_name']} shared a health record", "Open your appointments to see it.", "account")
+
+
+def shared_records_for(conn, me, bid):
+    return [dict(r) for r in conn.execute("SELECT r.id, r.title, r.kind, r.date, r.mime FROM record_shares s JOIN records r ON r.id=s.record_id "
+                                          "WHERE s.booking_id=? AND s.doctor_id=? AND s.expires > ?", (bid, me["id"], now_ms()))]
+
+
+def record_for_viewer(conn, rid, me):
+    if not me:
+        return None
+    r = conn.execute("SELECT * FROM records WHERE id=?", (rid,)).fetchone()
+    if not r:
+        return None
+    if r["member_id"] == me["id"] or conn.execute("SELECT 1 FROM record_shares WHERE record_id=? AND doctor_id=? AND expires > ?",
+                                                    (rid, me["id"], now_ms())).fetchone():
+        return r
+    return None
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3353,7 +3495,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/book/pay": m_book_pay, "/api/m/book/pay/demo": m_book_pay_demo, "/api/m/book/pay/verify": m_book_pay_verify,
                  "/api/m/phone/start": m_phone_start, "/api/m/phone/confirm": m_phone_confirm, "/api/m/phone/remove": m_phone_remove,
                  "/api/m/queue/checkin": m_queue_checkin, "/api/m/queue/state": m_queue_state, "/api/m/queue/walkin": m_queue_walkin,
-                 "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip}
+                 "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip,
+                 "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share}
 
 
 
@@ -4309,6 +4452,24 @@ class Handler(SimpleHTTPRequestHandler):
             if WA_ON and q.get("hub.mode", [""])[0] == "subscribe" and hmac.compare_digest(q.get("hub.verify_token", [""])[0], WA_VERIFY):
                 return self.send_text(200, q.get("hub.challenge", [""])[0][:200], "text/plain")
             return self.send_text(403, "forbidden", "text/plain")
+        m = re.fullmatch(r"/api/m/records/file/(\d+)", path_only)
+        if m:
+            with connect() as conn:
+                r = record_for_viewer(conn, int(m.group(1)), member_for_token(conn, self.member_token()))
+            if not r:
+                return self.send_json(404, {"error": "not found"})
+            body = record_read(r["id"])
+            self._cache = "private, no-store"
+            # no scripts, but the browser's own PDF viewer may still show the file
+            self._csp = "default-src 'none'; object-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; frame-ancestors 'self'"
+            self.send_response(200)
+            self.send_header("Content-Type", r["mime"])
+            self.send_header("Content-Length", str(len(body)))
+            ext = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf"}[r["mime"]]
+            self.send_header("Content-Disposition", f'inline; filename="{slugify(r["title"])}.{ext}"')
+            self.end_headers()
+            self.wfile.write(body)
+            return
         m = re.fullmatch(r"/queue/(\d+)", path_only)
         if m:
             with connect() as conn:
@@ -4725,7 +4886,7 @@ class Handler(SimpleHTTPRequestHandler):
     def member(self, path):
         ip = self.client_ip()
         try:
-            data = self.read_json(1_700_000 if path in ("/api/m/gallery/add", "/api/m/verify/submit") else 450_000 if path == "/api/m/photo" else 10_000)
+            data = self.read_json(7_000_000 if path == "/api/m/records/add" else 1_700_000 if path in ("/api/m/gallery/add", "/api/m/verify/submit") else 450_000 if path == "/api/m/photo" else 40_000)
             if not isinstance(data, dict):
                 raise InputError("Bad request")
             with DB_LOCK, connect() as conn:

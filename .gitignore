@@ -31,3 +31,5 @@ data/videos/
 data/backups/
 data/before-restore-*/
 data/vapid_private.pem
+data/records/
+data/records.key
