@@ -1,0 +1,35 @@
+# Changelog
+
+All notable changes to Clinora. Dates are when the work landed on `main`.
+
+## [1.0.0] – 2026-11-27
+
+The first complete version: live at **https://clinora-cwxu.onrender.com**.
+
+### For patients
+- Find doctors, hospitals, labs and pharmacies worldwide (OpenStreetMap), on a 3D map, with "open now" and filters
+- **Book real doctors**: free slots, in-clinic or video, family members, online payment (Razorpay Route) with automatic refunds
+- **Video visits** with a Join button, **printable prescriptions** and one-tap medicine reminders
+- **Reminders** by bell, phone push, email, SMS and WhatsApp; prescription photo → reminders
+- **Encrypted health records** (AES-256-GCM), shared with one doctor for one visit
+- **Clinic queue tokens** with a live tracking link (no login) and turn alerts
+- AI assistant in 139 languages, Food Scan, cheaper generic medicines, voice input, free medical books
+- **Installed phone app** with its own home screen and bottom tabs
+
+### For doctors and clinics
+- Public doctor pages (5 designs) that Google can find; verified-doctor badge
+- Online booking calendar, patient history (EHR lite) with private notes, receipts
+- Doctor dashboard: visits, no-show rate, earnings, busiest hours; clinic teams; invite links
+- Clinic admin: statistics, doctor verification, reports & blocking, payouts, daily backups
+
+### Security & quality
+- Strict Content-Security-Policy with nonce, SRI, PBKDF2 passwords, HttpOnly cookies, rate limits, HMAC webhooks
+- Email and phone verification, first-admin setup code, suspended accounts
+- 33 automated end-to-end test groups on every push, CodeQL security scanning, Dependabot
+- Accessibility: names for every field, skip link, visible keyboard focus
+
+### Infrastructure
+- One-command launch check (`python server.py --check`), Render blueprint, backups with optional cloud copy
+- WhatsApp Cloud API assistant, Web Push notifications, SMS (MSG91 / Twilio)
+
+See every step in the [build timeline](https://github.com/urstrulyrammukesh/clinora-tech-stack/blob/main/TIMELINE.md).
