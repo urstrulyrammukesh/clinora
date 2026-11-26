@@ -473,6 +473,9 @@ def init_db():
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
         if "suspended" not in mcols:
             conn.execute("ALTER TABLE members ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
+        for col, kind in [("phone", "TEXT"), ("phone_ok", "INTEGER NOT NULL DEFAULT 0"), ("phone_code", "TEXT"), ("phone_code_exp", "INTEGER")]:
+            if col not in mcols:
+                conn.execute(f"ALTER TABLE members ADD COLUMN {col} {kind}")
         if "email_ok" not in mcols:  # accounts made before email confirmation existed count as confirmed
             conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE members SET email_ok=1")
@@ -488,6 +491,8 @@ def init_db():
             conn.execute("ALTER TABLE reminders ADD COLUMN ref TEXT")
         if "until" not in rcols:
             conn.execute("ALTER TABLE reminders ADD COLUMN until TEXT")
+        if "sms" not in rcols:
+            conn.execute("ALTER TABLE reminders ADD COLUMN sms INTEGER NOT NULL DEFAULT 0")
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
         for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0"), ("booking", "TEXT")]:
             if col not in lcols:
@@ -926,7 +931,9 @@ def member_state(conn, me):
     notif_unread = conn.execute("SELECT COUNT(*) FROM notifs WHERE member_id=? AND seen=0", (me["id"],)).fetchone()[0]
     ver = conn.execute("SELECT reg_no, council, reg_year, qualification, cert, status, reason, submitted, reviewed FROM verifications "
                        "WHERE member_id=?", (me["id"],)).fetchone() if me["kind"] == "doctor" else None
-    return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw), "notif_unread": notif_unread,
+    ph = conn.execute("SELECT phone, phone_ok FROM members WHERE id=?", (me["id"],)).fetchone()
+    return {"me": dict(me, listing_id=lst["id"] if lst else None, has_password=has_pw, phone=ph["phone"], phone_ok=bool(ph["phone_ok"]),
+                       sms_on=SMS_ON or WA_REMINDERS_ON), "notif_unread": notif_unread,
             "verification": dict(ver) if ver else None, "reminders": reminder_list(conn, me["id"]), "bookings": my_bookings(conn, me), "push_key": PUSH_KEY,
             "family": [dict(r) for r in conn.execute("SELECT id, name, relation, year FROM family WHERE member_id=? ORDER BY id", (me["id"],))],
             "favs": fav_ids, "threads": threads,
@@ -1262,7 +1269,7 @@ def reminder_next(r, after_ms):
 
 
 def reminder_list(conn, mid):
-    return [dict(r) for r in conn.execute("SELECT id, kind, title, note, at, days, date, tz, lead, email, active, next_at, last_sent, until "
+    return [dict(r) for r in conn.execute("SELECT id, kind, title, note, at, days, date, tz, lead, email, active, next_at, last_sent, until, sms "
                                           "FROM reminders WHERE member_id=? ORDER BY active DESC, COALESCE(next_at, 9e15), id", (mid,))]
 
 
@@ -1304,11 +1311,14 @@ def m_reminder_save(conn, d, me):
     nxt = reminder_next(r, now_ms())
     if nxt is None:
         raise InputError("That time has already passed. Pick a time in the future.")
-    vals = (kind, title, text(d, "note", 200, False), at, days, date, tz, lead, 1 if d.get("email") else 0, nxt, until)
+    sms = 1 if d.get("sms") else 0
+    if sms and not conn.execute("SELECT phone_ok FROM members WHERE id=?", (me["id"],)).fetchone()[0]:
+        raise InputError("Add and confirm your mobile number first (Account → Mobile number)")
+    vals = (kind, title, text(d, "note", 200, False), at, days, date, tz, lead, 1 if d.get("email") else 0, nxt, until, sms)
     if rid:
-        conn.execute("UPDATE reminders SET kind=?,title=?,note=?,at=?,days=?,date=?,tz=?,lead=?,email=?,next_at=?,until=?,active=1 WHERE id=?", vals + (rid,))
+        conn.execute("UPDATE reminders SET kind=?,title=?,note=?,at=?,days=?,date=?,tz=?,lead=?,email=?,next_at=?,until=?,sms=?,active=1 WHERE id=?", vals + (rid,))
     else:
-        rid = conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,until,member_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        rid = conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,until,sms,member_id,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                            vals + (me["id"], now_ms())).lastrowid
     return {"id": rid, "next_at": nxt}
 
@@ -1343,7 +1353,7 @@ def fire_due_reminders(conn, now=None):
     """Sends every reminder that is due. Ones missed while the server was off by more than 6 hours are skipped, not sent late."""
     now = now or now_ms()
     sent = 0
-    for r in conn.execute("SELECT r.*, m.email AS m_email, m.name AS m_name FROM reminders r JOIN members m ON m.id=r.member_id "
+    for r in conn.execute("SELECT r.*, m.email AS m_email, m.name AS m_name, m.phone AS m_phone, m.phone_ok AS m_phone_ok FROM reminders r JOIN members m ON m.id=r.member_id "
                           "WHERE r.active=1 AND r.next_at<=? LIMIT 500", (now,)).fetchall():
         if now - r["next_at"] < 6 * 3600_000:
             icon = REMINDER_KINDS.get(r["kind"], "⏰")
@@ -1355,6 +1365,9 @@ def fire_due_reminders(conn, now=None):
                 html_body = (f"<p>Hi {html.escape(r['m_name'])},</p><p style='font-size:18px'><b>{html.escape(title)}</b></p>"
                              f"<p>{html.escape(r['note'] or '')}</p><p><a href='{html.escape(link)}'>Manage your reminders</a></p><p>Clinora</p>")
                 send_email(r["m_email"], f"Reminder: {r['title']}", body, html_body)
+            if r["sms"] and r["m_phone_ok"] and r["m_phone"] and not too_many("sms", str(r["member_id"]), 20, 86400):
+                send_text_message(r["m_phone"], f"Clinora reminder: {r['title']}" + (f" - {r['note']}" if r["note"] else ""),
+                                  {"title": r["title"][:60], "when": r["at"]})
             sent += 1
         nxt = reminder_next(r, max(now, r["next_at"]))
         conn.execute("UPDATE reminders SET last_sent=?, next_at=?, active=? WHERE id=?", (now, nxt, 1 if nxt else 0, r["id"]))
@@ -2496,10 +2509,11 @@ def booking_confirmed(conn, bid):
         r = {"at": tm, "days": 0, "date": date, "tz": cfg["tz"], "lead": lead}
         nxt = reminder_next(r, now_ms())
         if nxt:
-            conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,member_id,created,ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            sms_ok = conn.execute("SELECT phone_ok FROM members WHERE id=?", (me["id"],)).fetchone()[0]
+            conn.execute("INSERT INTO reminders(kind,title,note,at,days,date,tz,lead,email,next_at,member_id,created,ref,sms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                          ("appointment", f"{lst['name']}" + (f" · {for_name}" if for_name != me["name"] else ""),
                           ("Video visit: open Clinora and message or call the doctor." if mode == "video" else f"In clinic: {lst['addr']}, {lst['city']}")[:200],
-                          tm, 0, date, cfg["tz"], lead, 1, nxt, me["id"], now_ms(), f"dbook:{bid}"))
+                          tm, 0, date, cfg["tz"], lead, 1, nxt, me["id"], now_ms(), f"dbook:{bid}", 1 if (sms_ok and lead == 60) else 0))
 
 
 def m_booking_cancel(conn, d, me):
@@ -3132,6 +3146,82 @@ def wa_handle(payload):
         WA_SEEN.pop(k, None)
 
 
+# ---------------------------------------------------------------- SMS / WhatsApp reminders
+# For people who don't use apps. Providers (pick one in .env):
+#   SMS_PROVIDER=twilio  + TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM            (worldwide)
+#   SMS_PROVIDER=msg91   + MSG91_AUTHKEY, MSG91_TEMPLATE_ID, MSG91_OTP_TEMPLATE_ID  (India, DLT-registered templates)
+#   WhatsApp template    + WHATSAPP_REMINDER_TEMPLATE (an approved template with 2 body variables: title, time)
+# Without any of these (on your own computer) messages and codes are printed in the Terminal.
+SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "").strip().lower()
+TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM = (os.environ.get(k, "").strip() for k in ("TWILIO_SID", "TWILIO_TOKEN", "TWILIO_FROM"))
+MSG91_AUTHKEY, MSG91_TEMPLATE, MSG91_OTP_TEMPLATE = (os.environ.get(k, "").strip() for k in ("MSG91_AUTHKEY", "MSG91_TEMPLATE_ID", "MSG91_OTP_TEMPLATE_ID"))
+WA_REMINDER_TEMPLATE = os.environ.get("WHATSAPP_REMINDER_TEMPLATE", "").strip()
+SMS_ON = (SMS_PROVIDER == "twilio" and bool(TWILIO_SID and TWILIO_TOKEN and TWILIO_FROM)) or (SMS_PROVIDER == "msg91" and bool(MSG91_AUTHKEY and MSG91_TEMPLATE))
+WA_REMINDERS_ON = bool(WA_REMINDER_TEMPLATE and WA_TOKEN and WA_PHONE_ID)
+E164_RE = re.compile(r"^\+[1-9]\d{7,14}$")
+
+
+def send_text_message(phone, body, vars_=None, otp=None):
+    """Sends in the background. vars_ fill template variables where the provider needs approved templates."""
+    vars_ = vars_ or {}
+
+    def run():
+        try:
+            if WA_REMINDERS_ON and not otp:
+                http_json("POST", f"{WA_API}/{WA_PHONE_ID}/messages", {"messaging_product": "whatsapp", "to": phone.lstrip("+"), "type": "template",
+                          "template": {"name": WA_REMINDER_TEMPLATE, "language": {"code": "en"}, "components": [{"type": "body", "parameters": [
+                              {"type": "text", "text": vars_.get("title", body)[:60]}, {"type": "text", "text": vars_.get("when", "")}]}]}}, bearer=WA_TOKEN)
+            elif SMS_ON and SMS_PROVIDER == "twilio":
+                http_json("POST", f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json",
+                          form={"To": phone, "From": TWILIO_FROM, "Body": body[:300]}, auth=(TWILIO_SID, TWILIO_TOKEN))
+            elif SMS_ON and SMS_PROVIDER == "msg91":
+                req = urllib.request.Request("https://control.msg91.com/api/v5/flow", json.dumps({
+                    "template_id": MSG91_OTP_TEMPLATE if otp else MSG91_TEMPLATE, "short_url": "0",
+                    "recipients": [dict({"mobiles": phone.lstrip("+")}, **({"otp": otp} if otp else {"var1": vars_.get("title", body)[:30], "var2": vars_.get("when", "")}))]}).encode(),
+                    {"authkey": MSG91_AUTHKEY, "Content-Type": "application/json", "Accept": "application/json"})
+                urllib.request.urlopen(req, timeout=20).read()
+            else:
+                print(f"[sms] (dev, not sent) To: {phone} | {body}", flush=True)
+                return
+            print(f"[sms] sent to {phone[:4]}…{phone[-2:]}", flush=True)
+        except Exception as e:
+            print(f"[sms] FAILED: {type(e).__name__}: {e}", flush=True)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def m_phone_start(conn, d, me):
+    need_member(me)
+    phone = re.sub(r"[\s()-]", "", str(d.get("phone") or ""))
+    if not E164_RE.match(phone):
+        raise InputError("Write the number with country code, e.g. +91 98765 43210")
+    if not d.get("consent"):
+        raise InputError("Please agree to get reminder messages on this number")
+    if too_many("otp", str(me["id"]), 4, 3600) or too_many("otp:" + phone, "x", 4, 3600):
+        raise AuthError("Too many codes. Please wait an hour.", 429)
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    conn.execute("UPDATE members SET phone=?, phone_ok=0, phone_code=?, phone_code_exp=? WHERE id=?",
+                 (phone, token_hash(code), now_ms() + 10 * 60_000, me["id"]))
+    send_text_message(phone, f"Your Clinora code is {code}. It works for 10 minutes. Don't share it.", otp=code)
+    return {"sent": True}
+
+
+def m_phone_confirm(conn, d, me):
+    need_member(me)
+    r = conn.execute("SELECT phone_code, phone_code_exp FROM members WHERE id=?", (me["id"],)).fetchone()
+    if too_many("otpcheck", str(me["id"]), 8, 3600):
+        raise AuthError("Too many tries. Please wait an hour.", 429)
+    code = re.sub(r"\D", "", str(d.get("code") or ""))
+    if not r["phone_code"] or (r["phone_code_exp"] or 0) < now_ms() or not hmac.compare_digest(token_hash(code), r["phone_code"]):
+        raise InputError("That code is wrong or expired")
+    conn.execute("UPDATE members SET phone_ok=1, phone_code=NULL, phone_code_exp=NULL WHERE id=?", (me["id"],))
+
+
+def m_phone_remove(conn, d, me):
+    need_member(me)
+    conn.execute("UPDATE members SET phone=NULL, phone_ok=0, phone_code=NULL WHERE id=?", (me["id"],))
+    conn.execute("UPDATE reminders SET sms=0 WHERE member_id=?", (me["id"],))
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3144,7 +3234,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots,
                  "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe,
                  "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete, "/api/m/rx/write": m_rx_write, "/api/m/rx/get": m_rx_get,
-                 "/api/m/book/pay": m_book_pay, "/api/m/book/pay/demo": m_book_pay_demo, "/api/m/book/pay/verify": m_book_pay_verify}
+                 "/api/m/book/pay": m_book_pay, "/api/m/book/pay/demo": m_book_pay_demo, "/api/m/book/pay/verify": m_book_pay_verify,
+                 "/api/m/phone/start": m_phone_start, "/api/m/phone/confirm": m_phone_confirm, "/api/m/phone/remove": m_phone_remove}
 
 
 

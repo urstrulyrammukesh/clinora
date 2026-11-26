@@ -2903,6 +2903,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <button class="btn primary sm" type="submit">${me.has_password?'Update password':'Set password'}</button><div id="pwMsg" style="font-size:13px;margin-top:8px"></div>
         <p style="font-size:12px;color:var(--mute);margin-top:8px">For your safety, this logs you out on your other phones and computers.</p></form></details>
     <div class="card" id="pushCard" style="padding:14px 18px;margin-bottom:18px;display:none"></div>
+    ${phoneCard()}
     ${myVisitsCard()}
     ${familyCard()}
     ${remCard()}
@@ -2950,7 +2951,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         video:$('#dpVideo').checked,lat,lon,...readHours('dpHours'),social:{instagram:v('#dpIg'),telegram:v('#dpTg'),facebook:v('#dpFb'),whatsapp:v('#dpWa'),youtube:v('#dpYt'),linkedin:v('#dpLi')}});
         renderAccount();$('#dpMsg').innerHTML='<span class="teal">✅ Saved. Your profile is live in the directory and on the map.</span>'}catch(err){$('#dpMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}}
   if(openThread)openConv(openThread);
-  wireReminders();wireBookings();wirePush();wireFamily();
+  wireReminders();wireBookings();wirePush();wireFamily();wirePhone();
   if(doc&&MEM.listing){renderGallery();wireVerify()}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
@@ -3244,7 +3245,7 @@ function remCard(){const R=MEM.reminders||[];const perm=('Notification' in windo
     <div style="padding:0 20px 10px"><label class="btn ghost sm" style="cursor:pointer">📷 Read a prescription<input type="file" id="rxFile" accept="image/*" hidden></label>
       <span style="font-size:12.5px;color:var(--mute);margin-left:6px">Take a photo of the prescription: we suggest reminders, you check them.</span><div id="rxBox"></div></div>
     <div class="rem-list">${R.length?R.map(r=>`<div class="rem ${r.active?'':'off'}"><span class="ic">${(REM_KINDS[r.kind]||REM_KINDS.other)[0]}</span><div><b>${esc(r.title)}</b>
-      <small>${fmtHM(r.at)} · ${remRepeat(r)}${r.until?' · until '+bkDay(r.until):''}${remLead(r.lead)}${r.email?' · ✉️ email':''}</small><small>${remNext(r)}${r.note?' · '+esc(r.note):''}</small></div>
+      <small>${fmtHM(r.at)} · ${remRepeat(r)}${r.until?' · until '+bkDay(r.until):''}${remLead(r.lead)}${r.email?' · ✉️ email':''}${r.sms?' · 📱 SMS':''}</small><small>${remNext(r)}${r.note?' · '+esc(r.note):''}</small></div>
       <div class="acts"><button type="button" data-remtog="${r.id}" data-on="${r.active?0:1}" title="${r.active?'Pause':'Turn on'}">${r.active?'⏸':'▶️'}</button><button type="button" data-remedit="${r.id}" title="Edit">✏️</button><button type="button" data-remdel="${r.id}" title="Delete">🗑</button></div></div>`).join('')
       :'<p style="font-size:13.5px;color:var(--mute);margin:0 0 6px">No reminders yet. Add one for your medicines, an appointment, or to drink water.</p>'}</div>
     <form class="form" id="remForm"><input type="hidden" id="remId">
@@ -3258,6 +3259,7 @@ function remCard(){const R=MEM.reminders||[];const perm=('Notification' in windo
       <div class="two"><div><label>REMIND ME</label><select id="remLead"><option value="0">At that time</option><option value="10">10 min before</option><option value="30">30 min before</option><option value="60">1 hour before</option><option value="1440">1 day before</option></select></div>
         <div><label>NOTE (OPTIONAL)</label><input id="remNote" maxlength="200" placeholder="e.g. with water, 1 tablet"></div></div>
       <label class="chk"><input type="checkbox" id="remEmail"> Also email me</label>
+      ${MEM.me.phone_ok?'<label class="chk"><input type="checkbox" id="remSms"> Also send an SMS / WhatsApp to '+esc(MEM.me.phone)+'</label>':''}
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary sm" type="submit" id="remSave">Add reminder</button><button class="btn ghost sm" type="button" id="remCancel" style="display:none">Cancel edit</button></div>
       <div id="remMsg" style="font-size:13px;margin-top:8px"></div>
       <p style="font-size:12px;color:var(--mute);margin-top:6px">Times use your time zone (${esc(remTZ())}). Reminders show in the 🔔 bell and as a pop-up while Clinora is open. Never change medicine without asking your doctor.</p></form></details>`}
@@ -3271,14 +3273,14 @@ function wireReminders(){const f=$('#remForm');if(!f)return;let days=0;
   f.onsubmit=async e=>{e.preventDefault();const m=$('#remMsg');m.textContent='Saving…';
     const who=($('#remFor')||{}).value,ttl=$('#remTitle').value.trim();
     try{await mapi('reminder/save',{id:+$('#remId').value||0,kind:$('#remKind').value,title:who&&!ttl.startsWith(who+':')?(who+': '+ttl).slice(0,80):ttl,at:$('#remAt').value,days,date:$('#remDate').value,
-        lead:+$('#remLead').value,note:$('#remNote').value.trim(),email:$('#remEmail').checked,tz:remTZ(),until:days?(($('#remUntil')||{}).value||''):''});
+        lead:+$('#remLead').value,note:$('#remNote').value.trim(),email:$('#remEmail').checked,sms:!!($('#remSms')||{}).checked,tz:remTZ(),until:days?(($('#remUntil')||{}).value||''):''});
       renderAccount();$('#remCard').open=true;$('#remMsg').innerHTML='<span class="teal">✅ Saved. We will remind you.</span>'}
     catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
   $$('[data-remtog]').forEach(b=>b.onclick=async()=>{try{await mapi('reminder/toggle',{id:+b.dataset.remtog,on:b.dataset.on==='1'});renderAccount();$('#remCard').open=true}catch(e){alert(e.message)}});
   $$('[data-remdel]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this reminder?'))return;try{await mapi('reminder/delete',{id:+b.dataset.remdel});renderAccount();$('#remCard').open=true}catch(e){alert(e.message)}});
   $$('[data-remedit]').forEach(b=>b.onclick=()=>{const r=(MEM.reminders||[]).find(x=>x.id===+b.dataset.remedit);if(!r)return;
     $('#remId').value=r.id;$('#remKind').value=r.kind;$('#remAt').value=r.at;$('#remTitle').value=r.title;$('#remNote').value=r.note||'';$('#remLead').value=String(r.lead);
-    $('#remEmail').checked=!!r.email;days=r.days;if(r.date)$('#remDate').value=r.date;if($('#remUntil'))$('#remUntil').value=r.until||'';paint();$('#remSave').textContent='Save changes';$('#remCancel').style.display='';f.scrollIntoView({block:'center'})});
+    $('#remEmail').checked=!!r.email;if($('#remSms'))$('#remSms').checked=!!r.sms;days=r.days;if(r.date)$('#remDate').value=r.date;if($('#remUntil'))$('#remUntil').value=r.until||'';paint();$('#remSave').textContent='Save changes';$('#remCancel').style.display='';f.scrollIntoView({block:'center'})});
   const rx=$('#rxFile');if(rx)rx.onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)rxScan(f)};
   if(window.__openRem){window.__openRem=false;setTimeout(()=>{const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}},80)}}
 // a booking made while logged in gets two reminders: a day before and an hour before
@@ -3458,6 +3460,23 @@ async function renderPayouts(){const sec=$('#payoutSec');if(!sec)return;const ad
       <input data-acc="${d.id}" value="${esc(d.payout_acc||'')}" placeholder="acc_XXXXXXXXXXXX" aria-label="Linked account id for ${esc(d.name)}" style="width:190px"><button class="btn ghost sm" type="button" data-accsave="${d.id}">Save</button></div>`).join('')
       :'<p style="font-size:13px;color:var(--mute)">No doctor profiles yet.</p>'}`;
   sec.querySelectorAll('[data-accsave]').forEach(b=>b.onclick=async()=>{try{await api('/api/payout/set',{listing_id:+b.dataset.accsave,acc:sec.querySelector(`[data-acc="${b.dataset.accsave}"]`).value.trim()});renderPayouts()}catch(e){alert(e.message)}})}
+
+/* ================= MOBILE NUMBER FOR SMS / WHATSAPP REMINDERS ================= */
+function phoneCard(){const me=MEM.me;
+  return `<details class="card pw-card" id="phCard"><summary>📱 Mobile number <span style="font-weight:400;color:var(--mute);font-size:13px">· ${me.phone_ok?esc(me.phone)+' ✓ for SMS / WhatsApp reminders':'get visit and medicine reminders by SMS or WhatsApp'}</span></summary>
+    <form class="form" id="phForm">${me.phone_ok?`<p style="font-size:13.5px;margin:0 0 8px">✅ ${esc(me.phone)} is confirmed. Visit reminders come by SMS/WhatsApp one hour before; tick “Also send an SMS” on any other reminder.</p>
+        <button class="btn ghost sm" type="button" id="phDel">Remove number</button>`
+      :`<label>MOBILE WITH COUNTRY CODE</label><input id="phNum" type="tel" autocomplete="tel" placeholder="+91 98765 43210" value="${esc(me.phone||'')}">
+        <label class="chk"><input type="checkbox" id="phOk"> I agree to get reminder messages from Clinora on this number. No ads.</label>
+        <button class="btn primary sm" type="submit">Send code</button>
+        <div id="phCodeRow" ${me.phone&&!me.phone_ok?'':'hidden'}><label>CODE WE SENT</label><input id="phCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6 digits"><button class="btn primary sm" type="button" id="phConfirm">Confirm</button></div>
+        ${me.sms_on?'':'<p style="font-size:12px;color:var(--mute)">SMS isn’t switched on for this website yet; on a dev computer the code appears in the server Terminal.</p>'}`}
+      <div id="phMsg" style="font-size:13px;margin-top:6px"></div></form></details>`}
+function wirePhone(){const f=$('#phForm');if(!f)return;const msg=t=>$('#phMsg').innerHTML=t;const keep=()=>{const c=$('#phCard');if(c)c.open=true};
+  const del=$('#phDel');if(del)del.onclick=async()=>{if(!confirm('Remove your number? SMS reminders stop.'))return;try{await mapi('phone/remove');renderAccount();keep()}catch(e){alert(e.message)}};
+  f.onsubmit=async e=>{e.preventDefault();try{await mapi('phone/start',{phone:$('#phNum').value.trim(),consent:$('#phOk').checked});renderAccount();keep();
+      $('#phCodeRow').hidden=false;msg('<span class="teal">📩 Code sent. Type it below.</span>');$('#phCode').focus()}catch(err){msg('<span class="red">'+esc(err.message)+'</span>')}};
+  const cf=$('#phConfirm');if(cf)cf.onclick=async()=>{try{await mapi('phone/confirm',{code:$('#phCode').value});renderAccount();keep()}catch(err){msg('<span class="red">'+esc(err.message)+'</span>')}}}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}

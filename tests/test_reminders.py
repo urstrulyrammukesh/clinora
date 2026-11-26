@@ -60,3 +60,33 @@ def test_once_and_course_end():
     while (t := app.reminder_next(r, t)) and n < 10:
         n += 1
     assert 2 <= n <= 3
+
+
+def test_phone_confirmation_and_sms_reminder(server, uniq):
+    import re
+    p, other = server.client(), server.client()
+    p.signup("patient", "Sms User", uniq())
+    other.signup("patient", "Other", uniq())
+    assert p.post("/api/m/reminder/save", {"kind": "medicine", "title": "x", "at": "09:00", "days": 127, "sms": True})[0] == 400  # no phone yet
+    assert p.post("/api/m/phone/start", {"phone": "12345", "consent": True})[0] == 400
+    assert p.post("/api/m/phone/start", {"phone": "+91 98765 43210", "consent": False})[0] == 400
+    assert p.post("/api/m/phone/start", {"phone": "+91 98765 43210", "consent": True})[0] == 200
+    for _ in range(30):
+        codes = re.findall(r"\+919876543210 \| Your Clinora code is (\d{6})", server.logtext())
+        if codes:
+            break
+        time.sleep(0.1)
+    assert p.post("/api/m/phone/confirm", {"code": "000000"})[0] == 400
+    assert other.post("/api/m/phone/confirm", {"code": codes[-1]})[0] == 400  # someone else's code
+    assert p.post("/api/m/phone/confirm", {"code": codes[-1]})[0] == 200
+    me = p.post("/api/m/me")[1]["me"]
+    assert me["phone_ok"] is True and me["phone"] == "+919876543210"
+    s, j = p.post("/api/m/reminder/save", {"kind": "medicine", "title": "Iron tablet", "at": "09:00", "days": 127, "sms": True, "tz": "UTC"})
+    assert s == 200
+    with server.db() as c:
+        c.execute("UPDATE reminders SET next_at=? WHERE title='Iron tablet'", (int(time.time() * 1000) - 1000,))
+    for _ in range(40):
+        if "Clinora reminder: Iron tablet" in server.logtext():
+            break
+        time.sleep(1)
+    assert "To: +919876543210 | Clinora reminder: Iron tablet" in server.logtext()
