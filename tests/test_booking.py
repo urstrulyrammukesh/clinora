@@ -229,3 +229,24 @@ def test_clinic_team(server, uniq):
     assert b"Our doctors" in body and b"Dr Team A" in body
     assert docA.post("/api/m/team/remove", {"clinic_id": cid, "doctor_id": aid})[0] == 200
     assert server.client().post("/api/m/me")[1]["listings"] and not {x["id"]: x for x in server.client().post("/api/m/me")[1]["listings"]}[cid]["team"]
+
+
+def test_doctor_dashboard_and_invites(server, doctor, uniq):
+    doc, lid = doctor
+    p = server.client()
+    p.signup("patient", "Stat Pat", uniq())
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    p.post("/api/m/book", {"listing_id": lid, "date": days[4]["date"], "time": days[4]["times"][0], "mode": "clinic"})
+    s, j = doc.post("/api/m/doc/stats")
+    assert s == 200 and j["result"]["upcoming"] >= 1 and len(j["result"]["weekly"]) == 8 and j["result"]["patients"] >= 1
+    assert p.post("/api/m/doc/stats")[0] == 403
+    s, j = doc.post("/api/m/invite")
+    url = j["result"]["url"]
+    assert url.endswith("/d") and "#join/" in url
+    code = url.split("#join/")[1].split("/")[0]
+    assert doc.post("/api/m/invite")[1]["result"]["url"] == url  # stable link
+    newdoc = server.client()
+    s, j = newdoc.post("/api/m/signup", {"kind": "doctor", "name": "Dr Invited", "email": uniq("inv"), "password": "Pass123456!", "agree": True, "ref": code})
+    assert s == 200
+    assert doc.post("/api/m/invite")[1]["result"]["joined"] == {"doctor": 1}
+    assert any("joined Clinora from your invite" in n["title"] for n in doc.post("/api/m/notifs")[1]["notifs"])

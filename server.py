@@ -482,7 +482,8 @@ def init_db():
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
         if "suspended" not in mcols:
             conn.execute("ALTER TABLE members ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
-        for col, kind in [("phone", "TEXT"), ("phone_ok", "INTEGER NOT NULL DEFAULT 0"), ("phone_code", "TEXT"), ("phone_code_exp", "INTEGER")]:
+        for col, kind in [("phone", "TEXT"), ("phone_ok", "INTEGER NOT NULL DEFAULT 0"), ("phone_code", "TEXT"), ("phone_code_exp", "INTEGER"),
+                          ("ref_code", "TEXT"), ("referred_by", "INTEGER")]:
             if col not in mcols:
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} {kind}")
         if "email_ok" not in mcols:  # accounts made before email confirmation existed count as confirmed
@@ -969,6 +970,12 @@ def m_signup(conn, d, me, ip):
                         text(d, "city", 80, False), now_ms()))
     welcome(conn, cur.lastrowid, kind)
     send_confirm_email(conn, cur.lastrowid)
+    ref = re.sub(r"[^A-Za-z0-9]", "", str(d.get("ref") or ""))[:12]
+    inviter = conn.execute("SELECT id FROM members WHERE ref_code=?", (ref,)).fetchone() if ref else None
+    if inviter:
+        conn.execute("UPDATE members SET referred_by=? WHERE id=?", (inviter["id"], cur.lastrowid))
+        notify(conn, inviter["id"], "welcome", f"🎉 {text(d, 'name', 80)} joined Clinora from your invite",
+               "Thank you for growing Clinora!" if kind == "patient" else "Invite them to your clinic team, or say hello.", "account")
     return cur.lastrowid
 
 
@@ -3610,6 +3617,48 @@ def m_team_remove(conn, d, me):
     conn.execute("DELETE FROM clinic_team WHERE clinic_id=? AND doctor_id=?", (cid, did))
 
 
+# ---------------------------------------------------------------- doctor's own dashboard and invite link
+def m_doc_stats(conn, d, me):
+    need_member(me, "doctor")
+    lst = my_listing(conn, me)
+    if not lst:
+        raise InputError("Save your public profile first")
+    lid, now = lst["id"], now_ms()
+    month = datetime.date.today().replace(day=1).isoformat()
+    one = lambda q, *a: conn.execute(q, a).fetchone()[0] or 0
+    st = {s: one("SELECT COUNT(*) FROM dbookings WHERE listing_id=? AND status=?", lid, s) for s in ("done", "no_show", "cancelled")}
+    keep = 1 - PLATFORM_FEE_PCT / 100
+    week, start = 7 * 86_400_000, now - 8 * 7 * 86_400_000
+    weekly = [0] * 8
+    for (at,) in conn.execute("SELECT at FROM dbookings WHERE listing_id=? AND status!='cancelled' AND at > ? AND at <= ?", (lid, start, now + week)):
+        i = min(7, int((at - start) // week))
+        weekly[i] += 1
+    return {
+        "upcoming": one("SELECT COUNT(*) FROM dbookings WHERE listing_id=? AND status='booked' AND at > ?", lid, now),
+        "this_month": one("SELECT COUNT(*) FROM dbookings WHERE listing_id=? AND status!='cancelled' AND date >= ?", lid, month),
+        "done": st["done"], "no_show": st["no_show"], "cancelled": st["cancelled"],
+        "no_show_rate": round(100 * st["no_show"] / (st["done"] + st["no_show"])) if st["done"] + st["no_show"] else None,
+        "earned_month": round(one("SELECT SUM(pay_amount) FROM dbookings WHERE listing_id=? AND pay_status='paid' AND date >= ?", lid, month) * keep / 100),
+        "earned_all": round(one("SELECT SUM(pay_amount) FROM dbookings WHERE listing_id=? AND pay_status='paid'", lid) * keep / 100),
+        "rating": conn.execute("SELECT ROUND(AVG(stars),1) FROM reviews WHERE listing_id=?", (lid,)).fetchone()[0],
+        "reviews": one("SELECT COUNT(*) FROM reviews WHERE listing_id=?", lid),
+        "followers": one("SELECT COUNT(*) FROM favs WHERE listing_id=?", lid),
+        "prescriptions": one("SELECT COUNT(*) FROM prescriptions WHERE doctor_id=?", me["id"]),
+        "patients": one("SELECT COUNT(DISTINCT patient_id) FROM dbookings WHERE listing_id=? AND status!='cancelled'", lid),
+        "weekly": weekly, "fee_pct": PLATFORM_FEE_PCT,
+    }
+
+
+def m_invite_link(conn, d, me):
+    need_member(me)
+    code = conn.execute("SELECT ref_code FROM members WHERE id=?", (me["id"],)).fetchone()[0]
+    if not code:
+        code = secrets.token_urlsafe(6).replace("-", "a").replace("_", "b")
+        conn.execute("UPDATE members SET ref_code=? WHERE id=?", (code, me["id"]))
+    joined = conn.execute("SELECT kind, COUNT(*) AS n FROM members WHERE referred_by=? GROUP BY kind", (me["id"],)).fetchall()
+    return {"url": f"{PUBLIC_URL}/#join/{code}" + ("/d" if me["kind"] == "doctor" else ""), "joined": {r["kind"]: r["n"] for r in joined}}
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -3627,7 +3676,8 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/queue/checkin": m_queue_checkin, "/api/m/queue/state": m_queue_state, "/api/m/queue/walkin": m_queue_walkin,
                  "/api/m/queue/next": m_queue_next, "/api/m/queue/skip": m_queue_skip,
                  "/api/m/records/add": m_record_add, "/api/m/records/delete": m_record_delete, "/api/m/records/share": m_record_share,
-                 "/api/m/team/invite": m_team_invite, "/api/m/team/answer": m_team_answer, "/api/m/team/remove": m_team_remove}
+                 "/api/m/team/invite": m_team_invite, "/api/m/team/answer": m_team_answer, "/api/m/team/remove": m_team_remove,
+                 "/api/m/doc/stats": m_doc_stats, "/api/m/invite": m_invite_link}
 
 
 

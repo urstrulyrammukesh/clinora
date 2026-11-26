@@ -1551,6 +1551,8 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
   if(v==='reminders'){window.__openRem=true;v='account'}
+  {const jm=String(v).match(/^join\/([A-Za-z0-9]+)(\/d)?$/);if(jm){try{sessionStorage.setItem('cl_ref',jm[1])}catch{}history.replaceState(null,'',location.search+'#account');v='account';
+    if(jm[2]){signKind='doctor';acctMode='signup'}pendingNotice=jm[2]?'👋 A doctor invited you to Clinora. Create your free doctor account below.':'👋 You were invited to Clinora. Create your free account below.'}}
   {const m=String(v).match(/^(doctor|book)\/(\d+)$/);if(m){const id=+m[2];history.replaceState(null,'',location.search+'#directory');v='directory';
     const open=()=>{if(!DBok&&!(DB.listings||[]).length)return setTimeout(open,300);m[1]==='book'?openBooking(id):openReviews(id)};setTimeout(open,200)}}
   if(/^reset\//.test(String(v))){window.__resetToken=String(v).slice(6);history.replaceState(null,'',location.search+'#account');v='account'}
@@ -2875,7 +2877,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       <p style="font-size:12.5px;margin-top:14px;color:var(--mute)">Clinic staff use the <a class="teal" href="#dashboard" data-go="dashboard">Clinic Dashboard</a> login instead.</p></form></div>`;
     $$('#sgForm .seg2 button').forEach(b=>b.onclick=()=>{signKind=b.dataset.k;renderAccount()});
     $('#sgForm').onsubmit=async e=>{e.preventDefault();$('#sgMsg').textContent='Creating your account…';
-      try{await mapi('signup',{kind:signKind,name:$('#sgName').value.trim(),email:$('#sgEmail').value.trim(),password:$('#sgPw').value,city:$('#sgCity').value.trim(),agree:$('#sgAgree').checked});pendingNotice='';renderAccount()}
+      try{await mapi('signup',{ref:(()=>{try{return sessionStorage.getItem('cl_ref')||''}catch{return ''}})(),kind:signKind,name:$('#sgName').value.trim(),email:$('#sgEmail').value.trim(),password:$('#sgPw').value,city:$('#sgCity').value.trim(),agree:$('#sgAgree').checked});pendingNotice='';renderAccount()}
       catch(err){$('#sgMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
     $('#liForm').onsubmit=async e=>{e.preventDefault();$('#liMsg').textContent='Logging in…';
       try{await mapi('login',{email:$('#liEmail').value.trim(),password:$('#liPw').value});pendingNotice='';renderAccount()}catch(err){$('#liMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
@@ -2908,6 +2910,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     ${myVisitsCard()}
     ${familyCard()}
     ${recordsCard()}
+    <details class="card pw-card" id="invCard"><summary>📣 ${doc?'Invite doctors':'Invite friends & family'} <span style="font-weight:400;color:var(--mute);font-size:13px">· share your link</span></summary><div id="invBody" style="padding:0 20px 16px">Loading…</div></details>
     <details class="card pw-card" id="medCard"><summary>💊 Cheaper medicines <span style="font-weight:400;color:var(--mute);font-size:13px">· find the generic (Jan Aushadhi) name of a brand</span></summary>
       <form class="form" id="medForm"><div style="display:flex;gap:8px"><input id="medName" required maxlength="60" placeholder="Medicine brand, e.g. Dolo 650" aria-label="Medicine brand" style="flex:1"><button class="btn primary sm" type="submit">Find</button></div>
       <div id="medOut" style="font-size:14px;margin-top:8px"></div></form></details>
@@ -2929,6 +2932,7 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
         <button class="btn primary" type="submit">Save profile</button><div id="dpMsg"></div></form>
       ${L&&L.hidden?'<div class="card" style="padding:14px 18px;margin-bottom:18px;border-color:var(--red)">⚠️ <b>Your profile is hidden</b> from patients after reports. Please check your details are correct, then contact Clinora support.</div>':''}
       ${L&&L.id?`<div class="card" style="padding:14px 18px;margin-bottom:18px">🔗 <b>Your public page:</b> <a class="teal" href="/doctor/${L.id}" target="_blank" rel="noopener">${esc(location.host)}/doctor/${L.id}…</a> <button class="btn ghost sm" type="button" data-share="/doctor/${L.id}" data-sname="${esc(L.name)}" style="margin-left:6px">Share</button><div style="font-size:12.5px;color:var(--mute);margin-top:4px">Put this link on WhatsApp, Instagram and Google so patients can book you.</div></div>`:''}
+      ${L?'<details class="card pw-card" id="dashCard" open><summary>📈 Your practice <span style="font-weight:400;color:var(--mute);font-size:13px">· visits, earnings, ratings</span></summary><div id="dashBody" style="padding:0 20px 16px">Loading…</div></details>':''}
       ${L?teamCard():''}
       ${L?verifyCard(MEM.verification):''}
       ${L?bookSettingsCard(L)+doctorVisitsCard()+'<details class="card pw-card" id="qCard"><summary>🎫 Today\'s queue <span style="font-weight:400;color:var(--mute);font-size:13px">· tokens for patients at the clinic</span></summary><div id="qBody" style="padding:0 20px 16px">Loading…</div></details>':''}
@@ -2959,7 +2963,8 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
   if(openThread)openConv(openThread);
   wireReminders();wireBookings();wirePush();wireFamily();wirePhone();wireRecords();
   const mf=$('#medForm');if(mf)mf.onsubmit=e=>{e.preventDefault();medFind($('#medName').value,$('#medOut'))};
-  if(doc&&MEM.listing){renderGallery();wireVerify();wireTeam();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
+  {const ic=$('#invCard');if(ic)ic.ontoggle=()=>{if(ic.open)invitePanel()}}
+  if(doc&&MEM.listing){renderGallery();wireVerify();wireTeam();docDash();const qc=$('#qCard');if(qc)qc.ontoggle=()=>{if(qc.open)docQueue()}}
   const dz=document.createElement('div');dz.className='card';dz.style.cssText='padding:20px;margin-top:22px;border-color:rgba(255,61,85,.4)';
   dz.innerHTML=`<h3>Delete my account</h3><p style="color:var(--mute);font-size:13.5px;margin:4px 0 12px">This permanently deletes your account, profile photo${doc?', public profile, work photos, and the reviews on your profile':''}, your messages, reviews and follows. It can't be undone. <a class="teal" href="/delete-account">What gets deleted</a></p>
     <div id="delStep"><button class="btn ghost sm" type="button" id="delStart" style="border-color:rgba(255,61,85,.5);color:#ff6b7d">Delete my account…</button></div>`;
@@ -3572,6 +3577,24 @@ function wireTeam(){const keep=()=>{const c=$('#teamCard');if(c)c.open=true};con
   $$('[data-tans]').forEach(b=>b.onclick=()=>run('team/answer',{clinic_id:+b.dataset.tans,accept:b.dataset.ok==='1'}));
   $$('[data-tleave]').forEach(b=>b.onclick=()=>{if(confirm('Leave this clinic team?'))run('team/remove',{clinic_id:+b.dataset.tleave,doctor_id:MEM.listing.id})});
   $$('[data-tdel]').forEach(b=>b.onclick=()=>{if(confirm('Remove this doctor from your team?'))run('team/remove',{clinic_id:MEM.listing.id,doctor_id:+b.dataset.tdel})})}
+
+/* ================= DOCTOR'S DASHBOARD ================= */
+async function docDash(){const box=$('#dashBody');if(!box)return;let s;try{s=(await mapi('doc/stats')).result}catch(e){box.textContent=e.message;return}
+  const tile=(n,l)=>`<div class="st-tile"><b>${n??'–'}</b><span>${l}</span></div>`;
+  box.innerHTML=`<div class="st-tiles">${tile(s.upcoming,'upcoming visits')}${tile(s.this_month,'visits this month')}${tile(s.patients,'patients so far')}${tile(s.done,'visits done')}
+      ${tile(s.no_show_rate==null?'–':s.no_show_rate+'%','no-show rate')}${tile(s.cancelled,'cancelled')}${tile('₹'+Number(s.earned_month).toLocaleString('en-IN'),'earned this month (online)')}${tile('₹'+Number(s.earned_all).toLocaleString('en-IN'),'earned in total (online)')}
+      ${tile(s.rating?s.rating+'★':'–',s.reviews+' reviews')}${tile(s.followers,'followers')}${tile(s.prescriptions,'prescriptions written')}</div>
+    <div class="st-chart"><h5>📅 Visits per week · last 8 weeks + this week</h5>${stBars(s.weekly,'Visits')}</div>
+    <p style="font-size:12px;color:var(--mute);margin-top:6px">Earnings count online payments after Clinora's ${s.fee_pct}% fee. Fees paid at the clinic aren't counted.${s.no_show_rate>20?' Tip: many no-shows? Turn on “Patients pay online when booking”.':''}</p>`}
+
+/* ================= INVITE LINK ================= */
+async function invitePanel(){const box=$('#invBody');if(!box)return;let j;try{j=(await mapi('invite')).result}catch(e){box.textContent=e.message;return}
+  const doc=MEM.me.kind==='doctor';const msg=doc?`Hi! I use Clinora for online bookings, reminders and prescriptions. It's free to join as a doctor: ${j.url}`:`I book doctors and set medicine reminders on Clinora. Try it: ${j.url}`;
+  const n=(j.joined.doctor||0)+(j.joined.patient||0);
+  box.innerHTML=`<p style="font-size:13.5px;margin:0 0 8px">${doc?'Doctors who join with your link start with “I’m a doctor” ready. Add them to your clinic team after.':'Share Clinora with people you care about.'}</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><input readonly value="${esc(j.url)}" aria-label="Your invite link" style="flex:1;min-width:200px"><button class="btn ghost sm" type="button" data-share="${esc(j.url.replace(location.origin,''))}" data-sname="Clinora">🔗 Share</button>
+      <a class="btn primary sm" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">WhatsApp</a></div>
+    <p style="font-size:13px;color:var(--mute);margin-top:8px">${n?`🎉 ${j.joined.doctor||0} doctor${(j.joined.doctor||0)===1?'':'s'} and ${j.joined.patient||0} patient${(j.joined.patient||0)===1?'':'s'} joined with your link.`:'Nobody has joined with your link yet.'}</p>`}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
