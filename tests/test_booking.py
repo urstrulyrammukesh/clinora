@@ -76,3 +76,29 @@ def test_booking_off(server, doctor):
     doc, lid = doctor
     doc.post("/api/m/booking/settings", {"on": False})
     assert server.client().post("/api/m/slots", {"listing_id": lid})[0] == 400
+
+
+def test_prescription_and_review_request(server, doctor, uniq):
+    doc, lid = doctor
+    p, stranger = server.client(), server.client()
+    p.signup("patient", "Asha", uniq())
+    stranger.signup("patient", "Other", uniq())
+    days = server.client().post("/api/m/slots", {"listing_id": lid})[1]["result"]["days"]
+    bid = p.post("/api/m/book", {"listing_id": lid, "date": days[0]["date"], "time": days[0]["times"][0], "mode": "video"})[1]["result"]["id"]
+    assert doc.post("/api/m/rx/write", {"booking_id": bid})[0] == 400  # empty
+    assert p.post("/api/m/rx/write", {"booking_id": bid, "advice": "rest"})[0] == 403  # patients can't write
+    s, j = doc.post("/api/m/rx/write", {"booking_id": bid, "diagnosis": "Viral fever", "advice": "Drink fluids",
+                                        "meds": [{"name": "Paracetamol", "strength": "650 mg", "dose": "1 tablet", "times": ["08:00", "20:00", "99:99"], "days": 3, "food": "after"}]})
+    assert s == 200
+    rx = j["result"]["rx_id"]
+    s, j = p.post("/api/m/rx/get", {"id": rx})
+    assert s == 200 and j["result"]["data"]["meds"][0]["times"] == ["08:00", "20:00"]
+    assert stranger.post("/api/m/rx/get", {"id": rx})[0] == 400
+    s, body, h = p.get(f"/rx/{rx}")
+    assert s == 200 and b"Paracetamol" in body and b"Viral fever" in body and "script-src 'nonce-" in h["Content-Security-Policy"]
+    assert stranger.get(f"/rx/{rx}")[0] == 404 and server.client().get(f"/rx/{rx}")[0] == 404
+    assert any("Prescription from" in n["title"] for n in p.post("/api/m/notifs")[1]["notifs"])
+    assert doc.post("/api/m/booking/mark", {"id": bid, "status": "done"})[0] == 200
+    assert any("How was your visit" in n["title"] for n in p.post("/api/m/notifs")[1]["notifs"])
+    v = p.post("/api/m/me")[1]["bookings"]["as_patient"][0]
+    assert v["rx_id"] == rx and v["slot"] == 30

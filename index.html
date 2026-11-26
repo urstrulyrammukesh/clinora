@@ -3349,6 +3349,8 @@ async function rxScan(file){const box=$('#rxBox');box.innerHTML='<p style="font-
   let out;try{const image=await rxJpeg(file);const r=await fetch('/api/rxscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image,lang:(document.documentElement.lang||'en')})});
     out=await r.json();if(!r.ok||out.error)throw new Error(out.error||'Reading failed. Please try again.')}
   catch(e){box.innerHTML=`<p class="red" style="font-size:13.5px">${esc(e.message)}</p>`;return}
+  rxShow(out)}
+function rxShow(out){const box=$('#rxBox');if(!box)return;
   const meds=(out.medicines||[]).filter(m=>m.name);
   if(!out.readable||!meds.length){box.innerHTML=`<p style="font-size:13.5px">😕 ${esc(out.warning||'We could not read any medicines. Try a clearer, well-lit photo, or add reminders by hand.')}</p>`;return}
   const fam=MEM.family||[];
@@ -3395,6 +3397,41 @@ async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin
   document.querySelectorAll('input:not([type=hidden]):not([aria-label]),select:not([aria-label]),textarea:not([aria-label])').forEach(c=>{
     if((c.labels&&c.labels.length)||c.closest('label'))return;const ph=c.getAttribute('placeholder');if(ph)c.setAttribute('aria-label',ph)});};
   new MutationObserver(()=>{if(!pend)pend=setTimeout(fix,250)}).observe(document.body,{childList:true,subtree:true});fix()})();
+
+/* ================= DOCTOR WRITES A PRESCRIPTION ================= */
+async function openRxWriter(bid,rxId,forName){let d={diagnosis:'',advice:'',tests:'',followup:'',meds:[]};
+  if(rxId){try{d=(await mapi('rx/get',{id:rxId})).result.data}catch{}}
+  if(!d.meds.length)d.meds=[{name:'',strength:'',dose:'1 tablet',times:['09:00','21:00'],days:5,food:'after',note:''}];
+  const ov=document.createElement('div');ov.className='rp-ov';document.body.appendChild(ov);const close=()=>ov.remove();
+  ov.onclick=e=>{if(e.target===ov)close()};ov.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close()}});
+  const row=(m,i)=>`<div class="fam" style="flex-wrap:wrap;margin-bottom:6px" data-mrow="${i}">
+      <input data-k="name" value="${esc(m.name)}" placeholder="Medicine, e.g. Amoxicillin" aria-label="Medicine name" style="flex:2 1 160px">
+      <input data-k="strength" value="${esc(m.strength)}" placeholder="500 mg" aria-label="Strength" style="flex:1 1 70px">
+      <input data-k="dose" value="${esc(m.dose)}" placeholder="1 tablet" aria-label="Dose" style="flex:1 1 80px">
+      <input data-k="times" value="${esc((m.times||[]).join(', '))}" placeholder="08:00, 20:00" aria-label="Times" style="flex:1 1 110px">
+      <input data-k="days" type="number" min="0" max="365" value="${m.days||''}" placeholder="days" aria-label="Days" style="width:70px">
+      <select data-k="food" aria-label="Food">${['after','before','with','any'].map(f=>`<option value="${f}" ${m.food===f?'selected':''}>${f==='any'?'any time':f+' food'}</option>`).join('')}</select>
+      <input data-k="note" value="${esc(m.note||'')}" placeholder="Note (optional)" aria-label="Note" style="flex:2 1 140px">
+      <button class="rv-mini" type="button" data-mdel="${i}" aria-label="Remove medicine">✕</button></div>`;
+  const read=()=>{d.diagnosis=$('#rxDx').value;d.advice=$('#rxAdv').value;d.tests=$('#rxTests').value;d.followup=$('#rxFu').value;
+    d.meds=[...ov.querySelectorAll('[data-mrow]')].map(r=>{const g=k=>r.querySelector(`[data-k="${k}"]`).value.trim();
+      return {name:g('name'),strength:g('strength'),dose:g('dose'),times:g('times').split(/[,\s]+/).filter(Boolean),days:+g('days')||0,food:g('food'),note:g('note')}})};
+  const draw=()=>{ov.innerHTML=`<form class="rp-box" style="max-width:760px" role="dialog" aria-modal="true" aria-label="Write prescription"><h3>💊 Prescription for ${esc(forName)}</h3>
+    <label style="font-size:12px;color:var(--mute)">DIAGNOSIS / FINDINGS</label><textarea id="rxDx" maxlength="300">${esc(d.diagnosis||'')}</textarea>
+    <label style="font-size:12px;color:var(--mute);display:block;margin-top:8px">MEDICINES · times as 24-hour HH:MM, e.g. 08:00, 20:00</label>${d.meds.map(row).join('')}
+    <button class="btn ghost sm" type="button" id="rxMore">+ Add medicine</button>
+    <label style="font-size:12px;color:var(--mute);display:block;margin-top:8px">TESTS (OPTIONAL)</label><textarea id="rxTests" maxlength="300" style="min-height:44px">${esc(d.tests||'')}</textarea>
+    <label style="font-size:12px;color:var(--mute);display:block">ADVICE</label><textarea id="rxAdv" maxlength="800">${esc(d.advice||'')}</textarea>
+    <label style="font-size:12px;color:var(--mute);display:block">FOLLOW-UP DATE (OPTIONAL)</label><input id="rxFu" type="date" value="${esc(d.followup||'')}">
+    <p style="font-size:12px;color:var(--mute)">The patient can print this and turn the medicines into reminders. You are responsible for this advice.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost sm" type="button" id="rxX">Cancel</button><button class="btn primary sm" type="submit">Save & send to patient</button></div>
+    <div id="rxWM" style="font-size:13px;margin-top:6px"></div></form>`;
+    $('#rxX').onclick=close;$('#rxMore').onclick=()=>{read();d.meds.push({name:'',strength:'',dose:'',times:[],days:0,food:'after',note:''});draw()};
+    ov.querySelectorAll('[data-mdel]').forEach(b=>b.onclick=()=>{read();d.meds.splice(+b.dataset.mdel,1);draw()});
+    ov.querySelector('form').onsubmit=async e=>{e.preventDefault();read();
+      try{const j=await mapi('rx/write',Object.assign({booking_id:bid},d,{meds:d.meds.filter(m=>m.name)}));close();renderAccount();const dv=$('#docVisits');if(dv)dv.open=true;
+        window.open('/rx/'+j.result.rx_id,'_blank')}catch(err){$('#rxWM').innerHTML='<span class="red">'+esc(err.message)+'</span>'}}};
+  draw()}
 /* ================= BOOK REAL DOCTORS ================= */
 const BK_CUR=['INR','USD','EUR','GBP','AED','SAR','PKR','BDT','NPR','LKR','NGN','KES','CAD','AUD','SGD','MYR','IDR','PHP'];
 function bkMoney(n,c){if(!n)return 'Free';try{return new Intl.NumberFormat(undefined,{style:'currency',currency:c,maximumFractionDigits:0}).format(n)}catch{return n+' '+c}}
@@ -3408,7 +3445,13 @@ function visitRow(v){const past=v.at<Date.now();const st=BK_ST[v.status]||['',''
     <small>${doc?`👤 ${esc(v.patient)}${v.patient!==v.account?` (booked by ${esc(v.account)})`:''}`:`👨‍⚕️ ${esc(v.doctor)}${v.patient!==MEM.me.name?` · for ${esc(v.patient)}`:''}`} · ${v.mode==='video'?'📹 Video visit':'🏥 In clinic'}${v.fee?' · '+bkMoney(v.fee,v.cur):''}</small>
     ${!doc&&v.mode!=='video'&&v.addr?`<small>📍 ${esc(v.addr)}</small>`:''}${v.reason?`<small>📝 ${esc(v.reason)}</small>`:''}
     ${v.status==='cancelled'?`<small>Cancelled${v.cancel_reason?': '+esc(v.cancel_reason):''}</small>`:''}
-    <div class="acts">${v.status!=='cancelled'?`<button class="btn ghost sm" type="button" data-vmsg="${doc?v.patient_id:v.doctor_id}" data-vlid="${doc?'':v.listing_id}">💬 Message${v.mode==='video'?' / 📹 call':''}</button>`:''}
+    <div class="acts">${(()=>{const now=Date.now(),open=v.status==='booked'&&v.mode==='video'&&now>v.at-10*60e3&&now<v.at+((v.slot||30)+30)*60e3;
+        return open?`<button class="btn primary sm" type="button" data-vcallm="${doc?v.patient_id:v.doctor_id}">📹 Join video visit</button>`
+          :v.status==='booked'&&v.mode==='video'&&!past?'<small style="width:100%">📹 The <b>Join</b> button appears here 10 minutes before the visit.</small>':''})()}
+      ${v.rx_id?`<a class="btn ghost sm" href="/rx/${v.rx_id}" target="_blank" rel="noopener">📄 Prescription</a>${doc?'':`<button class="btn ghost sm" type="button" data-rxrem="${v.rx_id}">⏰ Add to reminders</button>`}`:''}
+      ${doc&&v.status!=='cancelled'&&v.at-Date.now()<3600e3?`<button class="btn ghost sm" type="button" data-rxwrite="${v.id}" data-rxid="${v.rx_id||''}" data-rxfor="${esc(v.patient)}">💊 ${v.rx_id?'Edit':'Write'} prescription</button>`:''}
+      ${!doc&&v.status==='done'?`<button class="btn ghost sm" type="button" data-rev="${v.listing_id}">⭐ Review</button>`:''}
+      ${v.status!=='cancelled'?`<button class="btn ghost sm" type="button" data-vmsg="${doc?v.patient_id:v.doctor_id}" data-vlid="${doc?'':v.listing_id}">💬 Message${v.mode==='video'?' / 📹 call':''}</button>`:''}
       ${v.status==='booked'&&!past?`<button class="btn ghost sm" type="button" data-vcancel="${v.id}">Cancel visit</button>`:''}
       ${doc&&v.status!=='cancelled'&&past?`<button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="done">✅ Done</button><button class="btn ghost sm" type="button" data-vmark="${v.id}" data-st="no_show">No-show</button>`:''}</div></div>`}
 function myVisitsCard(){const V=(MEM.bookings||{}).as_patient||[];if(!V.length&&MEM.me.kind==='doctor')return '';
@@ -3435,6 +3478,9 @@ function wireBookings(){
   $$('[data-vmsg]').forEach(b=>b.onclick=()=>{openConv(+b.dataset.vmsg,b.dataset.vlid?+b.dataset.vlid:undefined);const c=$('#conv');if(c)c.scrollIntoView({block:'center'})});
   $$('[data-vcancel]').forEach(b=>b.onclick=async()=>{const r=prompt('Cancel this visit? You can add a short reason (optional):','');if(r===null)return;
     try{await mapi('booking/cancel',{id:+b.dataset.vcancel,reason:r});renderAccount()}catch(e){alert(e.message)}});
+  $$('[data-rxwrite]').forEach(b=>b.onclick=()=>openRxWriter(+b.dataset.rxwrite,b.dataset.rxid?+b.dataset.rxid:0,b.dataset.rxfor));
+  $$('[data-rxrem]').forEach(b=>b.onclick=async()=>{try{const r=(await mapi('rx/get',{id:+b.dataset.rxrem})).result;const c=$('#remCard');if(c){c.open=true;c.scrollIntoView({block:'start'})}
+    rxShow({readable:true,warning:'From the prescription by '+r.doctor+'. Check the times and press Add.',medicines:r.data.meds.map(m=>Object.assign({},m))})}catch(e){alert(e.message)}});
   $$('[data-vmark]').forEach(b=>b.onclick=async()=>{try{await mapi('booking/mark',{id:+b.dataset.vmark,status:b.dataset.st});renderAccount();const d=$('#docVisits');if(d)d.open=true}catch(e){alert(e.message)}});
   const f=$('#bkForm');if(!f)return;let days=0;$$('#bkDays button').forEach(x=>{if(x.classList.contains('on'))days|=1<<+x.dataset.bit;x.onclick=()=>{days^=1<<+x.dataset.bit;x.classList.toggle('on')}});
   $('#bkBrkOn').onchange=()=>{$('#bkBrk').hidden=!$('#bkBrkOn').checked};

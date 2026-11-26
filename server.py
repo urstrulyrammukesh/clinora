@@ -392,6 +392,8 @@ CREATE INDEX IF NOT EXISTS dbook_patient ON dbookings(patient_id, at);
 CREATE TABLE IF NOT EXISTS push_subs(endpoint TEXT PRIMARY KEY, member_id INTEGER NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS family(id INTEGER PRIMARY KEY AUTOINCREMENT, member_id INTEGER NOT NULL, name TEXT NOT NULL, relation TEXT NOT NULL,
   year INTEGER, ts INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS prescriptions(id INTEGER PRIMARY KEY AUTOINCREMENT, booking_id INTEGER UNIQUE NOT NULL, doctor_id INTEGER NOT NULL,
+  patient_id INTEGER NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
@@ -1384,6 +1386,7 @@ def m_delete_account(conn, d, me, ip):
     conn.execute("DELETE FROM reminders WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM push_subs WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM family WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM prescriptions WHERE patient_id=? OR doctor_id=?", (mid, mid))
     for (bid, owner, when) in conn.execute("SELECT b.id, l.owner, b.date || ' ' || b.time FROM dbookings b JOIN listings l ON l.id=b.listing_id "
                                            "WHERE b.patient_id=? AND b.status='booked' AND b.at>?", (mid, now_ms())).fetchall():
         notify(conn, owner, "booking", "❌ A patient cancelled", f"{when} · the patient deleted their account", "account")
@@ -2405,11 +2408,12 @@ def _booking_view(r, side):
     return {"id": r["id"], "listing_id": r["listing_id"], "doctor": r["doctor_name"], "doctor_id": r["doctor_id"], "patient": r["for_name"],
             "patient_id": r["patient_id"], "account": r["patient_name"], "date": r["date"], "time": r["time"], "tz": r["tz"], "mode": r["mode"],
             "reason": r["reason"], "status": r["status"], "fee": r["fee"], "cur": r["cur"], "at": r["at"], "side": side,
-            "cancel_reason": r["cancel_reason"], "addr": r["addr"]}
+            "cancel_reason": r["cancel_reason"], "addr": r["addr"], "rx_id": r["rx_id"], "slot": r["slot"]}
 
 
 def my_bookings(conn, me):
-    q = ("SELECT b.*, l.name AS doctor_name, l.addr || ', ' || l.city AS addr, l.owner AS doctor_id, m.name AS patient_name FROM dbookings b "
+    q = ("SELECT b.*, l.name AS doctor_name, l.addr || ', ' || l.city AS addr, l.owner AS doctor_id, m.name AS patient_name, "
+         "(SELECT id FROM prescriptions p WHERE p.booking_id=b.id) AS rx_id, CAST(json_extract(l.booking, '$.slot') AS INTEGER) AS slot FROM dbookings b "
          "JOIN listings l ON l.id=b.listing_id JOIN members m ON m.id=b.patient_id WHERE {} AND b.at > ? ORDER BY b.at LIMIT 60")
     since = now_ms() - 7 * 86_400_000
     mine = [_booking_view(r, "patient") for r in conn.execute(q.format("b.patient_id=?"), (me["id"], since))]
@@ -2500,6 +2504,8 @@ def m_booking_mark(conn, d, me):
     if not r or r["status"] == "cancelled":
         raise InputError("Booking not found")
     conn.execute("UPDATE dbookings SET status=? WHERE id=?", (st, r["id"]))
+    if st == "done" and r["status"] != "done":
+        ask_review(conn, r, lst)
 
 
 def has_booking(conn, a, b):
@@ -2756,6 +2762,101 @@ def stats_overview(conn, d, user):
     return {"totals": totals, "series": series, "week_start": start, "top_doctors": top, "cities": cities}
 
 
+# ---------------------------------------------------------------- after the visit: prescription and review request
+RX_FOODS = {"before", "after", "with", "any"}
+
+
+def m_rx_write(conn, d, me):
+    """The doctor writes the prescription for a visit (in-clinic or video). The patient can print it and turn it into reminders."""
+    need_member(me, "doctor")
+    need_confirmed(me)
+    lst = my_listing(conn, me)
+    b = conn.execute("SELECT * FROM dbookings WHERE id=? AND listing_id=?", (int(d.get("booking_id") or 0), lst["id"] if lst else -1)).fetchone()
+    if not b or b["status"] == "cancelled":
+        raise InputError("Visit not found")
+    meds = []
+    for m in (d.get("meds") or [])[:15]:
+        if not isinstance(m, dict):
+            continue
+        name = str(m.get("name") or "").strip()[:80]
+        if not name:
+            continue
+        times = [x for x in (m.get("times") or []) if HHMM_RE.match(str(x))][:6]
+        meds.append({"name": name, "strength": str(m.get("strength") or "")[:40], "dose": str(m.get("dose") or "")[:60], "times": times,
+                     "days": max(0, min(int(m.get("days") or 0), 365)), "food": m.get("food") if m.get("food") in RX_FOODS else "any",
+                     "note": str(m.get("note") or "")[:120]})
+    data = {"diagnosis": text(d, "diagnosis", 300, False), "advice": text(d, "advice", 800, False), "meds": meds,
+            "followup": str(d.get("followup") or "")[:10] if DATE_RE.match(str(d.get("followup") or "")) else "", "tests": text(d, "tests", 300, False)}
+    if not (meds or data["advice"] or data["diagnosis"]):
+        raise InputError("Write at least one medicine or some advice")
+    conn.execute("INSERT INTO prescriptions(booking_id,doctor_id,patient_id,data,ts) VALUES(?,?,?,?,?) "
+                 "ON CONFLICT(booking_id) DO UPDATE SET data=excluded.data, ts=excluded.ts", (b["id"], me["id"], b["patient_id"], json.dumps(data), now_ms()))
+    rx_id = conn.execute("SELECT id FROM prescriptions WHERE booking_id=?", (b["id"],)).fetchone()[0]
+    if b["status"] == "booked" and b["at"] < now_ms():
+        conn.execute("UPDATE dbookings SET status='done' WHERE id=?", (b["id"],))
+        ask_review(conn, b, lst)
+    notify(conn, b["patient_id"], "booking", f"💊 Prescription from {lst['name']}", "Open it to print, or add the medicines to your reminders.", "account")
+    return {"rx_id": rx_id}
+
+
+def ask_review(conn, b, lst):
+    if not conn.execute("SELECT 1 FROM reviews WHERE listing_id=? AND member_id=?", (lst["id"], b["patient_id"])).fetchone():
+        notify(conn, b["patient_id"], "review", f"⭐ How was your visit with {lst['name']}?", "A short review helps other patients choose.", f"reviews:{lst['id']}")
+
+
+def prescription_for(conn, rx_id, me):
+    if not me:
+        return None
+    r = conn.execute("SELECT p.*, b.for_name, b.date, b.time, b.mode, l.name AS doctor, l.addr, l.city, l.phone, l.spec, m.name AS patient_account "
+                     "FROM prescriptions p JOIN dbookings b ON b.id=p.booking_id JOIN listings l ON l.id=b.listing_id JOIN members m ON m.id=p.patient_id "
+                     "WHERE p.id=?", (rx_id,)).fetchone()
+    if not r or me["id"] not in (r["doctor_id"], r["patient_id"]):
+        return None
+    out = dict(r)
+    out["data"] = json.loads(r["data"])
+    v = conn.execute("SELECT reg_no, council, qualification FROM verifications WHERE member_id=? AND status='verified'", (r["doctor_id"],)).fetchone()
+    out["reg"] = dict(v) if v else None
+    return out
+
+
+def m_rx_get(conn, d, me):
+    need_member(me)
+    rx = prescription_for(conn, int(d.get("id") or 0), me)
+    if not rx:
+        raise InputError("Prescription not found")
+    return {"id": rx["id"], "booking_id": rx["booking_id"], "data": rx["data"], "for_name": rx["for_name"], "doctor": rx["doctor"]}
+
+
+def prescription_page(rx):
+    e = html.escape
+    d = rx["data"]
+    food = {"before": "before food", "after": "after food", "with": "with food", "any": ""}
+    rows = "".join(f"<tr><td><b>{e(m['name'])}</b> {e(m['strength'])}</td><td>{e(m['dose'])}</td><td>{e(', '.join(m['times']) or 'as advised')}</td>"
+                   f"<td>{str(m['days']) + ' days' if m['days'] else ''}</td><td>{e(food.get(m['food'], ''))} {e(m['note'])}</td></tr>" for m in d["meds"])
+    reg = rx["reg"]
+    reg_line = f"Reg. no. {e(reg['reg_no'])} · {e(reg['council'])} · {e(reg['qualification'])}" if reg else "Registration not verified on Clinora"
+    meds_html = (f"<table><tr><th>Medicine</th><th>Dose</th><th>Times</th><th>For</th><th>Notes</th></tr>{rows}</table>" if rows else "")
+    when = datetime.date.fromisoformat(rx["date"]).strftime("%d %b %Y")
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prescription · {e(rx['for_name'])} · {when}</title><meta name="robots" content="noindex">
+<style>body{{font:15px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:0;background:#f1f5f9}}main{{max-width:760px;margin:20px auto;background:#fff;padding:28px 30px;border-radius:14px}}
+h1{{margin:0;font-size:22px}}.mu{{color:#64748b;font-size:13px}}hr{{border:0;border-top:2px solid #0d9488;margin:14px 0}}table{{width:100%;border-collapse:collapse;margin:10px 0}}
+td,th{{border:1px solid #e2e8f0;padding:7px 8px;text-align:left;font-size:14px;vertical-align:top}}th{{background:#f0fdfa}}.rx{{font-size:30px;color:#0d9488;font-weight:800}}
+.btn{{background:#0d9488;color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;margin-right:8px;text-decoration:none;display:inline-block}}
+@media print{{body{{background:#fff}}main{{margin:0;padding:0}}.np{{display:none}}}}</style></head><body><main>
+<div class="np" style="margin-bottom:14px"><button class="btn" type="button" id="pr">🖨️ Print / Save as PDF</button><a class="btn" style="background:#475569" href="/#account">← Back to Clinora</a></div>
+<h1>{e(rx['doctor'])}</h1><div class="mu">{e(rx['spec'] or '')} · {e(rx['addr'])}, {e(rx['city'])} · {e(rx['phone'])}<br>{reg_line}</div><hr>
+<p><b>Patient:</b> {e(rx['for_name'])} &nbsp; <b>Date:</b> {when} &nbsp; <b>Visit:</b> {'Video consultation' if rx['mode'] == 'video' else 'In clinic'}</p>
+{f"<p><b>Diagnosis / findings:</b> {e(d['diagnosis'])}</p>" if d['diagnosis'] else ''}
+<div class="rx">℞</div>{meds_html}
+{f"<p><b>Tests:</b> {e(d['tests'])}</p>" if d.get('tests') else ''}
+{f"<p><b>Advice:</b> {e(d['advice'])}</p>" if d['advice'] else ''}
+{f"<p><b>Follow-up:</b> {datetime.date.fromisoformat(d['followup']).strftime('%d %b %Y')}</p>" if d.get('followup') else ''}
+<p class="mu" style="margin-top:26px">Issued through Clinora by the doctor named above, who is responsible for this advice. Clinora does not check prescriptions.
+Follow your doctor's advice; contact them if anything is unclear. In an emergency, call your local emergency number.</p></main>
+<script nonce="__NONCE__">document.getElementById('pr').onclick=()=>window.print()</script></body></html>"""
+
+
 MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_profile, "/api/m/status": m_status,
                  "/api/m/fav": m_fav, "/api/m/send": m_send, "/api/m/thread": m_thread, "/api/m/photo": m_photo,
                  "/api/m/reviews": m_reviews, "/api/m/review": m_review, "/api/m/review/delete": m_review_delete,
@@ -2767,7 +2868,7 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/booking/settings": m_booking_settings, "/api/m/book": m_book, "/api/m/booking/cancel": m_booking_cancel,
                  "/api/m/booking/mark": m_booking_mark, "/api/m/slots": m_slots,
                  "/api/m/push/subscribe": m_push_subscribe, "/api/m/push/unsubscribe": m_push_unsubscribe,
-                 "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete}
+                 "/api/m/family/save": m_family_save, "/api/m/family/delete": m_family_delete, "/api/m/rx/write": m_rx_write, "/api/m/rx/get": m_rx_get}
 
 
 
@@ -3713,6 +3814,16 @@ class Handler(SimpleHTTPRequestHandler):
             page = page.replace("{{SUPPORT_EMAIL}}", SUPPORT_EMAIL or "the email address shown in the Clinora app")
             page = page.replace("{{SITE_URL}}", site).replace("{{UPDATED}}", "25 November 2026")
             return self.send_text(200, page, "text/html; charset=utf-8")
+        m = re.fullmatch(r"/rx/(\d+)", path_only)
+        if m:
+            with connect() as conn:
+                rx = prescription_for(conn, int(m.group(1)), member_for_token(conn, self.member_token()))
+            if not rx:
+                return self.send_text(404, "<!DOCTYPE html><title>Not found</title><p>Prescription not found, or you are not logged in. <a href='/#account'>Log in</a></p>",
+                                      "text/html; charset=utf-8")
+            nonce = secrets.token_urlsafe(16)
+            self._csp = CSP_OTHER.replace("default-src 'none'", f"default-src 'none'; script-src 'nonce-{nonce}'")
+            return self.send_text(200, prescription_page(rx).replace("__NONCE__", nonce), "text/html; charset=utf-8")
         m = re.fullmatch(r"/doctor/(\d+)(?:-[a-z0-9-]*)?", path_only)
         if m:
             with connect() as conn:
