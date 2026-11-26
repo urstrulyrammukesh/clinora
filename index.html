@@ -1497,6 +1497,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);window.scrollTo(0,0);openCall(v.slice(5));return}
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
+  if(/^reset\//.test(String(v))){window.__resetToken=String(v).slice(6);history.replaceState(null,'',location.search+'#account');v='account'}
   if(/^account\/login-/.test(String(v))){pendingNotice=v.endsWith('soon')?'That sign-in option is coming soon. Please use email for now.':'Sign-in didn\'t finish. Please try again, or use email.';v='account'}
   if(!['home','nearby','dashboard','directory','books','account','food'].includes(v)) v='home';
   $$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));
@@ -2764,6 +2765,15 @@ function wireSocial(){const O=window.OAUTH||{};
   if(window.google&&google.accounts)draw();else if(!$('#gsiJs')){const s=document.createElement('script');s.id='gsiJs';s.src='https://accounts.google.com/gsi/client';s.async=true;s.onload=draw;document.head.appendChild(s)}}
 let pendingNotice='';function acctNotice(t){pendingNotice=t;renderAccount()}
 function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
+  if(window.__resetToken){box.innerHTML=`<form class="card form" id="rsForm" style="max-width:440px;margin:0 auto"><h3>🔒 Choose a new password</h3><p style="margin-bottom:12px">You opened a reset link from your email. Pick a new password for your Clinora account.</p>
+      <label>NEW PASSWORD (AT LEAST 10 CHARACTERS)</label><input id="rsNew" type="password" required minlength="10" autocomplete="new-password">
+      <label>REPEAT NEW PASSWORD</label><input id="rsNew2" type="password" required minlength="10" autocomplete="new-password">
+      <button class="btn primary" type="submit">Save new password</button><div id="rsMsg" style="font-size:13px;margin-top:8px"></div>
+      <p style="font-size:12px;color:var(--mute);margin-top:10px">This logs you out on every other device. <button type="button" class="rv-mini" id="rsCancel">Cancel</button></p></form>`;
+    $('#rsCancel').onclick=()=>{window.__resetToken=null;renderAccount()};
+    $('#rsForm').onsubmit=async e=>{e.preventDefault();const m=$('#rsMsg');if($('#rsNew').value!==$('#rsNew2').value){m.innerHTML='<span class="red">The two passwords don’t match.</span>';return}
+      m.textContent='Saving…';try{await mapi('reset',{token:window.__resetToken,new:$('#rsNew').value});window.__resetToken=null;renderAccount();$('#acctBox').insertAdjacentHTML('afterbegin','<div class="card" style="padding:14px 18px;margin-bottom:14px;border-color:var(--teal)">✅ Your password was reset and you are logged in.</div>')}
+      catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};return}
   if(!me){box.innerHTML=`${pendingNotice?`<div class="card" style="padding:14px 18px;margin-bottom:14px;border-color:var(--teal)">${esc(pendingNotice)}</div>`:''}
     <div class="acct-grid"><form class="card form" id="sgForm"><h3>Create a free account</h3><p style="margin-bottom:12px">It takes 30 seconds.</p>
       <div class="seg2"><button type="button" data-k="patient" class="${signKind==='patient'?'on':''}">I'm a patient</button><button type="button" data-k="doctor" class="${signKind==='doctor'?'on':''}">I'm a doctor</button></div>
@@ -2775,6 +2785,10 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       <button class="btn primary" type="submit">Create account</button><div id="sgMsg"></div>${socialBlock('sg')}</form>
     <form class="card form" id="liForm"><h3>Log in</h3><p style="margin-bottom:12px">Welcome back.</p>
       <label>EMAIL</label><input id="liEmail" type="email" required autocomplete="username"><label>PASSWORD</label><input id="liPw" type="password" required autocomplete="current-password">
+      <div style="text-align:right;margin:-4px 0 10px"><button type="button" class="rv-mini" id="liForgot">Forgot password?</button></div>
+      <div id="fgBox" hidden style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--panel2)">
+        <b style="font-size:14px">Reset your password</b><p style="font-size:12.5px;color:var(--mute);margin:4px 0 10px">Enter your account email. We'll send you a link to choose a new password. It works for 30 minutes.</p>
+        <input id="fgEmail" type="email" placeholder="you@example.com" autocomplete="email" style="margin-bottom:8px"><button type="button" class="btn primary sm" id="fgSend">Send reset link</button><div id="fgMsg" style="font-size:13px;margin-top:8px"></div></div>
       <button class="btn primary" type="submit">Log in</button><div id="liMsg"></div>${socialBlock('li')}
       <p style="font-size:12.5px;margin-top:14px;color:var(--mute)">Clinic staff use the <a class="teal" href="#dashboard" data-go="dashboard">Clinic Dashboard</a> login instead.</p></form></div>`;
     $$('#sgForm .seg2 button').forEach(b=>b.onclick=()=>{signKind=b.dataset.k;renderAccount()});
@@ -2783,6 +2797,13 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
       catch(err){$('#sgMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
     $('#liForm').onsubmit=async e=>{e.preventDefault();$('#liMsg').textContent='Logging in…';
       try{await mapi('login',{email:$('#liEmail').value.trim(),password:$('#liPw').value});pendingNotice='';renderAccount()}catch(err){$('#liMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+    $('#liForgot').onclick=()=>{const b=$('#fgBox');b.hidden=!b.hidden;if(!b.hidden){$('#fgEmail').value=$('#liEmail').value.trim();$('#fgEmail').focus()}};
+    $('#fgSend').onclick=async()=>{const m=$('#fgMsg'),em=$('#fgEmail').value.trim();if(!em){m.innerHTML='<span class="red">Please enter your email.</span>';return}
+      m.textContent='Sending…';$('#fgSend').disabled=true;
+      try{const r=await fetch('/api/m/forgot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em})});const j=await r.json().catch(()=>({}));
+        if(!r.ok||j.error)throw new Error(j.error||'Could not send the link. Please try again.');
+        m.innerHTML='<span class="teal">📧 If an account exists for this email, a reset link is on its way. Check your inbox and spam folder.</span>'}
+      catch(err){m.innerHTML='<span class="red">'+esc(err.message)+'</span>'}finally{$('#fgSend').disabled=false}};
     wireSocial();return}
   const doc=me.kind==='doctor',L=MEM.listing,soc=(L&&L.social)||{};
   const favs=(MEM.favs||[]).map(id=>regs().find(x=>x.id===id)).filter(Boolean).map(regToPlace);

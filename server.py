@@ -371,6 +371,7 @@ CREATE INDEX IF NOT EXISTS notif_member ON notifs(member_id, id);
 CREATE TABLE IF NOT EXISTS videos(id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, member_id INTEGER NOT NULL,
   kind TEXT NOT NULL, caption TEXT, status TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ts INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS video_listing ON videos(listing_id, status);
+CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
 
 
@@ -1220,6 +1221,95 @@ def m_password(conn, d, me, ip):
            "If this wasn't you, change it again right away and contact the clinic.", "account")
     return {"changed": True}
 
+
+
+# ---------------------------------------------------------------- forgot password: a one-time link by email
+# Email is sent with any SMTP service (Brevo, Gmail app password, Resend, Zoho...). See docs/email-setup.md.
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or 587)
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASS = os.environ.get("SMTP_PASS", "").strip()
+MAIL_FROM = os.environ.get("MAIL_FROM", "").strip() or SMTP_USER
+RESET_MINUTES = 30
+
+
+def send_email(to, subject, text_body, html_body):
+    """Sends in the background so the reply time never shows whether an account exists."""
+    if not SMTP_HOST:
+        if PRODUCTION:
+            print(f"[email] NOT SENT to {to}: SMTP_HOST is not set in .env", flush=True)
+        else:  # on your own computer: the link is printed here so you can test without an email service
+            print(f"[email] (dev, not sent) To: {to} | {subject}\n{text_body}", flush=True)
+        return
+    def run():
+        import smtplib
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["Subject"], msg["From"], msg["To"] = subject, f"Clinora <{MAIL_FROM}>", to
+        msg.set_content(text_body)
+        msg.add_alternative(html_body, subtype="html")
+        try:
+            if SMTP_PORT == 465:
+                with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+                    if SMTP_USER: s.login(SMTP_USER, SMTP_PASS)
+                    s.send_message(msg)
+            else:
+                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+                    s.ehlo()
+                    if s.has_extn("starttls"):
+                        s.starttls()
+                        s.ehlo()
+                    elif SMTP_USER:  # never send the email password over an unencrypted connection
+                        raise RuntimeError("this mail server doesn't offer encryption (STARTTLS); use port 465 or another server")
+                    if SMTP_USER: s.login(SMTP_USER, SMTP_PASS)
+                    s.send_message(msg)
+            print(f"[email] sent '{subject}' to {to}", flush=True)
+        except Exception as e:
+            print(f"[email] FAILED to {to}: {type(e).__name__}: {e}", flush=True)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def m_forgot(conn, d, ip):
+    """Always answers the same way, so nobody can use this to find out who has an account."""
+    email = str(d.get("email") or "").strip().lower()
+    if too_many("forgot", ip, 8, 3600) or (email and too_many("forgot:" + email, "x", 3, 3600)):
+        raise AuthError("Too many reset requests. Please wait an hour and try again.", 429)
+    if not EMAIL_RE.match(email):
+        raise InputError("Please enter a valid email address")
+    row = conn.execute("SELECT id, name FROM members WHERE email=?", (email,)).fetchone()
+    if row and not email.endswith("@users.clinora.invalid"):
+        token = secrets.token_urlsafe(32)
+        conn.execute("DELETE FROM pw_resets WHERE expires < ? OR member_id=?", (now_ms(), row["id"]))
+        conn.execute("INSERT INTO pw_resets(token, member_id, expires) VALUES(?,?,?)",
+                     (token_hash(token), row["id"], now_ms() + RESET_MINUTES * 60_000))
+        link = f"{PUBLIC_URL}/#reset/{token}"
+        first = (row["name"] or "there").split()[0]
+        send_email(email, "Reset your Clinora password",
+                   f"Hi {first},\n\nSomeone (hopefully you) asked to reset your Clinora password.\n\n"
+                   f"Open this link to choose a new password. It works once, for {RESET_MINUTES} minutes:\n{link}\n\n"
+                   "If you didn't ask for this, ignore this email. Your password stays the same.\n\nClinora",
+                   f"""<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:auto;padding:24px;color:#0f172a">
+<h2 style="color:#0d9488;margin:0 0 12px">Reset your Clinora password</h2>
+<p>Hi {first},</p><p>Someone (hopefully you) asked to reset your Clinora password.</p>
+<p style="margin:26px 0"><a href="{link}" style="background:#0d9488;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Choose a new password</a></p>
+<p style="color:#475569;font-size:14px">This link works once, for {RESET_MINUTES} minutes. If you didn't ask for this, ignore this email: your password stays the same.</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:28px">Clinora · AI receptionist for clinics</p></div>""")
+    return {"sent": True}
+
+
+def m_reset(conn, d):
+    token = str(d.get("token") or "")
+    row = conn.execute("SELECT member_id, expires, used FROM pw_resets WHERE token=?", (token_hash(token),)).fetchone() if token else None
+    if not row or row["used"] or row["expires"] < now_ms():
+        raise AuthError("This reset link has expired or was already used. Please ask for a new one.", 400)
+    new = valid_password(d, "new")
+    mid = row["member_id"]
+    conn.execute("UPDATE members SET pw=? WHERE id=?", (hash_password(new), mid))
+    conn.execute("UPDATE pw_resets SET used=1 WHERE member_id=?", (mid,))
+    conn.execute("DELETE FROM member_sessions WHERE member_id=?", (mid,))  # log out everywhere
+    notify(conn, mid, "security", "Your password was reset",
+           "You used a reset link from your email. If this wasn't you, reset it again right away.", "account")
+    return mid
 
 # ---------------------------------------------------------------- log in with Google, Facebook or X
 # Each one switches on when its keys are in .env (see docs/social-login.md). Until then the buttons show "coming soon".
@@ -2573,6 +2663,12 @@ class Handler(SimpleHTTPRequestHandler):
                     me = member_for_token(conn, self.member_token())
                     m_delete_account(conn, data, me, ip)
                     return self.send_json(200, {"me": None, "deleted": True}, cookie=self.member_cookie("", 0))
+                if path == "/api/m/forgot":
+                    return self.send_json(200, m_forgot(conn, data, ip))
+                if path == "/api/m/reset":
+                    mid = m_reset(conn, data)
+                    token = new_member_session(conn, mid)  # logged in on this device with the new password
+                    return self.send_json(200, member_state(conn, member_for_token(conn, token)), cookie=self.member_cookie(token, 30 * 86_400))
                 if path in ("/api/m/notifs", "/api/m/notifs/read"):  # light: polled by the bell, no listings
                     me = member_for_token(conn, self.member_token())
                     return self.send_json(200, (m_notifs if path.endswith("notifs") else m_notifs_read)(conn, data, me))
