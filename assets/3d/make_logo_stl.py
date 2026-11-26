@@ -43,11 +43,28 @@ def rect(x0, y0, x1, y1):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
+def cross(w, l, z0, z1):
+    """One clean solid "plus" shape: a single outline for the walls, five rectangles for the top and bottom
+    (no overlapping parts, so viewers draw it without flicker)."""
+    h = w / 2
+    outline = [(h, -l), (h, -h), (l, -h), (l, h), (h, h), (h, l), (-h, l), (-h, h), (-l, h), (-l, -h), (-h, -h), (-h, -l)]
+    tris = []
+    for i in range(len(outline)):
+        a, b = outline[i], outline[(i + 1) % len(outline)]
+        tris.append(((a[0], a[1], z0), (b[0], b[1], z0), (b[0], b[1], z1)))
+        tris.append(((a[0], a[1], z0), (b[0], b[1], z1), (a[0], a[1], z1)))
+    for x0, y0, x1, y1 in [(-h, -h, h, h), (-h, h, h, l), (-h, -l, h, -h), (h, -h, l, h), (-l, -h, -h, h)]:
+        tris.append(((x0, y0, z1), (x1, y0, z1), (x1, y1, z1)))
+        tris.append(((x0, y0, z1), (x1, y1, z1), (x0, y1, z1)))
+        tris.append(((x0, y0, z0), (x1, y1, z0), (x1, y0, z0)))
+        tris.append(((x0, y0, z0), (x0, y1, z0), (x1, y1, z0)))
+    return tris
+
+
 def build():
     tris = []
-    tris += prism(rounded_square(20, 7), 0, 4)          # the app-icon tile
-    tris += prism(rect(-4.5, -13, 4.5, 13), 4, 12)      # cross: vertical bar
-    tris += prism(rect(-13, -4.5, 13, 4.5), 4, 12)      # cross: horizontal bar
+    tris += prism(rounded_square(20, 7), 0, 3)          # the app-icon tile
+    tris += cross(11, 15, 3, 13)                         # the raised medical cross
     lines = ["solid clinora_logo"]
     for a, b, c in tris:
         n = norm(a, b, c)
