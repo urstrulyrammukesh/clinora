@@ -6,7 +6,7 @@
 
 Patients can chat with an AI receptionist (powered by Claude) to book in-clinic visits or video consultations, find doctors, hospitals, labs and medical colleges in any city, see who is open right now on a 3D map, pay in their own currency, and book a cab to the hospital. Clinics get a private dashboard with doctor logins.
 
-📄 **[Read the Clinora Company Overview & Product Paper (PDF, 32 pages)](docs/Clinora-Company-Overview.pdf)**: what Clinora is, how it works, architecture, security, business plan and roadmap.
+📄 **[Read the Clinora Company Overview & Product Paper (PDF, 33 pages)](docs/Clinora-Company-Overview.pdf)**: what Clinora is, how it works, architecture, security, business plan and roadmap.
 
 👤 Founded and built by **[Ram Mukesh Yadav](https://www.linkedin.com/in/ram-mukesh-yadav-033336412/)**, B.Tech CSE, NIT Srinagar · [Portfolio](https://urstrulyrammukesh.github.io)
 
