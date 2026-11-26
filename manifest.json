@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Clinora: Doctors, AI Health & Video Consults",
   "short_name": "Clinora",
-  "description": "Find doctors and hospitals near you, book visits and video consultations, chat with an AI health assistant, scan your food and read free medical books.",
+  "description": "Find and book real doctors, video visits, prescriptions, medicine reminders, health records, an AI health assistant, Food Scan and free medical books.",
   "start_url": "/?source=app#home",
   "scope": "/",
   "display": "standalone",
@@ -11,15 +11,71 @@
   "theme_color": "#06080b",
   "lang": "en",
   "dir": "auto",
-  "categories": ["medical", "health", "lifestyle"],
+  "categories": [
+    "medical",
+    "health",
+    "lifestyle"
+  ],
   "icons": [
-    {"src": "/assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "/assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "/assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "/assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    {"name": "Nearby doctors", "url": "/#nearby", "icons": [{"src": "/assets/icons/icon-192.png", "sizes": "192x192"}]},
-    {"name": "Food Scan", "url": "/#food", "icons": [{"src": "/assets/icons/icon-192.png", "sizes": "192x192"}]},
-    {"name": "Ask AI", "url": "/#demo", "icons": [{"src": "/assets/icons/icon-192.png", "sizes": "192x192"}]}
+    {
+      "name": "Book a doctor",
+      "url": "/#directory",
+      "icons": [
+        {
+          "src": "/assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "My visits & reminders",
+      "url": "/#reminders",
+      "icons": [
+        {
+          "src": "/assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Nearby doctors",
+      "url": "/#nearby",
+      "icons": [
+        {
+          "src": "/assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Ask AI",
+      "url": "/#demo",
+      "icons": [
+        {
+          "src": "/assets/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

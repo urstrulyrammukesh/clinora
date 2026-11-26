@@ -10,7 +10,7 @@ Check first that nobody else uses "Clinora" as a brand in your country (search t
 
 ## Step 2: Put the website online with Render (≈ $7 a month + disk ≈ $0.25)
 1. Make an account at https://render.com and connect your GitHub.
-2. Click **New → Blueprint** and choose the `clinora` repository. Render reads `render.yaml` and sets everything up (server, address, a 1 GB disk for the database and photos).
+2. Click **New → Blueprint** and choose the `clinora` repository. Render reads `render.yaml` and sets everything up (server, address, a 5 GB disk for the database, photos, health records and backups). The full launch guide is `docs/go-live.md`.
 3. Fill in the secret boxes Render asks for:
    - `PUBLIC_URL`: `https://` + your domain, e.g. `https://clinora.in`
    - `SUPPORT_EMAIL`: an email people can write to (for example a new Gmail made for Clinora)
