@@ -1463,7 +1463,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#prof').classLi
 const AI={on:false,reason:'',busy:false};let aiMsgs=[];
 function setAIBadge(){const b=$('#aiBadge');
   if(AI.on){b.textContent='AI Receptionist · powered by Claude · online';b.classList.remove('off');$('#aiNote').innerHTML='AI can make mistakes. It does not give medical advice. In an emergency call your local emergency number.'}
-  else{b.textContent='Demo mode · basic replies';b.classList.add('off');$('#aiNote').innerHTML='<b>Real AI is off:</b> '+esc(AI.reason||'start the site with server.py')+' Until then, simple built-in replies are used.'}}
+  else{b.textContent='Quick replies · AI assistant resting';b.classList.add('off');$('#aiNote').innerHTML='Quick-reply mode: you can still book, cancel, ask about fees and get emergency numbers. It does not give medical advice. In an emergency call your local emergency number.';
+    if(AI.reason)console.info('[Clinora] AI is off:',AI.reason)}}
 fetch('/api/status').then(r=>r.json()).then(j=>{AI.on=!!j.ai;AI.reason=j.reason||''}).catch(()=>{AI.on=false;AI.reason='The AI server is not running (start it with start.command).'}).finally(setAIBadge);
 function md(t){let h=esc(t).replace(/(https?:\/\/[^\s<]+#pay\/[A-Za-z0-9._-]+)/g,'<a class="teal" href="$1">💳 Pay now</a>').replace(/(https?:\/\/[^\s<]+#call\/[A-Za-z0-9._-]+)/g,'<a class="teal" href="$1">📹 Join video call</a>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^#{1,4}\s*(.+)$/gm,'<b>$1</b>').replace(/^\s*[-*]\s+/gm,'• ');return h}
 function aiContext(){const d=new Date();return [`Today: ${ymd(d)} (${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()]})`,
@@ -1479,8 +1480,7 @@ async function aiSend(text){
       const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:aiMsgs,context:aiContext()})});
       const j=await r.json().catch(()=>({error:'Unexpected reply from the server.'}));
       showTyping(false);
-      if(!r.ok||j.error){aiMsgs.length=mark;addMsg('bot','⚠️ '+esc(j.error||'Something went wrong.'),[],'alert');
-        if(r.status===503||r.status===401){AI.on=false;AI.reason=j.error||'';setAIBadge()}return}
+      if(!r.ok||j.error){aiMsgs.length=mark;aiFallback(text,j.error,r.status);return}
       if(j.stop_reason==='refusal'){aiMsgs.length=mark;addMsg('bot',`Sorry, I can't help with that here. If this is urgent, please call <b>${emNums()[0][0]}</b>.`);return}
       aiMsgs.push({role:'assistant',content:j.content});
       const txt=j.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
@@ -1493,8 +1493,15 @@ async function aiSend(text){
         results.push({type:'tool_result',tool_use_id:u.id,content:JSON.stringify(out),...(err?{is_error:true}:{})})}
       aiMsgs.push({role:'user',content:results});
     }
-  }catch(e){showTyping(false);aiMsgs.length=mark;addMsg('bot','⚠️ Could not reach the AI server. Check that it is running.',[],'alert')}
+  }catch(e){showTyping(false);aiMsgs.length=mark;aiFallback(text,'',0)}
   finally{AI.busy=false;showTyping(false)}
+}
+/* When the AI can't answer (no credits, outage, busy), never show a technical error:
+   apologise once, switch to quick replies, and still handle what the patient asked. */
+function aiFallback(text,msg,status){
+  if(status!==429){AI.on=false;setAIBadge()}
+  addMsg('bot',esc(msg||"Our AI assistant is taking a short break. I'll help you with quick replies instead.")+' 🙏');
+  setTimeout(()=>route(String(text)),400);
 }
 const digits=s=>String(s||'').replace(/\D/g,'');
 const samePhone=(a,b)=>{const x=digits(a),y=digits(b);return x.length>=7&&y.length>=7&&x.slice(-9)===y.slice(-9)};

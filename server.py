@@ -2130,7 +2130,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not path.startswith("/api/chat"):
             return self.send_json(404, {"error": "not found"})
         if client is None:
-            return self.send_json(503, {"error": AI_REASON})
+            return self.send_json(503, {"code": "ai_unavailable",
+                                        "error": "Our AI assistant is taking a short break. I'll help you with quick replies instead."})
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAX_BODY:
             return self.send_json(413, {"error": "Message too large."})
@@ -2142,16 +2143,15 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(400, {"error": "Bad request."})
         try:
             return self.send_json(200, chat_turn(messages, context))
-        except anthropic.AuthenticationError:
-            return self.send_json(401, {"error": "The API key was rejected. Check ANTHROPIC_API_KEY in .env."})
-        except anthropic.RateLimitError:
-            return self.send_json(429, {"error": "The AI is busy right now. Please try again in a moment."})
-        except anthropic.BadRequestError as e:
-            return self.send_json(400, {"error": f"Request rejected: {e.message}"})
-        except anthropic.APIStatusError as e:
-            return self.send_json(502, {"error": f"AI service error ({e.status_code}). Please try again."})
-        except anthropic.APIConnectionError:
-            return self.send_json(502, {"error": "Could not reach the AI service. Check the internet connection."})
+        except anthropic.APIError as e:
+            # Patients never see technical details (API keys, billing, error codes).
+            # The real reason goes to the server log for the clinic's admin.
+            print(f"[AI] chat failed: {type(e).__name__} {getattr(e, 'status_code', '')} {getattr(e, 'message', e)}", flush=True)
+            if isinstance(e, anthropic.RateLimitError):
+                return self.send_json(429, {"code": "ai_busy",
+                                            "error": "Our AI assistant is very busy right now. I'll help you with quick replies instead."})
+            return self.send_json(503, {"code": "ai_unavailable",
+                                        "error": "Our AI assistant is taking a short break. I'll help you with quick replies instead."})
 
     def client_ip(self):
         if TRUST_PROXY:
