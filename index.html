@@ -7,6 +7,7 @@
 <meta name="description" content="Find doctors, hospitals and clinics near you, see who is open now, book in-clinic visits or video consultations, chat with an AI health assistant, scan your food and read free medical books. In 139 languages.">
 <meta name="keywords" content="doctor near me, hospital near me, book doctor appointment, video consultation, online doctor, AI health assistant, food safety scanner, clinic receptionist">
 <meta name="theme-color" content="#06080b">
+<script>try{if(localStorage.getItem("cl_theme")==="light")document.documentElement.setAttribute("data-theme","light")}catch(e){}</script>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="48x48" href="/assets/icons/favicon-48.png">
 <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
@@ -881,6 +882,27 @@ html{overflow-x:clip}
 #tourCard.center{left:50%!important;top:50%!important;transform:translate(-50%,-50%)}
 #tourCard.center{animation:none}
 @media (prefers-reduced-motion: reduce){#tourSpot,#tourCard{transition:none}}
+
+/* ================= LIGHT / DARK THEME (sun & moon button) ================= */
+.theme-btn{flex-shrink:0;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;font-size:18px;line-height:1;cursor:pointer;color:var(--text);transition:border-color .2s,transform .5s cubic-bezier(.3,1.6,.5,1),background .3s}
+.theme-btn:hover{border-color:var(--teal)}
+.theme-btn.spin{transform:rotate(360deg) scale(1.08)}
+html.theme-anim,html.theme-anim *,html.theme-anim *:before,html.theme-anim *:after{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease!important}
+html[data-theme="light"]{
+  --bg:#f5f7fb;--panel:#ffffff;--panel2:#eef2f7;--line:#dce3ec;--text:#0f172a;--mute:#5b6778;
+  --teal:hsl(var(--h),78%,34%);--teal2:hsl(var(--h),82%,28%);--accent2:hsl(calc(var(--h) + 45),80%,42%);--accent3:hsl(calc(var(--h) + 95),75%,44%);
+  --red:#e11d48;--amber:#b45309;--green:#15803d;color-scheme:light}
+html[data-theme="light"] body{color:var(--text)}
+html[data-theme="light"] nav{background:rgba(255,255,255,.86)}
+html[data-theme="light"] nav.scrolled{background:rgba(255,255,255,.95);box-shadow:0 10px 30px rgba(15,23,42,.08)}
+html[data-theme="light"] .chat-head{background:hsl(var(--h),55%,93%)}
+html[data-theme="light"] .msg.me{background:hsl(var(--h),60%,86%);color:#0f172a}
+html[data-theme="light"] .map-tools button,html[data-theme="light"] .move-chip{background:rgba(255,255,255,.94);color:var(--text)}
+html[data-theme="light"] .controls{background:rgba(255,255,255,.85)}
+html[data-theme="light"] #ambient{opacity:.55}
+html[data-theme="light"] .num.alt{color:var(--red);background:#fff}
+/* the phone mock-up and video stage are "devices": they stay dark in light mode */
+html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--panel:#0c1015;--panel2:#11161d;--line:#1c242e;--text:#e9eff3;--mute:#8693a0;color:var(--text)}
 </style>
 </head>
 <body>
@@ -912,6 +934,7 @@ html{overflow-x:clip}
       <h4>TEXT SIZE</h4><div class="fx-seg" id="fxSize"><button data-s=".9">A−</button><button data-s="1">A</button><button data-s="1.1">A+</button><button data-s="1.2">A++</button></div>
       <div style="margin-top:14px;text-align:right"><button class="btn ghost sm" id="fxReset">↺ Reset</button></div>
     </div></div>
+  <button class="theme-btn notranslate" id="themeBtn" type="button" aria-label="Switch to light mode" title="Light / dark mode">🌙</button>
   <button class="acct-btn" id="acctBtn" data-go="account" aria-label="Your account" title="Your account">👤<i id="acctDot"></i></button>
   <div class="lang notranslate"><button id="langBtn" aria-label="Change language">🌐 EN</button>
     <div class="lang-menu" id="langMenu"></div></div>
@@ -3102,6 +3125,17 @@ async function bookSearch(){const q=$('#bookQ').value.trim();if(!q)return;const 
 
 loadDB();setInterval(loadDB,8000);
 go(location.hash.slice(1)||'home');
+
+/* ================= LIGHT / DARK THEME ================= */
+(()=>{const root=document.documentElement,btn=document.getElementById('themeBtn'),meta=document.querySelector('meta[name="theme-color"]');if(!btn)return;
+  const isLight=()=>root.getAttribute('data-theme')==='light';
+  const paint=()=>{const l=isLight();btn.textContent=l?'☀️':'🌙';btn.setAttribute('aria-label',l?'Switch to dark mode':'Switch to light mode');btn.title=l?'Light mode on · tap for dark':'Dark mode on · tap for light';if(meta)meta.setAttribute('content',l?'#f5f7fb':'#06080b')};
+  btn.addEventListener('click',()=>{root.classList.add('theme-anim');
+    if(isLight())root.removeAttribute('data-theme');else root.setAttribute('data-theme','light');
+    try{localStorage.setItem('cl_theme',isLight()?'light':'dark')}catch(e){}
+    btn.classList.remove('spin');void btn.offsetWidth;btn.classList.add('spin');paint();
+    setTimeout(()=>root.classList.remove('theme-anim'),500)});
+  paint()})();
 </script>
 </body>
 </html>
