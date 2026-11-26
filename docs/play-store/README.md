@@ -5,14 +5,14 @@ Everything technical is ready in this project. These are the steps only you can 
 ---
 
 ## Step 1: Buy a domain (≈ ₹500–1,500 a year)
-Buy a name such as `clinora.in` or `getclinora.com` from GoDaddy, Hostinger, Namecheap or Google's partner registrars.
+Buy a name such as `your-domain.in` or `getclinora.com` from GoDaddy, Hostinger, Namecheap or Google's partner registrars.
 Check first that nobody else uses "Clinora" as a brand in your country (search the name and the trademark site: https://ipindiaonline.gov.in/eregister/).
 
 ## Step 2: Put the website online with Render (≈ $7 a month + disk ≈ $0.25)
 1. Make an account at https://render.com and connect your GitHub.
 2. Click **New → Blueprint** and choose the `clinora` repository. Render reads `render.yaml` and sets everything up (server, address, a 5 GB disk for the database, photos, health records and backups). The full launch guide is `docs/go-live.md`.
 3. Fill in the secret boxes Render asks for:
-   - `PUBLIC_URL`: `https://` + your domain, e.g. `https://clinora.in`
+   - `PUBLIC_URL`: `https://` + your domain, e.g. `https://your-domain.in`
    - `SUPPORT_EMAIL`: an email people can write to (for example a new Gmail made for Clinora)
    - `ANTHROPIC_API_KEY`: **make a new key** (the old one was shared in a chat; delete it in the Anthropic Console)
    - Payment keys (Razorpay / Stripe / PayPal): start with their **test** keys, switch to live keys after a test payment works

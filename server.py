@@ -157,6 +157,8 @@ def methods_for(currency):
 
 
 def http_json(method, url, body=None, auth=None, bearer=None, form=None):
+    if not url.startswith(("https://", "http://")):  # only web addresses: never file:// or other schemes
+        raise ProviderError("refused a non-web address")
     headers = {"Accept": "application/json"}
     data = None
     if form is not None:
@@ -333,6 +335,8 @@ CREATE INDEX IF NOT EXISTS appt_slot ON appointments(doc, date, time);
 CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, src TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS live(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS stats(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS visits(day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(day, kind, key));
 CREATE TABLE IF NOT EXISTS listings(
   id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, type TEXT NOT NULL, spec TEXT, phone TEXT NOT NULL,
   email TEXT, web TEXT, addr TEXT NOT NULL, city TEXT NOT NULL, country TEXT NOT NULL, cc TEXT,
@@ -597,13 +601,20 @@ RATE = {}
 def too_many(bucket, ip, limit, window):
     """Simple in-memory rate limit: True when this IP made more than `limit` calls in `window` seconds."""
     key = (bucket, ip)
-    recent = [t for t in RATE.get(key, []) if t > time.time() - window]
-    recent.append(time.time())
-    RATE[key] = recent
+    now = time.time()
+    if len(RATE) > 50_000:  # forget old visitors so the table can't grow without end (memory exhaustion)
+        for k in [k for k, v in RATE.items() if not v or v[-1] < now - 86400]:
+            RATE.pop(k, None)
+    recent = [t for t in RATE.get(key, []) if t > now - window]
+    recent.append(now)
+    RATE[key] = recent[-(limit + 1):]  # keep only what the limit needs
     return len(recent) > limit
 
 
 def too_many_failures(ip):
+    if len(FAILED_LOGINS) > 50_000:
+        for k in [k for k, v in FAILED_LOGINS.items() if not v or v[-1] < time.time() - 900]:
+            FAILED_LOGINS.pop(k, None)
     recent = [t for t in FAILED_LOGINS.get(ip, []) if t > time.time() - 900]
     FAILED_LOGINS[ip] = recent
     return len(recent) >= 8
@@ -2114,11 +2125,17 @@ BACKUP_EVERY_H = max(1.0, float(os.environ.get("BACKUP_EVERY_HOURS") or 24))
 BACKUP_KEEP = max(2, int(os.environ.get("BACKUP_KEEP") or 14))
 BACKUP_VIDEOS = os.environ.get("BACKUP_VIDEOS", "").strip() == "1"
 S3_ENDPOINT = os.environ.get("BACKUP_S3_ENDPOINT", "").strip().rstrip("/")
+_S3_LOCAL = re.match(r"^http://(localhost|127\.0\.0\.1)(:\d+)?$", S3_ENDPOINT)  # MinIO / tests on this computer
+if S3_ENDPOINT and not (S3_ENDPOINT.startswith("https://") or _S3_LOCAL):
+    print("[backup] BACKUP_S3_ENDPOINT must start with https:// — cloud copy turned off", flush=True)
+    S3_ENDPOINT = ""
 S3_BUCKET = os.environ.get("BACKUP_S3_BUCKET", "").strip()
 S3_KEY_ID = os.environ.get("BACKUP_S3_KEY_ID", "").strip()
 S3_SECRET = os.environ.get("BACKUP_S3_SECRET", "").strip()
 S3_REGION = os.environ.get("BACKUP_S3_REGION", "").strip() or "auto"
-S3_ON = bool(S3_ENDPOINT.startswith("https://") and S3_BUCKET and S3_KEY_ID and S3_SECRET)
+S3_ON = bool(S3_ENDPOINT and S3_BUCKET and S3_KEY_ID and S3_SECRET)
+AUTO_RESTORE = os.environ.get("BACKUP_AUTO_RESTORE", "1").strip() != "0"   # empty disk + cloud backup -> restore it
+BACKUP_ON_SHUTDOWN = os.environ.get("BACKUP_ON_SHUTDOWN", "1").strip() != "0"  # one last backup when the host stops us
 BACKUP_NAME_RE = re.compile(r"^clinora-\d{8}-\d{6}\.tar\.gz$")
 BACKUP_FOLDERS = ("avatars", "gallery", "verify", "records")
 BACKUP_LOCK = threading.Lock()
@@ -2145,31 +2162,63 @@ def list_backups():
     return sorted(out, key=lambda b: b["name"], reverse=True)
 
 
-def s3_put(key, path):
-    """Uploads one file with AWS Signature V4 (works with S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO)."""
-    import urllib.parse
-    import urllib.request
-    body = Path(path).read_bytes()
+def s3_request(method, key="", query=None, body=b"", content_type="application/gzip", timeout=300):
+    """One signed request (AWS Signature V4: works with S3, Cloudflare R2, Backblaze B2, Wasabi, MinIO)."""
     payload_hash = hashlib.sha256(body).hexdigest()
     host = urllib.parse.urlparse(S3_ENDPOINT).netloc
     now = datetime.datetime.now(datetime.timezone.utc)
     amz_date, day = now.strftime("%Y%m%dT%H%M%SZ"), now.strftime("%Y%m%d")
-    uri = "/" + urllib.parse.quote(S3_BUCKET, safe="") + "/" + urllib.parse.quote(key, safe="/")
-    signed = "content-type;host;x-amz-content-sha256;x-amz-date"
-    canonical = "\n".join(["PUT", uri, "", "content-type:application/gzip", f"host:{host}",
-                           f"x-amz-content-sha256:{payload_hash}", f"x-amz-date:{amz_date}", "", signed, payload_hash])
+    uri = "/" + urllib.parse.quote(S3_BUCKET, safe="") + ("/" + urllib.parse.quote(key, safe="/") if key else "")
+    qs = "&".join(f"{urllib.parse.quote(k, safe='-_.~')}={urllib.parse.quote(str(v), safe='-_.~')}"
+                  for k, v in sorted((query or {}).items()))
+    heads = {"host": host, "x-amz-content-sha256": payload_hash, "x-amz-date": amz_date}
+    if method == "PUT":
+        heads["content-type"] = content_type
+    signed = ";".join(sorted(heads))
+    canonical = "\n".join([method, uri, qs] + [f"{k}:{heads[k]}" for k in sorted(heads)] + ["", signed, payload_hash])
     scope = f"{day}/{S3_REGION}/s3/aws4_request"
     to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical.encode()).hexdigest()])
     k = hmac.new(("AWS4" + S3_SECRET).encode(), day.encode(), hashlib.sha256).digest()
     for part in (S3_REGION, "s3", "aws4_request"):
         k = hmac.new(k, part.encode(), hashlib.sha256).digest()
     sig = hmac.new(k, to_sign.encode(), hashlib.sha256).hexdigest()
-    req = urllib.request.Request(S3_ENDPOINT + uri, data=body, method="PUT", headers={
-        "Content-Type": "application/gzip", "x-amz-content-sha256": payload_hash, "x-amz-date": amz_date,
-        "Authorization": f"AWS4-HMAC-SHA256 Credential={S3_KEY_ID}/{scope}, SignedHeaders={signed}, Signature={sig}"})
-    with urllib.request.urlopen(req, timeout=300) as r:
+    headers = {h: v for h, v in heads.items() if h != "host"}
+    headers["Authorization"] = f"AWS4-HMAC-SHA256 Credential={S3_KEY_ID}/{scope}, SignedHeaders={signed}, Signature={sig}"
+    req = urllib.request.Request(S3_ENDPOINT + uri + ("?" + qs if qs else ""), data=body if method == "PUT" else None,
+                                 method=method, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # https or this computer only. nosec B310
         if r.status not in (200, 201):
             raise RuntimeError(f"storage answered {r.status}")
+        return r.read()
+
+
+def s3_put(key, path):
+    s3_request("PUT", key, body=Path(path).read_bytes())
+
+
+def s3_newest_backup():
+    """Name of the newest backup in cloud storage, or None."""
+    xml = s3_request("GET", query={"list-type": "2", "prefix": "clinora-backups/"}, timeout=60).decode(errors="ignore")
+    names = [n for n in re.findall(r"<Key>clinora-backups/([^<]+)</Key>", xml) if BACKUP_NAME_RE.match(n)]
+    return max(names) if names else None
+
+
+def cloud_restore_if_empty():
+    """Free hosting (e.g. Render free plan) starts every deploy with an empty disk. If cloud backups are set up
+    and there is no database yet, bring back the newest cloud backup so nothing is lost."""
+    if not (S3_ON and AUTO_RESTORE) or DB_PATH.exists():
+        return
+    try:
+        name = s3_newest_backup()
+        if not name:
+            print("[restore] empty disk, but no cloud backup yet: starting fresh", flush=True)
+            return
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        (BACKUP_DIR / name).write_bytes(s3_request("GET", "clinora-backups/" + name, timeout=300))
+        restore_backup(BACKUP_DIR / name, check_running=False)
+        print(f"[restore] empty disk: brought back {name} from cloud storage", flush=True)
+    except (Exception, SystemExit) as e:
+        print(f"[restore] could not restore from cloud ({type(e).__name__}: {e}); starting fresh", flush=True)
 
 
 def make_backup(reason="auto"):
@@ -2187,7 +2236,7 @@ def make_backup(reason="auto"):
             src.backup(dst)  # SQLite's own online backup: a consistent copy even while people use the site
             if dst.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise RuntimeError("the database copy failed its integrity check")
-            counts = {t: dst.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            counts = {t: dst.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]  # table names come from sqlite_master. nosec B608
                       for (t,) in dst.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
         finally:
             src.close()
@@ -2264,18 +2313,19 @@ def backup_now(conn, d, user):
     return {"started": True}
 
 
-def restore_backup(path):
+def restore_backup(path, check_running=True):
     """python server.py --restore data/backups/clinora-....tar.gz   (stop Clinora first)"""
     import socket
     import tarfile
     src = Path(path)
     if not src.is_file():
         sys.exit(f"File not found: {src}")
-    try:
-        with socket.create_connection(("127.0.0.1", PORT), timeout=1):
-            sys.exit(f"Clinora is still running on port {PORT}. Stop it first (Ctrl+C in its window), then run this again.")
-    except OSError:
-        pass
+    if check_running:
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=1):
+                sys.exit(f"Clinora is still running on port {PORT}. Stop it first (Ctrl+C in its window), then run this again.")
+        except OSError:
+            pass
     allowed = (DB_PATH.name, "manifest.json", "vapid_private.pem", "records.key")
     with tarfile.open(src, "r:gz") as tar:
         members = tar.getmembers()
@@ -2292,7 +2342,7 @@ def restore_backup(path):
         except Exception:
             pass
         keep = DATA_DIR / ("before-restore-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        keep.mkdir(parents=True)
+        keep.mkdir(parents=True, exist_ok=True)
         for f in [DB_PATH, DB_PATH.with_name(DB_PATH.name + "-wal"), DB_PATH.with_name(DB_PATH.name + "-shm")] + \
                  [DATA_DIR / x for x in BACKUP_FOLDERS + (("videos",) if "videos" in {Path(m.name).parts[0] for m in members} else ())]:
             if f.exists():
@@ -2318,7 +2368,7 @@ def launch_check():
     line("✅" if PRODUCTION else "❌", "APP_ENV=production" if PRODUCTION else "APP_ENV is not 'production'",
          "" if PRODUCTION else "Set APP_ENV=production on the live server (turns off demo payments and demo data).")
     line("✅" if PUBLIC_URL.startswith("https://") and "localhost" not in PUBLIC_URL else "❌", f"PUBLIC_URL = {PUBLIC_URL}",
-         "" if PUBLIC_URL.startswith("https://") else "Your real address with https, e.g. https://clinora.in")
+         "" if PUBLIC_URL.startswith("https://") else "Your real address with https, e.g. https://your-domain.in")
     line("✅" if ADMIN_SETUP_CODE else ("❌" if PRODUCTION else "⚠️"), "ADMIN_SETUP_CODE is set" if ADMIN_SETUP_CODE else "ADMIN_SETUP_CODE missing",
          "" if ADMIN_SETUP_CODE else "A secret code needed to create the first admin account, so nobody else can take the dashboard.")
     line("✅" if SUPPORT_EMAIL else "❌", "SUPPORT_EMAIL is set" if SUPPORT_EMAIL else "SUPPORT_EMAIL missing",
@@ -2833,6 +2883,80 @@ def m_family_delete(conn, d, me):
 
 
 # ---------------------------------------------------------------- admin statistics (Clinic Dashboard)
+# ---------------------------------------------------------------- visitor statistics (privacy-friendly)
+# Like Plausible/GoatCounter: no cookies, no IP addresses or browser fingerprints are stored. A visitor is counted
+# once a day by a hash of (random daily salt + IP + browser); the salt lives only in memory and changes every day,
+# so yesterday's visitors can't be linked to today's. Only daily totals are saved. Browsers that send
+# Do-Not-Track or Global-Privacy-Control are not counted at all (checked in the page).
+_SEEN = {"day": None, "salt": b"", "ids": set()}
+_TZ_COUNTRY = {}
+
+
+def _tz_country(tz):
+    if not _TZ_COUNTRY:
+        for f in ("/usr/share/zoneinfo/zone.tab", "/var/db/timezone/zoneinfo/zone.tab"):
+            try:
+                for line in Path(f).read_text().splitlines():
+                    if line and not line.startswith("#"):
+                        cc, _, name = line.split("\t")[:3]
+                        _TZ_COUNTRY[name] = cc
+                break
+            except (OSError, ValueError):
+                continue
+        _TZ_COUNTRY.update({"Asia/Calcutta": "IN", "Asia/Kolkata": "IN"})
+    return _TZ_COUNTRY.get(tz)
+
+
+def record_hit(d, ip, ua, cf_country=""):
+    if too_many("hit", ip, 300, 3600):
+        return {}
+    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    if _SEEN["day"] != day:
+        _SEEN.update(day=day, salt=secrets.token_bytes(16), ids=set())
+    vid = hashlib.sha256(_SEEN["salt"] + ip.encode() + (ua or "")[:300].encode()).hexdigest()[:16]
+    new = vid not in _SEEN["ids"]
+    _SEEN["ids"].add(vid)
+    ev = str(d.get("ev") or "view")[:10]
+    rows = []
+    if ev == "install":
+        rows.append(("install", ""))
+    else:
+        rows.append(("views", ""))
+        page = re.sub(r"[^a-z0-9_-]", "", str(d.get("p") or "home").lower())[:24] or "home"
+        rows.append(("page", page))
+        if d.get("app"):
+            rows.append(("app_open", ""))
+    if new and ev != "install":
+        cc = (cf_country or "").upper()
+        if not re.match(r"^[A-Z]{2}$", cc) or cc in ("XX", "T1"):
+            cc = _tz_country(str(d.get("tz") or "")[:60]) or "??"
+        w = int(d.get("w") or 0) if str(d.get("w") or "0").isdigit() else 0
+        device = "phone" if 0 < w < 700 else "tablet" if w < 1100 and w else "computer"
+        rows += [("visitors", ""), ("country", cc), ("device", device)]
+        ref = urllib.parse.urlparse(str(d.get("ref") or "")[:300]).netloc.lower().removeprefix("www.")
+        own = urllib.parse.urlparse(PUBLIC_URL).netloc.lower().removeprefix("www.")
+        rows.append(("source", re.sub(r"[^a-z0-9.-]", "", ref)[:60] if ref and ref != own else "direct"))
+    with DB_LOCK, connect() as conn:
+        for kind, key in rows:
+            conn.execute("INSERT INTO visits(day, kind, key, n) VALUES(?,?,?,1) "
+                         "ON CONFLICT(day, kind, key) DO UPDATE SET n=n+1", (day, kind, key))
+    return {}
+
+
+def visitor_stats(conn):
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    since = lambda days: (today - datetime.timedelta(days=days - 1)).isoformat()
+    total = lambda kind, days: conn.execute("SELECT COALESCE(SUM(n),0) FROM visits WHERE kind=? AND day>=?",
+                                            (kind, since(days))).fetchone()[0]
+    top = lambda kind, lim: [{"key": k, "n": n} for k, n in conn.execute(
+        "SELECT key, SUM(n) AS s FROM visits WHERE kind=? AND day>=? GROUP BY key ORDER BY s DESC LIMIT ?", (kind, since(30), lim))]
+    per_day = dict(conn.execute("SELECT day, n FROM visits WHERE kind='visitors' AND key='' AND day>=?", (since(14),)).fetchall())
+    return {"today": total("visitors", 1), "d7": total("visitors", 7), "d30": total("visitors", 30),
+            "views30": total("views", 30), "app_opens30": total("app_open", 30), "installs30": total("install", 30),
+            "daily": [per_day.get((today - datetime.timedelta(days=13 - i)).isoformat(), 0) for i in range(14)],
+            "countries": top("country", 12), "devices": top("device", 3), "sources": top("source", 8), "pages": top("page", 8)}
+
+
 def stats_overview(conn, d, user):
     need_admin(user)
     now = now_ms()
@@ -2878,7 +3002,8 @@ def stats_overview(conn, d, user):
         "GROUP BY l.id ORDER BY visits DESC LIMIT 5")]
     cities = [dict(r) for r in conn.execute(
         "SELECT city, COUNT(*) AS n FROM members WHERE city IS NOT NULL AND city!='' GROUP BY LOWER(city) ORDER BY n DESC LIMIT 5")]
-    return {"totals": totals, "series": series, "week_start": start, "top_doctors": top, "cities": cities}
+    return {"totals": totals, "series": series, "week_start": start, "top_doctors": top, "cities": cities,
+            "visitors": visitor_stats(conn)}
 
 
 # ---------------------------------------------------------------- after the visit: prescription and review request
@@ -4604,6 +4729,7 @@ def ready_languages():
 
 
 MAX_MESSAGES = 80
+CHAT_PER_HOUR = int(os.environ.get("CHAT_PER_HOUR", "60"))  # AI chat messages per visitor per hour
 MAX_BODY = 400_000
 
 
@@ -4637,9 +4763,10 @@ TWA_SHA256 = os.environ.get("TWA_SHA256", "").strip()            # signing key f
 
 
 # Content-Security-Policy: the browser only runs scripts from our own page (with the per-load nonce) and the
-# few services we use, so injected <script> or onclick=... code is blocked even if something slipped through.
-CSP_PAGE = ("default-src 'self'; script-src 'self' 'nonce-{n}' https://unpkg.com https://accounts.google.com https://checkout.razorpay.com; "
-            "style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com; img-src 'self' data: blob: https:; "
+# few services we use (exact files, not whole sites: see docs/security-audit.md), so injected <script> or onclick=... code is blocked even if something slipped through.
+CSP_PAGE = ("default-src 'self'; script-src 'self' 'nonce-{n}' https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js "
+            "https://accounts.google.com/gsi/ https://checkout.razorpay.com; "
+            "style-src 'self' 'unsafe-inline' https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css https://accounts.google.com/gsi/; img-src 'self' data: blob: https:; "
             "font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: mediastream:; worker-src 'self' blob:; "
             "child-src 'self' blob:; frame-src https://accounts.google.com https://*.razorpay.com; object-src 'none'; base-uri 'self'; "
             "form-action 'self' https:; frame-ancestors 'none'; manifest-src 'self'")
@@ -4658,6 +4785,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin-allow-popups")  # other sites can't reach this window
         self.send_header("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(self), payment=(self)")
         if PUBLIC_URL.startswith("https://"):
             self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -5023,6 +5151,13 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:
                 return self.send_json(e.status, {"error": str(e)})
+        if path == "/api/hit":  # anonymous visit counter (see record_hit)
+            try:
+                data = self.read_json(2_000)
+                return self.send_json(200, record_hit(data if isinstance(data, dict) else {}, self.client_ip(),
+                                                      self.headers.get("User-Agent") or "", self.headers.get("CF-IPCountry") or ""))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
         if path == "/api/medfind":
             try:
                 data = self.read_json(2_000)
@@ -5102,12 +5237,19 @@ class Handler(SimpleHTTPRequestHandler):
                 if isinstance(e, ProviderError):
                     print("Payment provider error:", e)
                     return self.send_json(502, {"error": "The payment provider didn't respond correctly. Please try again."})
-                raise
+                # Anything unexpected: full details go to the server log only, the visitor gets a plain message
+                # (no stack traces or file paths leak to the browser).
+                import traceback
+                print(f"[error] {self.command} {path}: {type(e).__name__}\n{traceback.format_exc()}", flush=True)
+                return self.send_json(500, {"error": "Something went wrong on our side. Please try again."})
         if not path.startswith("/api/chat"):
             return self.send_json(404, {"error": "not found"})
         if client is None:
             return self.send_json(503, {"code": "ai_unavailable",
                                         "error": "Our AI assistant is taking a short break. I'll help you with quick replies instead."})
+        if too_many("chat", self.client_ip(), CHAT_PER_HOUR, 3600):  # protects the AI bill from scripted abuse
+            return self.send_json(429, {"code": "ai_busy",
+                                        "error": "You've sent a lot of messages. Please wait a little and try again."})
         length = int(self.headers.get("Content-Length") or 0)
         if length <= 0 or length > MAX_BODY:
             return self.send_json(413, {"error": "Message too large."})
@@ -5334,6 +5476,7 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"[{i}/{len(wanted)}] {code}: FAILED - {e}")
         sys.exit(0)
+    cloud_restore_if_empty()
     init_db()
     print("Database:", DB_PATH)
     print(f"Clinora AI running at http://localhost:{PORT}")
@@ -5351,4 +5494,15 @@ if __name__ == "__main__":
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=backup_loop, daemon=True).start()
     print("Backups:", f"every {BACKUP_EVERY_H:g} h, keeping {BACKUP_KEEP}, in {BACKUP_DIR}" + (" + cloud copy" if S3_ON else " (this computer/disk only)"))
+    if S3_ON and BACKUP_ON_SHUTDOWN:
+        import signal
+
+        def _last_backup(signum, frame):
+            # Hosts send SIGTERM before a redeploy or restart; save everything to the cloud first.
+            try:
+                make_backup("shutdown")
+            except Exception:
+                pass
+            os._exit(0)
+        signal.signal(signal.SIGTERM, _last_backup)
     ThreadingHTTPServer((os.environ.get("HOST", "127.0.0.1"), PORT), Handler).serve_forever()

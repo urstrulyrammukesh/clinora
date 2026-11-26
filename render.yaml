@@ -20,7 +20,7 @@ services:
         value: production
       - key: DATA_DIR            # database, profile photos and work photos live on the disk below
         value: /var/data
-      - key: PUBLIC_URL          # e.g. https://clinora.in (your domain, with https)
+      - key: PUBLIC_URL          # e.g. https://your-domain.in (your domain, with https)
         sync: false
       - key: SUPPORT_EMAIL       # shown on the Privacy, Terms and Delete-account pages
         sync: false
@@ -73,6 +73,10 @@ services:
       - key: BACKUP_S3_KEY_ID
         sync: false
       - key: BACKUP_S3_SECRET
+        sync: false
+      - key: BACKUP_EVERY_HOURS  # 1 on free hosting; the default 24 is fine with a disk
+        sync: false
+      - key: CHAT_PER_HOUR       # AI chat messages per visitor per hour (default 60)
         sync: false
       - key: WHATSAPP_TOKEN
         sync: false

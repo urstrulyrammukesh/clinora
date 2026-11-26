@@ -19,8 +19,20 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install
-        run: pip install -r requirements.txt pytest
+        run: pip install -r requirements.txt pytest coverage bandit pip-audit
       - name: Check the code compiles
         run: python -m py_compile server.py
-      - name: Run tests
+      - name: Run tests (measuring coverage)
+        env:
+          CLINORA_COVERAGE: "1"
         run: pytest -q tests
+      - name: Coverage report
+        run: |
+          coverage combine -q
+          coverage report | tail -1
+          echo "### Test coverage: $(coverage report --format=total)% of server.py" >> "$GITHUB_STEP_SUMMARY"
+          coverage report --fail-under=50
+      - name: Security scan (Bandit, high severity fails the build)
+        run: bandit -q -lll server.py
+      - name: Known-vulnerable packages (pip-audit)
+        run: pip-audit -r requirements.txt

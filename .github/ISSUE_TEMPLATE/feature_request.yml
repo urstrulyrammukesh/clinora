@@ -1,0 +1,29 @@
+name: 💡 Feature idea
+description: Suggest something that would help patients, doctors or clinics
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is it for?
+      options:
+        - Patients
+        - Doctors
+        - Clinic staff / admins
+        - Everyone
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      placeholder: "Patients in villages can't ... so they ..."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How could Clinora solve it? Sketches and examples welcome.
+    validations:
+      required: true

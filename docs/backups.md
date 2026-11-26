@@ -70,6 +70,26 @@ Restart Clinora, open the Clinic Dashboard and tap **💾 Back up now**. "Cloud 
 
 ---
 
+## Free hosting: keep your data across deploys
+
+On Render's **free plan** (and similar hosts) the disk is wiped on every deploy and restart. With the cloud copy above turned on, Clinora handles that by itself:
+
+1. **When the host stops Clinora** (a redeploy, a restart, the free plan going to sleep), it makes one last backup and uploads it. Hosts send a stop signal (`SIGTERM`) first, so this happens before the disk is wiped.
+2. **When Clinora starts on an empty disk**, it downloads the newest cloud backup and restores it before opening the doors.
+
+So patients, doctors, bookings and records survive deploys **for free**. Add on Render → your service → **Environment**:
+
+| Key | Value |
+|---|---|
+| `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_KEY_ID`, `BACKUP_S3_SECRET` | from Option A or B above |
+| `BACKUP_EVERY_HOURS` | `1` (on free hosting, so at most an hour is at risk if the server crashes instead of stopping) |
+
+Turn these off only if you have a reason: `BACKUP_AUTO_RESTORE=0`, `BACKUP_ON_SHUTDOWN=0`.
+
+The log shows `[restore] empty disk: brought back clinora-….tar.gz from cloud storage` when it worked.
+
+> The paid plan with a disk ($7/month on Render) is still the most solid choice for real patients: no wiping at all, and the cloud copy becomes a true off-site backup.
+
 ## Restore a backup
 
 Only do this if data was lost or broken.

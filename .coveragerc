@@ -1,0 +1,5 @@
+[run]
+source = .
+include = server.py
+data_file = .coverage
+sigterm = true

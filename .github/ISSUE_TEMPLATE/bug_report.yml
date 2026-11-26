@@ -1,0 +1,49 @@
+name: 🐞 Bug report
+description: Something in Clinora doesn't work as it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make Clinora better!
+        **Found a security problem?** Please don't post it here: see [SECURITY.md](https://github.com/urstrulyrammukesh/clinora/blob/main/SECURITY.md) to report it privately.
+        **Never paste real patient data, passwords or keys** in an issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see it
+      placeholder: |
+        1. Open the website on a phone
+        2. Tap "Book doctor"
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where?
+      options:
+        - Website on a computer
+        - Website on a phone
+        - Installed phone app
+        - Doctor / clinic dashboard
+        - WhatsApp assistant
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 131 on Android, Safari on iPhone 15...
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (optional)
+      description: Drag a picture here. Hide any personal details first.

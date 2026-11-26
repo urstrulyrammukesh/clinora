@@ -2,7 +2,7 @@
 
 Clinora already has the buttons and all the sign-in code. Each button switches on as soon as you add its keys to the `.env` file and restart the server. Until then it shows "coming soon", and email login always works.
 
-**Before you start:** these companies only allow sign-in on a real web address with **https**, not on `localhost`. Do this once Clinora is live, for example at `https://clinora.in`, and set `PUBLIC_URL=https://clinora.in` in `.env`.
+**Before you start:** these companies only allow sign-in on a real web address with **https**, not on `localhost`. Do this once Clinora is live, for example at `https://your-domain.in`, and set `PUBLIC_URL=https://your-domain.in` in `.env`.
 
 In every step below, replace `https://YOUR-DOMAIN` with your real address.
 

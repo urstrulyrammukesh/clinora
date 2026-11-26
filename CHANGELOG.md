@@ -2,6 +2,24 @@
 
 All notable changes to Clinora. Dates are when the work landed on `main`.
 
+## [1.1.0] – 2026-11-27
+
+Security audit release. Report: [docs/security-audit.md](docs/security-audit.md) · threat model: [docs/threat-model.md](docs/threat-model.md)
+
+### Security
+- Scripts from other sites are now allowed **by exact file**, not whole sites (an injected unpkg.com script would have run before)
+- **Rate limit on the AI chat** (60 messages per visitor per hour) to stop "denial of wallet" abuse
+- Fixed 8 known vulnerabilities in packages pulled in by `pywebpush` (`aiohttp`, `multidict`)
+- Unexpected errors return a plain message; details stay in the server log
+- `Cross-Origin-Opener-Policy` header; https-only backup storage; only web addresses for outgoing requests
+- Rate-limit tables can no longer grow without end
+- CI now also runs Bandit, pip-audit and measures test coverage (55%)
+
+### New
+- **Visitor statistics** for admins: visitors per day, countries, devices, where they came from, app opens and installs. Anonymous: no cookies, no IP addresses stored, Do-Not-Track respected
+- **Keeps data on free hosting**: a last cloud backup when the server stops, automatic restore when it starts on an empty disk
+- Demo GIF, issue and pull-request templates, CONTRIBUTING guide, custom-domain guide
+
 ## [1.0.0] – 2026-11-27
 
 The first complete version: live at **https://clinora-cwxu.onrender.com**.

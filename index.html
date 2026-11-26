@@ -3431,6 +3431,16 @@ function rxShow(out){const box=$('#rxBox');if(!box)return;
 /* ================= ADMIN STATISTICS ================= */
 function stBars(arr,label){const max=Math.max(1,...arr),w=200/arr.length;
   return `<svg viewBox="0 0 200 70" role="img" aria-label="${esc(label)} per week, last 8 weeks: ${arr.join(', ')}">${arr.map((v,i)=>`<rect x="${i*w+3}" y="${58-50*v/max}" width="${w-6}" height="${Math.max(1,50*v/max)}" rx="2"><title>${v}</title></rect><text x="${i*w+w/2}" y="68" text-anchor="middle">${v}</text>`).join('')}</svg>`}
+function stVisitors(v){if(!v)return'';const tile=(n,l)=>`<div class="st-tile"><b>${n}</b><span>${l}</span></div>`;
+  let dn;try{dn=new Intl.DisplayNames([navigator.language||'en'],{type:'region'})}catch{}
+  const flag=c=>/^[A-Z]{2}$/.test(c)?String.fromCodePoint(...[...c].map(x=>127397+x.charCodeAt(0))):'🌐';
+  const name=c=>c==='??'?'Unknown':(dn&&dn.of(c))||c;
+  const list=(rows,fmt)=>rows.length?rows.map(r=>`<div>${fmt(r)} <span style="color:var(--mute)">· ${r.n}</span></div>`).join(''):'<div style="color:var(--mute)">No visits yet</div>';
+  return `<h5 style="margin:12px 0 6px">🌍 Visitors <span style="font-weight:400;color:var(--mute)">(anonymous: no cookies, no IP addresses kept)</span></h5>
+    <div class="st-tiles">${tile(v.today,'visitors today')}${tile(v.d7,'last 7 days')}${tile(v.d30,'last 30 days')}${tile(v.views30,'page views · 30 days')}${tile(v.app_opens30,'app opens · 30 days')}${tile(v.installs30,'app installs · 30 days')}</div>
+    <div class="st-charts"><div class="st-chart"><h5>👥 Visitors · per day (14 days)</h5>${stBars(v.daily,'Visitors')}</div></div>
+    <div class="two" style="margin-top:8px;font-size:13px"><div><b>Countries · 30 days</b>${list(v.countries,r=>flag(r.key)+' '+esc(name(r.key)))}</div>
+      <div><b>Came from</b>${list(v.sources,r=>esc(r.key==='direct'?'Direct / app / WhatsApp':r.key))}<br><b>Devices</b>${list(v.devices,r=>({phone:'📱',tablet:'📟',computer:'💻'}[r.key]||'')+' '+esc(r.key))}</div></div>`}
 async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin=DB.me&&DB.me.role==='admin';sec.style.display=admin?'block':'none';if(!admin)return;
   let s;try{s=(await api('/api/stats/overview')).created}catch(e){sec.innerHTML='<h4>📊 STATISTICS</h4><p class="red">'+esc(e.message)+'</p>';return}
   const T=s.totals,tile=(n,l)=>`<div class="st-tile"><b>${n??'–'}</b><span>${l}</span></div>`;
@@ -3439,6 +3449,7 @@ async function renderStats(){const sec=$('#statsSec');if(!sec)return;const admin
       ${tile(T.active_7d,'active this week')}${tile(T.visits_upcoming,'upcoming visits')}${tile(T.visits_done,'visits done')}${tile(T.visits_cancelled,'cancelled')}
       ${tile(T.messages,'messages')}${tile(T.reviews+(T.avg_rating?` · ${T.avg_rating}★`:''),'reviews')}${tile(T.reminders_on,'reminders on')}${tile(T.push_devices,'phones with alerts')}
       ${tile(T.confirmed+' / '+(T.patients+T.doctors),'emails confirmed')}${tile(T.reports_open,'open reports')}</div>
+    ${stVisitors(s.visitors)}
     <div class="st-charts">${[['signups','🆕 Sign-ups'],['visits','📅 Visits booked'],['messages','💬 Messages'],['reviews','⭐ Reviews']].map(([k,l])=>`<div class="st-chart"><h5>${l} · per week</h5>${stBars(s.series[k],l)}</div>`).join('')}</div>
     <div class="two" style="margin-top:10px;font-size:13px"><div><b>Most booked doctors</b>${s.top_doctors.length?s.top_doctors.map(d=>`<div>${esc(d.name)} <span style="color:var(--mute)">· ${esc(d.city||'')} · ${d.visits}</span></div>`).join(''):'<div style="color:var(--mute)">No bookings yet</div>'}</div>
       <div><b>Top cities</b>${s.cities.length?s.cities.map(c=>`<div>${esc(c.city)} <span style="color:var(--mute)">· ${c.n}</span></div>`).join(''):'<div style="color:var(--mute)">No data yet</div>'}</div></div>
@@ -4129,6 +4140,15 @@ go(location.hash.slice(1)||'home');
   btn.onclick=e=>{e.stopPropagation();panel.classList.toggle('on')};
   document.addEventListener('click',e=>{if(!e.target.closest('#wallPanel')&&e.target!==btn)panel.classList.remove('on')});
   window.applyWall=apply;apply()})();
+/* Anonymous visit counter: no cookies, nothing stored in the browser; skipped when Do-Not-Track / GPC is on */
+(function(){if(navigator.doNotTrack==='1'||navigator.globalPrivacyControl||/localhost|127\.0\.0\.1/.test(location.hostname)&&!/[?&]count=1/.test(location.search))return;
+  let last='';const send=(ev)=>{const p=(location.hash.slice(1).split(/[/?]/)[0]||'home').toLowerCase();if(!ev&&p===last)return;last=p;
+    let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch{}
+    const app=document.documentElement.classList.contains('app')?1:0;
+    fetch('/api/hit',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
+      body:JSON.stringify({ev:ev||'view',p,tz,app,w:Math.round(screen.width),ref:ev?'':document.referrer})}).catch(()=>{})};
+  setTimeout(()=>send(),1200);addEventListener('hashchange',()=>setTimeout(()=>send(),300));
+  addEventListener('appinstalled',()=>send('install'))})();
 </script>
 <div id="appSplash" aria-hidden="true"><div class="lg">✚</div><b>Clinora</b><small>Your health, one tap away</small></div>
 <div id="appTabs" role="tablist" aria-label="App sections">

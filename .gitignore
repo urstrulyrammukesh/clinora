@@ -33,3 +33,8 @@ data/before-restore-*/
 data/vapid_private.pem
 data/records/
 data/records.key
+
+# Test coverage data
+.coverage
+.coverage.*
+htmlcov/

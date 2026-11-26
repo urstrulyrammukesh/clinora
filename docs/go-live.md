@@ -1,6 +1,6 @@
 # Put Clinora live on the internet
 
-This takes about **1–2 hours** the first time. At the end Clinora runs 24×7 at your own address, for example `https://clinora.in`, with HTTPS.
+This takes about **1–2 hours** the first time. At the end Clinora runs 24×7 at your own address, for example `https://your-domain.in`, with HTTPS.
 
 **What you need**
 - This GitHub repo (done ✅).
@@ -25,7 +25,7 @@ Before real patients, also take **`docs/legal-review.md`** to a lawyer or mentor
 
 ## Step 1: Buy a domain (10 min)
 
-1. Check a name at **https://www.namecheap.com**, **https://www.hostinger.in** or **https://www.cloudflare.com/products/registrar/** (cheapest renewals). Try `clinora.in`, `clinora.health`, `getclinora.com`, `clinora.app`.
+1. **First pick a name that's safe to use**: [docs/custom-domain.md](custom-domain.md) (another company already runs `clinora.in`, so check for clashes before you buy). Then check it at **https://www.cloudflare.com/products/registrar/** (cheapest renewals), **https://www.namecheap.com** or **https://www.hostinger.in**.
 2. Buy it for 1 year. Skip extras like "hosting", "email" or "SSL": Render gives HTTPS free.
 
 ## Step 2: Create the server on Render (20 min)
@@ -36,8 +36,8 @@ Before real patients, also take **`docs/legal-review.md`** to a lawyer or mentor
 
 | Setting | What to type |
 |---|---|
-| `PUBLIC_URL` | `https://clinora.in` (your domain, with https, no / at the end) |
-| `SUPPORT_EMAIL` | an email you read, e.g. `support@clinora.in` or your Gmail |
+| `PUBLIC_URL` | `https://your-domain.in` (your domain, with https, no / at the end) |
+| `SUPPORT_EMAIL` | an email you read, e.g. `support@your-domain.in` or your Gmail |
 | `ADMIN_SETUP_CODE` | a long random secret you invent, e.g. `river-mango-7731-quiet`. Write it down. |
 | `ANTHROPIC_API_KEY` | from https://console.anthropic.com (add a few dollars of credit) |
 | `SMTP_*`, `MAIL_FROM` | from `docs/email-setup.md` (Brevo is free) |
@@ -47,8 +47,8 @@ Before real patients, also take **`docs/legal-review.md`** to a lawyer or mentor
 
 ## Step 3: Connect your domain (15 min + waiting)
 
-1. In Render, open the service → **Settings → Custom Domains → Add**: add `clinora.in` and `www.clinora.in`.
-2. Render shows the DNS records to add. Go to where you bought the domain → **DNS settings** and add exactly those records (usually an **A** record for `clinora.in` and a **CNAME** for `www` pointing to `clinora-xxxx.onrender.com`). Delete any old "parking" A records.
+1. In Render, open the service → **Settings → Custom Domains → Add**: add `your-domain.in` and `www.clinora.in`.
+2. Render shows the DNS records to add. Go to where you bought the domain → **DNS settings** and add exactly those records (usually an **A** record for `your-domain.in` and a **CNAME** for `www` pointing to `clinora-xxxx.onrender.com`). Delete any old "parking" A records.
 3. Wait 10 minutes to a few hours. Render then shows ✅ **Verified** and issues the HTTPS certificate by itself.
 
 ## Step 4: Check everything (5 min)
@@ -63,7 +63,7 @@ It lists ✅ ready, ⚠️ recommended, ❌ must fix. Fix every ❌ (in **Enviro
 
 ## Step 5: Create your admin account (2 min)
 
-1. Open `https://clinora.in/#dashboard`.
+1. Open `https://your-domain.in/#dashboard`.
 2. Fill in your name, email, a strong password and the **setup code** from Step 2.
 3. You're the clinic admin. Add doctor logins from the dashboard.
 
@@ -79,9 +79,9 @@ Without the code nobody can create this account, so a stranger can't take over y
 | Payments | the comments at the top of `server.py` | Start with **test keys**, try a payment, then switch to **live** keys. |
 
 **Payment webhooks** (each provider asks for a URL):
-- Stripe: `https://clinora.in/api/pay/webhook`
-- Razorpay: `https://clinora.in/api/pay/razorpay-webhook`
-- PayPal: `https://clinora.in/api/pay/paypal-webhook`
+- Stripe: `https://your-domain.in/api/pay/webhook`
+- Razorpay: `https://your-domain.in/api/pay/razorpay-webhook`
+- PayPal: `https://your-domain.in/api/pay/paypal-webhook`
 
 Put each provider's webhook secret in Environment (`STRIPE_WEBHOOK_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `PAYPAL_WEBHOOK_ID`). The check in Step 4 warns if one is missing or if you're still on test keys.
 
@@ -101,7 +101,7 @@ On your phone, not logged in as admin:
 
 ## Step 8: Tell the world
 
-- Add the site in **Google Search Console** (https://search.google.com/search-console) and submit `https://clinora.in/sitemap.xml`.
+- Add the site in **Google Search Console** (https://search.google.com/search-console) and submit `https://your-domain.in/sitemap.xml`.
 - Put the link on your **LinkedIn**, **GitHub profile** and **portfolio**.
 - Post your launch post (`clinora-launch-kit.md` in your Desktop/github-work folder).
 

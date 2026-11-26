@@ -39,7 +39,10 @@ class Server:
         # TRUST_PROXY: each test "browser" sends its own X-Forwarded-For, like visitors behind Render's proxy
         full_env.update({"DATA_DIR": str(self.data_dir), "PORT": str(self.port), "PYTHONUNBUFFERED": "1", "TRUST_PROXY": "1"}, **(env or {}))
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.proc = subprocess.Popen([sys.executable, str(ROOT / "server.py")], cwd=ROOT, env=full_env,
+        # CLINORA_COVERAGE=1 measures which server lines the tests run (see .coveragerc and the Tests workflow)
+        cmd = [sys.executable, "-m", "coverage", "run", "--parallel-mode", str(ROOT / "server.py")] \
+            if os.environ.get("CLINORA_COVERAGE") == "1" else [sys.executable, str(ROOT / "server.py")]
+        self.proc = subprocess.Popen(cmd, cwd=ROOT, env=full_env,
                                      stdout=open(self.log, "w"), stderr=subprocess.STDOUT)
         for _ in range(100):
             try:

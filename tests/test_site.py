@@ -21,6 +21,17 @@ def test_home_page_csp_and_gzip(server):
     assert c.get("/server.py")[0] == 404 and c.get("/data/sehatdesk.db")[0] == 404 and c.get("/.env")[0] == 404
 
 
+def test_security_audit_fixes(server):
+    """From docs/security-audit.md: outside scripts are allowed by exact file, not whole sites; COOP is set."""
+    s, _, h = server.client().get("/")
+    csp = h["Content-Security-Policy"]
+    script_src = re.search(r"script-src ([^;]+)", csp).group(1).split()
+    assert "https://unpkg.com" not in script_src and "https://accounts.google.com" not in script_src
+    assert "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" in script_src
+    assert h["Cross-Origin-Opener-Policy"] == "same-origin-allow-popups"
+    assert h["X-Frame-Options"] == "DENY" and h["X-Content-Type-Options"] == "nosniff"
+
+
 def test_doctor_page_and_sitemap(server, uniq):
     doc = server.client()
     doc.signup("doctor", "Dr Page", uniq())
@@ -86,3 +97,19 @@ def test_doctor_page_themes(server, uniq):
     assert doc.post("/api/m/page/theme", {"theme": "warm"})[0] == 200
     body = server.client().get(f"/doctor/{lid}")[1]
     assert b"#fff8f1" in body and b"#06080b" not in body
+
+
+def test_anonymous_visitor_stats(server, admin):
+    a, b = server.client(), server.client()
+    a.post("/api/hit", {"p": "home", "tz": "Asia/Kolkata", "w": 390, "ref": "https://www.linkedin.com/feed/"})
+    a.post("/api/hit", {"p": "doctors", "tz": "Asia/Kolkata", "w": 390})  # same visitor, second page
+    b.post("/api/hit", {"p": "home", "tz": "Europe/Berlin", "w": 1440, "app": 1})
+    b.post("/api/hit", {"ev": "install"})
+    v = admin.post("/api/stats/overview")[1]["created"]["visitors"]
+    assert v["today"] >= 2 and v["views30"] >= 3 and v["installs30"] >= 1 and v["app_opens30"] >= 1
+    assert {"key": "linkedin.com", "n": 1} in v["sources"]
+    countries = {c["key"] for c in v["countries"]}
+    assert {"IN", "DE"} <= countries or "??" in countries  # "??" only where the OS has no time-zone table
+    rows = server.db().execute("SELECT * FROM visits").fetchall()
+    assert not any("10." in str(tuple(r)) for r in rows)  # no IP addresses stored
+    assert server.client().post("/api/stats/overview")[0] in (401, 403)
