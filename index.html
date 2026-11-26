@@ -4065,6 +4065,8 @@ async function bookSearch(){const q=$('#bookQ').value.trim();if(!q)return;const 
 
 loadDB();setInterval(()=>{if(!document.hidden)loadDB()},15000);
 document.addEventListener('visibilitychange',()=>{document.documentElement.classList.toggle('paused',document.hidden);if(!document.hidden)loadDB()});
+// if a browser wrongly reports the page as hidden, any touch, scroll or key press un-pauses it
+['pointerdown','keydown','scroll','focus'].forEach(ev=>addEventListener(ev,()=>document.documentElement.classList.remove('paused'),{passive:true,capture:true}));
 go(location.hash.slice(1)||'home');
 
 /* ================= LIGHT / DARK THEME ================= */

@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type": "Feature", "properties": {"name": "Clinora", "description": "Built and launching in Srinagar, Jammu & Kashmir, India", "marker-color": "#14b8a6", "marker-symbol": "hospital"},
+     "geometry": {"type": "Point", "coordinates": [74.7973, 34.0837]}},
+    {"type": "Feature", "properties": {"name": "NIT Srinagar", "description": "Where the founder studies B.Tech Computer Science & Engineering", "marker-color": "#2563eb", "marker-symbol": "college"},
+     "geometry": {"type": "Point", "coordinates": [74.8370, 34.1260]}}
+  ]
+}
