@@ -4692,7 +4692,8 @@ class Handler(SimpleHTTPRequestHandler):
         if _INDEX_CACHE.get("mt") != mt:
             _INDEX_CACHE.update(mt=mt, html=f.read_text(encoding="utf-8"))
         nonce = secrets.token_urlsafe(16)
-        body = _INDEX_CACHE["html"].replace("<script", f'<script nonce="{nonce}"').encode()
+        body = (_INDEX_CACHE["html"].replace("<script", f'<script nonce="{nonce}"')
+                .replace('property="og:image" content="/', f'property="og:image" content="{PUBLIC_URL}/')).encode()  # previews need a full address
         gz = "gzip" in (self.headers.get("Accept-Encoding") or "")
         if gz:
             body = gzip.compress(body, 6)
