@@ -384,6 +384,7 @@ CREATE TABLE IF NOT EXISTS reports(id INTEGER PRIMARY KEY AUTOINCREMENT, reporte
   action TEXT, ts INTEGER NOT NULL, reviewed INTEGER, reviewer TEXT);
 CREATE INDEX IF NOT EXISTS report_target ON reports(target_type, target_id, status);
 CREATE TABLE IF NOT EXISTS blocks(member_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY(member_id, blocked_id));
+CREATE TABLE IF NOT EXISTS email_confirms(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pw_resets(token TEXT PRIMARY KEY, member_id INTEGER NOT NULL, expires INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0);
 """
 
@@ -461,6 +462,9 @@ def init_db():
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
         if "suspended" not in mcols:
             conn.execute("ALTER TABLE members ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
+        if "email_ok" not in mcols:  # accounts made before email confirmation existed count as confirmed
+            conn.execute("ALTER TABLE members ADD COLUMN email_ok INTEGER NOT NULL DEFAULT 0")
+            conn.execute("UPDATE members SET email_ok=1")
         conn.executescript(EXTRA_SCHEMA)
         lcols = {r["name"] for r in conn.execute("PRAGMA table_info(listings)")}
         for col, kind in [("owner", "INTEGER"), ("social", "TEXT"), ("hours", "TEXT"), ("tz", "TEXT"), ("hidden", "INTEGER NOT NULL DEFAULT 0")]:
@@ -844,7 +848,7 @@ def member_for_token(conn, token):
     if not token:
         return None
     row = conn.execute(
-        "SELECT m.id, m.email, m.name, m.kind, m.city, m.online, m.photo_ts FROM member_sessions s JOIN members m ON m.id = s.member_id "
+        "SELECT m.id, m.email, m.name, m.kind, m.city, m.online, m.photo_ts, m.email_ok FROM member_sessions s JOIN members m ON m.id = s.member_id "
         "WHERE s.token = ? AND s.expires > ? AND m.suspended = 0", (token_hash(token), now_ms())).fetchone()
     if not row:
         return None
@@ -864,6 +868,12 @@ def need_member(me, kind=None):
         raise AuthError("Please log in first.", 401)
     if kind and me["kind"] != kind:
         raise AuthError("Only doctor accounts can do this." if kind == "doctor" else "Only patient accounts can do this.")
+
+
+def need_confirmed(me):
+    """Messaging, reviews, uploads, bookings and doctor profiles need a confirmed email: stops fake accounts."""
+    if not me.get("email_ok"):
+        raise AuthError("Please confirm your email first. We sent you a link (check spam too). You can resend it on your Account page.", 403)
 
 
 def my_listing(conn, me):
@@ -909,6 +919,7 @@ def m_signup(conn, d, me, ip):
                        (email, text(d, "name", 80), kind, hash_password(valid_password(d)), now_ms(),
                         text(d, "city", 80, False), now_ms()))
     welcome(conn, cur.lastrowid, kind)
+    send_confirm_email(conn, cur.lastrowid)
     return cur.lastrowid
 
 
@@ -927,6 +938,7 @@ def m_login(conn, d, me, ip):
 def m_profile(conn, d, me):
     """A doctor creates or updates their own public listing."""
     need_member(me, "doctor")
+    need_confirmed(me)
     web = text(d, "web", 200, required=False)
     if web and not web.lower().startswith(("https://", "http://")):
         raise InputError("Website must start with https://")
@@ -966,6 +978,7 @@ def m_fav(conn, d, me):
 
 def m_send(conn, d, me):
     need_member(me)
+    need_confirmed(me)
     to = int(d.get("to") or 0)
     if d.get("listing_id"):
         row = conn.execute("SELECT owner FROM listings WHERE id=?", (int(d["listing_id"]),)).fetchone()
@@ -1081,6 +1094,7 @@ def listing_reviews(conn, lid, me=None):
 
 def m_review(conn, d, me):
     need_member(me)
+    need_confirmed(me)
     lid = int(d.get("listing_id") or 0)
     row = conn.execute("SELECT owner FROM listings WHERE id=?", (lid,)).fetchone()
     if not row:
@@ -1123,6 +1137,7 @@ def m_review_delete(conn, d, me):
 def m_review_reply(conn, d, me):
     """The doctor answers a review once (public), like a business owner reply."""
     need_member(me, "doctor")
+    need_confirmed(me)
     r = conn.execute("SELECT r.listing_id, l.owner FROM reviews r JOIN listings l ON l.id=r.listing_id WHERE r.id=?",
                      (int(d.get("id") or 0),)).fetchone()
     if not r or r["owner"] != me["id"]:
@@ -1140,6 +1155,7 @@ def m_review_reply(conn, d, me):
 
 def m_gallery_add(conn, d, me):
     need_member(me, "doctor")
+    need_confirmed(me)
     lst = my_listing(conn, me)
     if not lst:
         raise InputError("Save your public profile first")
@@ -1436,6 +1452,7 @@ REG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/ .-]{1,29}$")
 
 def m_verify_submit(conn, d, me):
     need_member(me, "doctor")
+    need_confirmed(me)
     lst = my_listing(conn, me)
     if not lst:
         raise InputError("Save your public profile first")
@@ -1580,6 +1597,50 @@ def m_forgot(conn, d, ip):
     return {"sent": True}
 
 
+# ---------------------------------------------------------------- confirm email on sign-up
+CONFIRM_HOURS = 48
+
+
+def send_confirm_email(conn, mid):
+    row = conn.execute("SELECT email, name, email_ok FROM members WHERE id=?", (mid,)).fetchone()
+    if not row or row["email_ok"] or row["email"].endswith("@users.clinora.invalid"):
+        return
+    token = secrets.token_urlsafe(32)
+    conn.execute("DELETE FROM email_confirms WHERE expires < ? OR member_id=?", (now_ms(), mid))
+    conn.execute("INSERT INTO email_confirms VALUES(?,?,?)", (token_hash(token), mid, now_ms() + CONFIRM_HOURS * 3600_000))
+    link = f"{PUBLIC_URL}/#confirm/{token}"
+    first = html.escape((row["name"] or "there").split()[0])
+    send_email(row["email"], "Confirm your email for Clinora",
+               f"Hi {first},\n\nWelcome to Clinora! Please confirm your email by opening this link (it works for {CONFIRM_HOURS} hours):\n{link}\n\n"
+               "If you didn't create a Clinora account, ignore this email.\n\nClinora",
+               f"""<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:auto;padding:24px;color:#0f172a">
+<h2 style="color:#0d9488;margin:0 0 12px">Confirm your email</h2><p>Hi {first},</p><p>Welcome to Clinora! Tap the button to confirm this is your email.</p>
+<p style="margin:26px 0"><a href="{link}" style="background:#0d9488;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Confirm my email</a></p>
+<p style="color:#475569;font-size:14px">This link works for {CONFIRM_HOURS} hours. If you didn't create a Clinora account, ignore this email.</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:28px">Clinora · find doctors, book visits</p></div>""")
+
+
+def m_confirm_resend(conn, d, me):
+    need_member(me)
+    if me.get("email_ok"):
+        return {"already": True}
+    if too_many("confirm", str(me["id"]), 3, 3600):
+        raise AuthError("We already sent a few links. Please check your inbox and spam folder, or try again in an hour.", 429)
+    send_confirm_email(conn, me["id"])
+    return {"sent": True}
+
+
+def m_confirm(conn, d):
+    token = str(d.get("token") or "")
+    row = conn.execute("SELECT member_id, expires FROM email_confirms WHERE token=?", (token_hash(token),)).fetchone() if token else None
+    if not row or row["expires"] < now_ms():
+        raise AuthError("This confirmation link has expired or was already used. Log in and tap Resend on your Account page.", 400)
+    conn.execute("UPDATE members SET email_ok=1 WHERE id=?", (row["member_id"],))
+    conn.execute("DELETE FROM email_confirms WHERE member_id=?", (row["member_id"],))
+    notify(conn, row["member_id"], "security", "✅ Email confirmed", "You can now message doctors, write reviews and book visits.", "account")
+    return row["member_id"]
+
+
 def m_reset(conn, d):
     token = str(d.get("token") or "")
     row = conn.execute("SELECT member_id, expires, used FROM pw_resets WHERE token=?", (token_hash(token),)).fetchone() if token else None
@@ -1587,7 +1648,7 @@ def m_reset(conn, d):
         raise AuthError("This reset link has expired or was already used. Please ask for a new one.", 400)
     new = valid_password(d, "new")
     mid = row["member_id"]
-    conn.execute("UPDATE members SET pw=? WHERE id=?", (hash_password(new), mid))
+    conn.execute("UPDATE members SET pw=?, email_ok=1 WHERE id=?", (hash_password(new), mid))
     conn.execute("UPDATE pw_resets SET used=1 WHERE member_id=?", (mid,))
     conn.execute("DELETE FROM member_sessions WHERE member_id=?", (mid,))  # log out everywhere
     notify(conn, mid, "security", "Your password was reset",
@@ -1632,11 +1693,11 @@ def _social_member(conn, prov, pid, email, name, kind):
     if email:
         row = conn.execute("SELECT id FROM members WHERE email=?", (email,)).fetchone()
         if row:  # the provider confirmed this email, so it's the same person: link the accounts
-            conn.execute("UPDATE members SET provider=COALESCE(provider, ?), provider_id=COALESCE(provider_id, ?) WHERE id=?",
+            conn.execute("UPDATE members SET provider=COALESCE(provider, ?), provider_id=COALESCE(provider_id, ?), email_ok=1 WHERE id=?",
                          (prov, pid, row["id"]))
             return row["id"]
     kind = kind if kind in MEMBER_KINDS else "patient"
-    cur = conn.execute("INSERT INTO members(email,name,kind,pw,created,last_seen,provider,provider_id) VALUES(?,?,?,?,?,?,?,?)",
+    cur = conn.execute("INSERT INTO members(email,name,kind,pw,created,last_seen,provider,provider_id,email_ok) VALUES(?,?,?,?,?,?,?,?,1)",
                        (email or f"{prov}-{pid}@users.clinora.invalid", (str(name or "").strip() or "Clinora user")[:80], kind, "!",
                         now_ms(), now_ms(), prov, pid))
     welcome(conn, cur.lastrowid, kind)
@@ -1724,6 +1785,7 @@ def looks_like_video(head, mime):
 
 def video_upload(conn, me, mime, raw, lid, caption):
     need_member(me)
+    need_confirmed(me)
     if mime not in VIDEO_TYPES:
         raise InputError("Please choose an MP4, MOV or WebM video.")
     if len(raw) > MAX_VIDEO_BYTES:
@@ -2205,7 +2267,7 @@ MEMBER_ROUTES = {"/api/m/me": lambda conn, d, me: None, "/api/m/profile": m_prof
                  "/api/m/video/moderate": m_video_moderate, "/api/m/video/delete": m_video_delete,
                  "/api/m/verify/submit": m_verify_submit, "/api/m/reminder/save": m_reminder_save,
                  "/api/m/reminder/toggle": m_reminder_toggle, "/api/m/reminder/delete": m_reminder_delete,
-                 "/api/m/report": m_report, "/api/m/block": m_block}
+                 "/api/m/report": m_report, "/api/m/block": m_block, "/api/m/confirm/resend": m_confirm_resend}
 
 
 
@@ -3400,6 +3462,13 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json(200, {"me": None, "deleted": True}, cookie=self.member_cookie("", 0))
                 if path == "/api/m/forgot":
                     return self.send_json(200, m_forgot(conn, data, ip))
+                if path == "/api/m/confirm":
+                    mid = m_confirm(conn, data)
+                    me = member_for_token(conn, self.member_token())
+                    if me and me["id"] == mid:
+                        return self.send_json(200, member_state(conn, me))
+                    token = new_member_session(conn, mid)  # opened the link on another device: log in there
+                    return self.send_json(200, member_state(conn, member_for_token(conn, token)), cookie=self.member_cookie(token, 30 * 86_400))
                 if path == "/api/m/reset":
                     mid = m_reset(conn, data)
                     token = new_member_session(conn, mid)  # logged in on this device with the new password

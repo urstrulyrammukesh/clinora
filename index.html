@@ -1526,6 +1526,8 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
   if(v==='reminders'){window.__openRem=true;v='account'}
   if(/^reset\//.test(String(v))){window.__resetToken=String(v).slice(6);history.replaceState(null,'',location.search+'#account');v='account'}
+  if(/^confirm\//.test(String(v))){const tok=String(v).slice(8);history.replaceState(null,'',location.search+'#account');v='account';
+    setTimeout(async()=>{try{await mapi('confirm',{token:tok});acctNotice('✅ Your email is confirmed. Welcome to Clinora!')}catch(e){acctNotice(e.message)}},50)}
   if(/^account\/login-/.test(String(v))){pendingNotice=v.endsWith('soon')?'That sign-in option is coming soon. Please use email for now.':'Sign-in didn\'t finish. Please try again, or use email.';v='account'}
   if(!['home','nearby','dashboard','directory','books','account','food'].includes(v)) v='home';
   $$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-'+v));
@@ -2839,7 +2841,10 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     wireSocial();return}
   const doc=me.kind==='doctor',L=MEM.listing,soc=(L&&L.social)||{};
   const favs=(MEM.favs||[]).map(id=>regs().find(x=>x.id===id)).filter(Boolean).map(regToPlace);
-  box.innerHTML=`<div class="acct-head"><button class="lc-av ph-edit" id="phBtn" style="--avh:${hash(me.name)%360}" title="Change profile photo" aria-label="Change profile photo">${esc(initials(me.name))}${avImg(me.id,me.photo_ts)}<span class="cam">${ico('cam',13)}</span></button>
+  box.innerHTML=`${pendingNotice?`<div class="card" style="padding:14px 18px;margin-bottom:14px;border-color:var(--teal)">${esc(pendingNotice)}</div>`:''}
+    ${me.email_ok?'':`<div class="card" id="cfBox" style="padding:14px 18px;margin-bottom:14px;border-color:var(--amber)">📧 <b>Please confirm your email.</b> We sent a link to <b>${esc(me.email)}</b> (check spam too). Until then you can browse, but not message, review or book.
+      <div style="margin-top:8px"><button class="btn ghost sm" type="button" id="cfResend">Send the link again</button> <span id="cfMsg" style="font-size:13px"></span></div></div>`}
+    <div class="acct-head"><button class="lc-av ph-edit" id="phBtn" style="--avh:${hash(me.name)%360}" title="Change profile photo" aria-label="Change profile photo">${esc(initials(me.name))}${avImg(me.id,me.photo_ts)}<span class="cam">${ico('cam',13)}</span></button>
       <input type="file" id="phFile" accept="image/*" hidden>
       <div><h3>${esc(me.name)}</h3><div style="color:var(--mute);font-size:14px">${doc?'Doctor account':'Patient account'} · ${esc(me.email)}</div>
         <div class="ph-menu"><button type="button" id="phChange">${me.photo_ts?'Change photo':'Add profile photo'}</button>${me.photo_ts?'<button type="button" id="phRemove">Remove photo</button>':''}</div><div id="phMsg" style="font-size:13px;margin-top:6px"></div></div>
@@ -2874,6 +2879,8 @@ function renderAccount(){const box=$('#acctBox');if(!box)return;const me=MEM.me;
     <div class="inbox"><div class="threads" id="thrList">${(MEM.threads||[]).length?MEM.threads.map(t=>`<div class="thr ${openThread===t.with?'on':''}" data-thr="${t.with}"><div class="lc-av" style="--avh:${hash(t.name)%360}">${esc(initials(t.name))}${avImg(t.with,t.photo_ts)}</div><div style="min-width:0"><b>${esc(t.name)}</b><small>${t.mine?'You: ':''}${esc(t.last)}</small></div>${t.unread?`<em>${t.unread}</em>`:''}</div>`).join('')
       :`<div class="empty-note">${doc?'When patients message you, they appear here.':'Message a doctor from their card to start a chat.'}</div>`}</div>
       <div class="conv" id="conv"><div class="empty-note" style="margin:auto">Pick a conversation.</div></div></div>`;
+  pendingNotice='';
+  const cf=$('#cfResend');if(cf)cf.onclick=async()=>{try{await mapi('confirm/resend');$('#cfMsg').innerHTML='<span class="teal">✅ Sent. Check your inbox.</span>'}catch(e){$('#cfMsg').innerHTML='<span class="red">'+esc(e.message)+'</span>'}};
   const openPick=()=>$('#phFile').click();$('#phBtn').onclick=openPick;$('#phChange').onclick=openPick;
   $('#phFile').onchange=e=>pickPhoto(e.target.files[0]);
   if($('#phRemove'))$('#phRemove').onclick=async()=>{if(!confirm('Remove your profile photo?'))return;try{await mapi('photo',{remove:true});renderAccount()}catch(e){alert(e.message)}};
