@@ -61,6 +61,6 @@ I wrote these up as a **STRIDE threat model** ([`docs/threat-model.md`](https://
 
 ## What's next
 
-Two-factor login for clinic admins, a custom domain behind Cloudflare, and a pilot with real clinics.
+Two-factor login for clinic staff is now done (authenticator app + recovery codes). Next: a custom domain behind Cloudflare, and a pilot with real clinics.
 
 If you're working on health tech or security, I'd love feedback: the code is open, and there's a private way to report vulnerabilities in [SECURITY.md](https://github.com/urstrulyrammukesh/clinora/blob/main/SECURITY.md).

@@ -81,7 +81,7 @@ I audited my own app the way an outside tester would: automated scanners first, 
 - CodeQL: no alerts
 
 ## Still to do (needs money or accounts, tracked in `docs/go-live.md`)
-- Two-factor login for clinic admins
+- ~~Two-factor login for clinic admins~~ ✅ done in 1.2.0 (TOTP + recovery codes, issue #6)
 - A paid penetration test before handling real patient data at scale
 - Web Application Firewall rules (Cloudflare) once on a custom domain
 

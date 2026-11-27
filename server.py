@@ -484,6 +484,11 @@ def init_db():
         for col in ("provider", "provider_id"):
             if col not in mcols:
                 conn.execute(f"ALTER TABLE members ADD COLUMN {col} TEXT")
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+        for col, kind in [("totp_on", "INTEGER NOT NULL DEFAULT 0"), ("totp_secret", "TEXT"), ("totp_pending", "TEXT"),
+                          ("totp_recovery", "TEXT"), ("totp_last", "INTEGER NOT NULL DEFAULT 0")]:
+            if col not in ucols:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
         if "suspended" not in mcols:
             conn.execute("ALTER TABLE members ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
         for col, kind in [("phone", "TEXT"), ("phone_ok", "INTEGER NOT NULL DEFAULT 0"), ("phone_code", "TEXT"), ("phone_code_exp", "INTEGER"),
@@ -563,7 +568,7 @@ def user_for_token(conn, token):
     if not token:
         return None
     row = conn.execute(
-        "SELECT u.id, u.email, u.name, u.role, u.doctor_id FROM sessions s JOIN users u ON u.id = s.user_id "
+        "SELECT u.id, u.email, u.name, u.role, u.doctor_id, u.totp_on AS two_factor FROM sessions s JOIN users u ON u.id = s.user_id "
         "WHERE s.token = ? AND s.expires > ?", (token_hash(token), now_ms())).fetchone()
     return dict(row) if row else None
 
@@ -646,7 +651,373 @@ def login(conn, d, ip):
     if not row or not check_password(str(d.get("password") or ""), row["pw"]):
         FAILED_LOGINS.setdefault(ip, []).append(time.time())
         raise AuthError("Wrong email or password.", 401)
+    second_factor(conn, row["id"], d, ip)  # authenticator code, if this account turned 2FA on
     return row["id"]
+
+
+# ---------------------------------------------------------------- two-factor login (TOTP, RFC 6238) for staff
+# Staff (clinic admins and doctors) can add a 6-digit code from an authenticator app (Google Authenticator,
+# Microsoft Authenticator, Authy, 1Password...). The shared secret is stored encrypted (AES-256-GCM, same key
+# as health records), each code works once, wrong codes are rate-limited, and 10 one-time recovery codes
+# (stored only as hashes) cover a lost phone. Standard library only, apart from the encryption.
+TOTP_STEP, TOTP_DIGITS, TOTP_ISSUER = 30, 6, "Clinora"
+
+
+class TwoFactorNeeded(AuthError):
+    """Password was right, but this account also needs its authenticator code."""
+
+
+def totp_at(secret_b32, step):
+    import struct
+    key = base64.b32decode(secret_b32 + "=" * (-len(secret_b32) % 8), casefold=True)
+    digest = hmac.new(key, struct.pack(">Q", step), hashlib.sha1).digest()
+    offset = digest[-1] & 15
+    return str((int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF) % 10 ** TOTP_DIGITS).zfill(TOTP_DIGITS)
+
+
+def totp_match(secret_b32, code, last_step=0, now=None):
+    """The time step the code belongs to (one step of clock drift allowed either way), or None.
+    Steps at or before last_step were already used, so a code can't be replayed."""
+    code = re.sub(r"\s", "", str(code or ""))
+    if not re.fullmatch(r"\d{6}", code):
+        return None
+    step = int((time.time() if now is None else now) // TOTP_STEP)
+    for s in (step, step - 1, step + 1):
+        if s > last_step and hmac.compare_digest(totp_at(secret_b32, s), code):
+            return s
+    return None
+
+
+def _totp_box(uid, plain=None, blob=None):
+    """Encrypt (plain) or decrypt (blob) a TOTP secret, bound to the user id."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    aad = f"totp:{uid}".encode()
+    if plain is not None:
+        nonce = secrets.token_bytes(12)
+        return base64.b64encode(nonce + AESGCM(_records_key()).encrypt(nonce, plain.encode(), aad)).decode()
+    raw = base64.b64decode(blob)
+    return AESGCM(_records_key()).decrypt(raw[:12], raw[12:], aad).decode()
+
+
+def _recovery_hash(code):
+    return hashlib.sha256(re.sub(r"[^a-z0-9]", "", str(code).lower()).encode()).hexdigest()
+
+
+def _new_recovery_codes():
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"  # no 0/o/1/l/i look-alikes
+    codes = ["".join(secrets.choice(alphabet) for _ in range(10)) for _ in range(10)]
+    return [c[:5] + "-" + c[5:] for c in codes]
+
+
+def _check_second_factor(conn, uid, code):
+    """True if `code` is a fresh authenticator code or an unused recovery code (which is then used up)."""
+    row = conn.execute("SELECT totp_secret, totp_last, totp_recovery FROM users WHERE id=?", (uid,)).fetchone()
+    if not row or not row["totp_secret"]:
+        return False
+    step = totp_match(_totp_box(uid, blob=row["totp_secret"]), code, row["totp_last"] or 0)
+    if step:
+        conn.execute("UPDATE users SET totp_last=? WHERE id=?", (step, uid))
+        return True
+    hashes = json.loads(row["totp_recovery"] or "[]")
+    h = _recovery_hash(code)
+    if len(re.sub(r"[^a-z0-9]", "", str(code).lower())) == 10 and h in hashes:
+        hashes.remove(h)
+        conn.execute("UPDATE users SET totp_recovery=? WHERE id=?", (json.dumps(hashes), uid))
+        return True
+    return False
+
+
+def second_factor(conn, uid, d, ip):
+    """Called after a correct password. Raises unless the account has no 2FA or a good code was sent."""
+    if not conn.execute("SELECT totp_on FROM users WHERE id=?", (uid,)).fetchone()["totp_on"]:
+        return
+    code = str(d.get("code") or "").strip()
+    if not code:
+        raise TwoFactorNeeded("Enter the 6-digit code from your authenticator app.", 401)
+    if too_many("totp", str(uid), 6, 900):
+        raise AuthError("Too many wrong codes. Try again in 15 minutes.", 429)
+    if not _check_second_factor(conn, uid, code):
+        FAILED_LOGINS.setdefault(ip, []).append(time.time())
+        raise TwoFactorNeeded("That code is wrong or expired. Try the newest code.", 401)
+
+
+def _need_password(conn, user, d):
+    row = conn.execute("SELECT pw FROM users WHERE id=?", (user["id"],)).fetchone()
+    if not check_password(str(d.get("password") or ""), row["pw"]):
+        raise InputError("Your password is wrong")
+
+
+def twofa_status(conn, d, user):
+    need_login(user)
+    row = conn.execute("SELECT totp_on, totp_recovery FROM users WHERE id=?", (user["id"],)).fetchone()
+    return {"on": bool(row["totp_on"]), "recovery_left": len(json.loads(row["totp_recovery"] or "[]"))}
+
+
+def twofa_setup(conn, d, user):
+    """Step 1: make a new secret (not active yet) and show it as a QR code."""
+    need_login(user)
+    _need_password(conn, user, d)
+    if too_many("totp-setup", str(user["id"]), 10, 3600):
+        raise AuthError("Too many tries. Please wait a while.", 429)
+    secret = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+    conn.execute("UPDATE users SET totp_pending=? WHERE id=?", (_totp_box(user["id"], plain=secret), user["id"]))
+    label = urllib.parse.quote(f"{TOTP_ISSUER}:{user['email']}")
+    uri = f"otpauth://totp/{label}?secret={secret}&issuer={TOTP_ISSUER}&algorithm=SHA1&digits={TOTP_DIGITS}&period={TOTP_STEP}"
+    return {"secret": " ".join(secret[i:i + 4] for i in range(0, len(secret), 4)), "uri": uri, "qr_svg": qr_svg(uri)}
+
+
+def twofa_enable(conn, d, user):
+    """Step 2: prove the app works by typing its current code. Returns the recovery codes (shown once)."""
+    need_login(user)
+    if too_many("totp", str(user["id"]), 6, 900):
+        raise AuthError("Too many wrong codes. Try again in 15 minutes.", 429)
+    row = conn.execute("SELECT totp_pending FROM users WHERE id=?", (user["id"],)).fetchone()
+    if not row["totp_pending"]:
+        raise InputError("Start again: press 'Turn on' first")
+    secret = _totp_box(user["id"], blob=row["totp_pending"])
+    step = totp_match(secret, d.get("code"))
+    if not step:
+        raise InputError("That code doesn't match. Check the time on your phone and use the newest code.")
+    codes = _new_recovery_codes()
+    conn.execute("UPDATE users SET totp_on=1, totp_secret=?, totp_pending=NULL, totp_last=?, totp_recovery=? WHERE id=?",
+                 (_totp_box(user["id"], plain=secret), step, json.dumps([_recovery_hash(c) for c in codes]), user["id"]))
+    return {"on": True, "recovery": codes}
+
+
+def twofa_disable(conn, d, user):
+    need_login(user)
+    _need_password(conn, user, d)
+    if too_many("totp", str(user["id"]), 6, 900):
+        raise AuthError("Too many wrong codes. Try again in 15 minutes.", 429)
+    if not _check_second_factor(conn, user["id"], d.get("code")):
+        raise InputError("That code is wrong. Use your authenticator app or a recovery code.")
+    conn.execute("UPDATE users SET totp_on=0, totp_secret=NULL, totp_pending=NULL, totp_recovery=NULL, totp_last=0 WHERE id=?",
+                 (user["id"],))
+    return {"on": False}
+
+
+def twofa_new_recovery(conn, d, user):
+    need_login(user)
+    _need_password(conn, user, d)
+    if not conn.execute("SELECT totp_on FROM users WHERE id=?", (user["id"],)).fetchone()["totp_on"]:
+        raise InputError("Two-factor login is off")
+    codes = _new_recovery_codes()
+    conn.execute("UPDATE users SET totp_recovery=? WHERE id=?", (json.dumps([_recovery_hash(c) for c in codes]), user["id"]))
+    return {"recovery": codes}
+
+
+def twofa_admin_reset(conn, d, user):
+    """For staff who lost both their phone and their recovery codes: the admin turns 2FA off for them."""
+    need_admin(user)
+    uid = int(d.get("id") or 0)
+    if uid == user["id"]:
+        raise InputError("Use your own recovery codes to turn yours off")
+    conn.execute("UPDATE users SET totp_on=0, totp_secret=NULL, totp_pending=NULL, totp_recovery=NULL, totp_last=0 WHERE id=?", (uid,))
+    conn.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+
+
+# ---------------------------------------------------------------- QR codes (for the authenticator app)
+# A small QR encoder (byte mode, error correction level M, versions 1-10), following ISO/IEC 18004 and
+# Project Nayuki's reference design. Output is an SVG, so the page needs no outside service or script.
+_QR_ECC_M = (None, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26)       # error-correction codewords per block
+_QR_BLOCKS_M = (None, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5)              # number of blocks
+
+
+def _gf_mul(x, y):
+    z = 0
+    for i in reversed(range(8)):
+        z = (z << 1) ^ ((z >> 7) * 0x11D)
+        z ^= ((y >> i) & 1) * x
+    return z
+
+
+def _rs_divisor(degree):
+    result = [0] * (degree - 1) + [1]
+    root = 1
+    for _ in range(degree):
+        for j in range(degree):
+            result[j] = _gf_mul(result[j], root)
+            if j + 1 < degree:
+                result[j] ^= result[j + 1]
+        root = _gf_mul(root, 0x02)
+    return result
+
+
+def _rs_remainder(data, divisor):
+    result = [0] * len(divisor)
+    for b in data:
+        factor = b ^ result.pop(0)
+        result.append(0)
+        for i, coef in enumerate(divisor):
+            result[i] ^= _gf_mul(coef, factor)
+    return result
+
+
+def _qr_raw_modules(ver):
+    result = (16 * ver + 128) * ver + 64
+    if ver >= 2:
+        numalign = ver // 7 + 2
+        result -= (25 * numalign - 10) * numalign - 55
+        if ver >= 7:
+            result -= 36
+    return result
+
+
+def _qr_align_positions(ver, size):
+    if ver == 1:
+        return []
+    numalign = ver // 7 + 2
+    step = (ver * 8 + numalign * 3 + 5) // (numalign * 4 - 4) * 2
+    return list(reversed([size - 7 - i * step for i in range(numalign - 1)] + [6]))
+
+
+def qr_matrix(text, mask=None):
+    data = text.encode("utf-8")
+    for ver in range(1, 11):
+        capacity = _qr_raw_modules(ver) // 8 - _QR_ECC_M[ver] * _QR_BLOCKS_M[ver]
+        count_bits = 8 if ver <= 9 else 16
+        if 4 + count_bits + 8 * len(data) <= capacity * 8:
+            break
+    else:
+        raise ValueError("text too long for a QR code")
+    # --- data bits
+    bits = [0, 1, 0, 0] + [(len(data) >> i) & 1 for i in reversed(range(count_bits))]
+    for b in data:
+        bits += [(b >> i) & 1 for i in reversed(range(8))]
+    bits += [0] * min(4, capacity * 8 - len(bits))
+    bits += [0] * (-len(bits) % 8)
+    codewords = [int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits), 8)]
+    pad = 0xEC
+    while len(codewords) < capacity:
+        codewords.append(pad)
+        pad ^= 0xEC ^ 0x11
+    # --- error correction, interleaved
+    numblocks, ecclen = _QR_BLOCKS_M[ver], _QR_ECC_M[ver]
+    raw = _qr_raw_modules(ver) // 8
+    numshort, shortlen = numblocks - raw % numblocks, raw // numblocks
+    div = _rs_divisor(ecclen)
+    blocks, k = [], 0
+    for i in range(numblocks):
+        dat = codewords[k:k + shortlen - ecclen + (0 if i < numshort else 1)]
+        k += len(dat)
+        ecc = _rs_remainder(dat, div)
+        if i < numshort:
+            dat = dat + [0]
+        blocks.append(dat + ecc)
+    final = [blk[i] for i in range(len(blocks[0])) for j, blk in enumerate(blocks)
+             if i != shortlen - ecclen or j >= numshort]
+    # --- function patterns
+    size = ver * 4 + 17
+    mods = [[False] * size for _ in range(size)]
+    func = [[False] * size for _ in range(size)]
+
+    def setf(x, y, dark):
+        mods[y][x], func[y][x] = dark, True
+
+    for i in range(size):
+        setf(6, i, i % 2 == 0)
+        setf(i, 6, i % 2 == 0)
+    for cx, cy in ((3, 3), (size - 4, 3), (3, size - 4)):
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                x, y = cx + dx, cy + dy
+                if 0 <= x < size and 0 <= y < size:
+                    setf(x, y, max(abs(dx), abs(dy)) not in (2, 4))
+    pos = _qr_align_positions(ver, size)
+    n = len(pos)
+    for i in range(n):
+        for j in range(n):
+            if (i, j) not in ((0, 0), (0, n - 1), (n - 1, 0)):
+                for dy in range(-2, 3):
+                    for dx in range(-2, 3):
+                        setf(pos[i] + dx, pos[j] + dy, max(abs(dx), abs(dy)) != 1)
+
+    def draw_format(m):
+        dat = (0 << 3) | m   # level M = 00
+        rem = dat
+        for _ in range(10):
+            rem = (rem << 1) ^ ((rem >> 9) * 0x537)
+        fb = ((dat << 10) | rem) ^ 0x5412
+        bit = lambda i: (fb >> i) & 1 == 1
+        for i in range(6):
+            setf(8, i, bit(i))
+        setf(8, 7, bit(6))
+        setf(8, 8, bit(7))
+        setf(7, 8, bit(8))
+        for i in range(9, 15):
+            setf(14 - i, 8, bit(i))
+        for i in range(8):
+            setf(size - 1 - i, 8, bit(i))
+        for i in range(8, 15):
+            setf(8, size - 15 + i, bit(i))
+        setf(8, size - 8, True)
+
+    draw_format(0)
+    if ver >= 7:
+        rem = ver
+        for _ in range(12):
+            rem = (rem << 1) ^ ((rem >> 11) * 0x1F25)
+        vb = (ver << 12) | rem
+        for i in range(18):
+            b = (vb >> i) & 1 == 1
+            a, c = size - 11 + i % 3, i // 3
+            setf(a, c, b)
+            setf(c, a, b)
+    # --- place data (zig-zag)
+    i = 0
+    for right in range(size - 1, 0, -2):
+        if right <= 6:
+            right -= 1
+        for vert in range(size):
+            for jj in range(2):
+                x = right - jj
+                upward = ((right + 1) & 2) == 0
+                y = size - 1 - vert if upward else vert
+                if not func[y][x] and i < len(final) * 8:
+                    mods[y][x] = ((final[i >> 3] >> (7 - (i & 7))) & 1) == 1
+                    i += 1
+    masks = [lambda x, y: (x + y) % 2 == 0, lambda x, y: y % 2 == 0, lambda x, y: x % 3 == 0,
+             lambda x, y: (x + y) % 3 == 0, lambda x, y: (x // 3 + y // 2) % 2 == 0,
+             lambda x, y: x * y % 2 + x * y % 3 == 0, lambda x, y: (x * y % 2 + x * y % 3) % 2 == 0,
+             lambda x, y: ((x + y) % 2 + x * y % 3) % 2 == 0]
+
+    def masked(m):
+        out = [row[:] for row in mods]
+        for y in range(size):
+            for x in range(size):
+                if not func[y][x] and masks[m](x, y):
+                    out[y][x] = not out[y][x]
+        return out
+
+    def penalty(g):  # rules 1 (runs), 2 (2x2 blocks) and 4 (balance) of the standard: enough to pick a good mask
+        p = 0
+        for line in g + [list(c) for c in zip(*g)]:
+            run = 1
+            for a, b in zip(line, line[1:]):
+                run = run + 1 if a == b else 1
+                if run == 5:
+                    p += 3
+                elif run > 5:
+                    p += 1
+        p += 3 * sum(g[y][x] == g[y][x + 1] == g[y + 1][x] == g[y + 1][x + 1] for y in range(size - 1) for x in range(size - 1))
+        dark = sum(map(sum, g))
+        p += (abs(dark * 20 - size * size * 10) + size * size - 1) // (size * size) * 10
+        return p
+
+    best = mask if mask is not None else min(range(8), key=lambda m: (draw_format(m), penalty(masked(m)))[1])
+    draw_format(best)
+    return masked(best)
+
+
+def qr_svg(text, scale=6):
+    m = qr_matrix(text)
+    size, quiet = len(m), 4
+    full = (size + 2 * quiet) * scale
+    path = "".join(f"M{(x + quiet) * scale} {(y + quiet) * scale}h{scale}v{scale}h-{scale}z"
+                   for y in range(size) for x in range(size) if m[y][x])
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {full} {full}" width="{full}" height="{full}" '
+            f'role="img" aria-label="QR code for your authenticator app"><rect width="100%" height="100%" fill="#fff"/>'
+            f'<path d="{path}" fill="#000"/></svg>')
 
 
 def change_password(conn, d, user):
@@ -697,7 +1068,7 @@ def snapshot(conn, user=None):
         if user["role"] == "admin":
             rows = conn.execute("SELECT * FROM appointments ORDER BY date, time")
             data["users"] = [dict(r) for r in conn.execute(
-                "SELECT id, email, name, role, doctor_id, created FROM users ORDER BY created")]
+                "SELECT id, email, name, role, doctor_id, created, totp_on AS two_factor FROM users ORDER BY created")]
             data["verify_pending"] = conn.execute("SELECT COUNT(*) FROM verifications WHERE status='pending'").fetchone()[0]
             data["reports_open"] = conn.execute("SELECT COUNT(DISTINCT target_type || target_id) FROM reports WHERE status='open'").fetchone()[0]
         else:
@@ -4574,6 +4945,8 @@ def find_appointments(conn, d, user=None):
 ROUTES = {
     "/api/appointments/find": find_appointments,
     "/api/auth/password": change_password,
+    "/api/auth/2fa/status": twofa_status, "/api/auth/2fa/setup": twofa_setup, "/api/auth/2fa/enable": twofa_enable,
+    "/api/auth/2fa/disable": twofa_disable, "/api/auth/2fa/recovery": twofa_new_recovery, "/api/users/2fa-reset": twofa_admin_reset,
     "/api/users/create": create_user,
     "/api/users/delete": delete_user,
     "/api/appointments": create_appointment,
@@ -5447,6 +5820,8 @@ class Handler(SimpleHTTPRequestHandler):
                                       self.cookie(token, SESSION_DAYS * 86_400))
         except InputError as e:
             return self.send_json(400, {"error": str(e)})
+        except TwoFactorNeeded as e:
+            return self.send_json(e.status, {"error": str(e), "need_2fa": True})
         except AuthError as e:
             return self.send_json(e.status, {"error": str(e)})
 

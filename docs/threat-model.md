@@ -52,6 +52,7 @@ Every arrow that crosses a box is a **trust boundary**: data crossing it is chec
 | | Fake a doctor | Sign up claiming to be a doctor | Registration number + admin verification, "verified" badge only after review |
 | | Fake a payment | Send a made-up "payment done" message | Razorpay/Stripe webhooks verified with HMAC signatures |
 | | Steal a session | Read the cookie with injected script | `HttpOnly` cookie, strict CSP with nonce |
+| | Use a stolen staff password | Phishing or a leaked password list | Two-factor login: 6-digit authenticator code, each code works once, 6 wrong codes → 15-minute lock |
 | **T**ampering | Change someone's booking | Send their booking id to the API | Every query checks the owner (`member_id = me`) |
 | | Change a health file on disk | Edit the stored file | AES-256-**GCM**: any change makes decryption fail |
 | | Inject SQL | `' OR 1=1 --` in a form | All visitor input goes through `?` placeholders |
@@ -71,7 +72,7 @@ Every arrow that crosses a box is a **trust boundary**: data crossing it is chec
 
 | Risk | Plan |
 |---|---|
-| Admin account taken over with a stolen password | Two-factor login for admins |
+| Admin account taken over with a stolen password | ✅ **Done:** two-factor login (authenticator app + recovery codes) for all clinic staff |
 | Big, spread-out traffic floods | Cloudflare rate rules / WAF once on a custom domain |
 | Server compromise exposes the records key | Keep `RECORDS_KEY` only in Render's settings; rotate it if leaked |
 | Free hosting loses data on redeploy | Cloud backups + automatic restore ([persistence](go-live.md)) |

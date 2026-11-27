@@ -9,7 +9,7 @@
   <img alt="Python" src="https://img.shields.io/badge/Python-3.11-3776ab?logo=python&logoColor=white">
   <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-vanilla-f7df1e?logo=javascript&logoColor=black">
   <img alt="SQLite" src="https://img.shields.io/badge/SQLite-33%20tables-003b57?logo=sqlite&logoColor=white">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-36-16a34a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-43-16a34a">
   <img alt="Coverage" src="https://img.shields.io/badge/coverage-55%25-eab308">
   <a href="https://github.com/urstrulyrammukesh/clinora/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/urstrulyrammukesh/clinora/actions/workflows/codeql.yml/badge.svg"></a>
   <a href="docs/security-audit.md"><img alt="Security audit" src="https://img.shields.io/badge/security%20audit-9%2F9%20fixed-8b5cf6"></a>
@@ -1403,7 +1403,7 @@ endsolid clinora_logo
 - 📁 **Encrypted health records**, shared with one doctor for one visit
 - ⏰ **Reminders** by bell, phone push, email, SMS and WhatsApp; 📷 prescription photo → reminders; 💊 cheaper generic medicines
 - 💬 **Clinora on WhatsApp**, 🎤 **voice input**, 👨‍👩‍👧 **family members**
-- ⚡ **Light mode on phones**, smaller images, gzip, strict CSP, 36 automated tests
+- ⚡ **Light mode on phones**, smaller images, gzip, strict CSP, 43 automated tests
 - 🌍 **Visitor statistics** for the admin: visitors per day, countries, devices, where they came from, app installs (anonymous)
 - ☁️ **Keeps data on free hosting**: last backup to the cloud when the server stops, automatic restore on an empty disk
 
@@ -1414,6 +1414,7 @@ Clinora handles health data, so security is built in and **tested**:
 - 🔍 **[Security audit](docs/security-audit.md)**: Bandit, pip-audit, CodeQL and hand checks on the live site. 9 findings, all fixed or explained, each locked in by a test.
 - 🧠 **[Threat model (STRIDE)](docs/threat-model.md)**: who might attack, what they'd go after, and which layer stops them.
 - ⚙️ **Every push** runs the tests, CodeQL, Bandit and pip-audit; Dependabot keeps packages up to date.
+- 🛡️ **Two-factor login** for clinic staff: authenticator app (QR code), one-time recovery codes, replay and brute-force protection.
 - 🔒 Strict CSP with per-page nonce · exact-file script allow-list with SRI · PBKDF2 passwords · HttpOnly cookies · rate limits (incl. AI chat) · HMAC webhooks · AES-256-GCM records · anonymous visit counts (no cookies, no IPs).
 - 📮 Found something? **[Report it privately](SECURITY.md)**.
 
