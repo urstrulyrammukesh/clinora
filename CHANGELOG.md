@@ -2,6 +2,16 @@
 
 All notable changes to Clinora. Dates are when the work landed on `main`.
 
+## [1.3.0] – 2026-11-27
+
+### Map
+- **Exact location**: always a fresh high-accuracy GPS fix, a blue accuracy circle, and "my location" keeps itself up to date as you move
+- **Follow me + compass**: the map moves with you and turns as you turn your phone (or in your travel direction when moving)
+- **Routes with travel times** for walking, cycling, bike, car/taxi, bus, train and flight, with arrival time and a live "time left" while you travel. Road routes from OpenStreetMap; bus, train and flight are clearly marked estimates
+- **Live location sharing**: a private link (15 min to 24 h) that shows where you are, how you travel (🚶 🚴 🏍️ 🚗 🚌 🚆 ✈️) and how fast. Stop any time. SOS now shares your live location automatically
+- **Travel mode detection** from speed and motion: walking, running, cycling, car/bike, train, flight
+- **Search by name**: type a doctor's, clinic's or hospital's name (Clinora + OpenStreetMap), or a city / PIN code
+
 ## [1.2.0] – 2026-11-27
 
 ### Security

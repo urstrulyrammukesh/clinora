@@ -335,6 +335,8 @@ CREATE INDEX IF NOT EXISTS appt_slot ON appointments(doc, date, time);
 CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, src TEXT NOT NULL, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS live(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS stats(key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS live_shares(id INTEGER PRIMARY KEY AUTOINCREMENT, view_hash TEXT UNIQUE NOT NULL, key_hash TEXT UNIQUE NOT NULL,
+  name TEXT, lat REAL, lon REAL, acc REAL, speed REAL, heading REAL, mode TEXT, updated INTEGER, started INTEGER, expires INTEGER, sos INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS visits(day TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL DEFAULT '', n INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(day, kind, key));
 CREATE TABLE IF NOT EXISTS listings(
@@ -3254,6 +3256,77 @@ def m_family_delete(conn, d, me):
 
 
 # ---------------------------------------------------------------- admin statistics (Clinic Dashboard)
+# ---------------------------------------------------------------- live location sharing
+# Anyone (no account needed) can share their live location for a set time. Two random tokens:
+#   view id  -> goes in the link sent to family (read-only),   update key -> stays on the sharer's phone.
+# Both are stored only as hashes. Sharing stops by itself when the time is up, or at once with "Stop";
+# then the row is deleted. Nothing is kept afterwards.
+LIVE_MODES = {"still", "walk", "run", "cycle", "bike", "car", "bus", "train", "flight", "vehicle"}
+LIVE_MAX_MIN = 24 * 60
+
+
+def _live_point(d):
+    try:
+        lat, lon = float(d.get("lat")), float(d.get("lon"))
+    except (TypeError, ValueError):
+        raise InputError("Location missing")
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise InputError("Location out of range")
+    num = lambda k, lo, hi: (lambda v: v if v is not None and lo <= v <= hi else None)(
+        (lambda x: float(x) if isinstance(x, (int, float)) or (isinstance(x, str) and re.fullmatch(r"-?\d+(\.\d+)?", x)) else None)(d.get(k)))
+    mode = str(d.get("mode") or "still")
+    return {"lat": round(lat, 6), "lon": round(lon, 6), "acc": num("acc", 0, 100_000), "speed": num("speed", 0, 400),
+            "heading": num("heading", 0, 360), "mode": mode if mode in LIVE_MODES else "still"}
+
+
+def live_start(d, ip):
+    if too_many("live-start", ip, 12, 3600):
+        raise AuthError("Too many shares started. Please wait a little.", 429)
+    pt = _live_point(d)
+    minutes = int(d.get("minutes") or 60) if str(d.get("minutes") or "60").isdigit() else 60
+    minutes = max(5, min(LIVE_MAX_MIN, minutes))
+    name = re.sub(r"[\x00-\x1f<>]", "", str(d.get("name") or "").strip())[:40] or "Someone"
+    view_id, key = secrets.token_urlsafe(12), secrets.token_urlsafe(24)
+    now = now_ms()
+    with DB_LOCK, connect() as conn:
+        conn.execute("DELETE FROM live_shares WHERE expires < ?", (now,))
+        conn.execute("INSERT INTO live_shares(view_hash, key_hash, name, lat, lon, acc, speed, heading, mode, updated, started, expires, sos) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (token_hash(view_id), token_hash(key), name, pt["lat"], pt["lon"], pt["acc"], pt["speed"], pt["heading"], pt["mode"],
+                      now, now, now + minutes * 60_000, 1 if d.get("sos") else 0))
+    return {"id": view_id, "key": key, "expires": now + minutes * 60_000, "url": f"{PUBLIC_URL}/#live/{view_id}"}
+
+
+def live_update(d, ip):
+    key = str(d.get("key") or "")
+    if too_many("live-up", token_hash(key)[:16], 40, 60):  # a phone sends one every few seconds at most
+        return {"ok": True, "slow": True}
+    pt = _live_point(d)
+    with DB_LOCK, connect() as conn:
+        cur = conn.execute("UPDATE live_shares SET lat=?, lon=?, acc=?, speed=?, heading=?, mode=?, updated=? WHERE key_hash=? AND expires > ?",
+                           (pt["lat"], pt["lon"], pt["acc"], pt["speed"], pt["heading"], pt["mode"], now_ms(), token_hash(key), now_ms()))
+        if not cur.rowcount:
+            raise AuthError("This live share has ended.", 410)
+    return {"ok": True}
+
+
+def live_stop(d, ip):
+    with DB_LOCK, connect() as conn:
+        conn.execute("DELETE FROM live_shares WHERE key_hash=?", (token_hash(str(d.get("key") or "")),))
+    return {"ok": True}
+
+
+def live_view(view_id, ip):
+    if too_many("live-view", ip, 600, 3600):
+        raise AuthError("Too many requests", 429)
+    with DB_LOCK, connect() as conn:
+        r = conn.execute("SELECT name, lat, lon, acc, speed, heading, mode, updated, started, expires, sos FROM live_shares "
+                         "WHERE view_hash=?", (token_hash(view_id),)).fetchone()
+    if not r or r["expires"] < now_ms():
+        return None
+    return dict(r)
+
+
 # ---------------------------------------------------------------- visitor statistics (privacy-friendly)
 # Like Plausible/GoatCounter: no cookies, no IP addresses or browser fingerprints are stored. A visitor is counted
 # once a day by a hash of (random daily salt + IP + browser); the salt lives only in memory and changes every day,
@@ -5230,6 +5303,12 @@ class Handler(SimpleHTTPRequestHandler):
         path_only = self.path.split("?")[0]
         if path_only in ("/", "/index.html"):
             return self.send_index()
+        if path_only.startswith("/api/live/v/"):
+            try:
+                r = live_view(path_only.rsplit("/", 1)[-1][:40], self.client_ip())
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+            return self.send_json(200, r) if r else self.send_json(404, {"error": "This live location has ended or the link is wrong."})
         if path_only == "/i18n.js":
             return self.send_static_gz("i18n.js", "text/javascript; charset=utf-8")
         if path_only == "/api/prices":
@@ -5520,6 +5599,15 @@ class Handler(SimpleHTTPRequestHandler):
                     raise InputError("Bad request")
                 with DB_LOCK, connect() as conn:
                     return self.send_json(200, MCALL_ROUTES[path](conn, data, member_for_token(conn, self.member_token())))
+            except InputError as e:
+                return self.send_json(400, {"error": str(e)})
+            except AuthError as e:
+                return self.send_json(e.status, {"error": str(e)})
+        if path in ("/api/live/start", "/api/live/update", "/api/live/stop"):  # live location sharing (no account needed)
+            try:
+                data = self.read_json(2_000)
+                fn = {"/api/live/start": live_start, "/api/live/update": live_update, "/api/live/stop": live_stop}[path]
+                return self.send_json(200, fn(data if isinstance(data, dict) else {}, self.client_ip()))
             except InputError as e:
                 return self.send_json(400, {"error": str(e)})
             except AuthError as e:

@@ -654,6 +654,24 @@ html[dir=rtl] .sos-float{left:auto;right:22px}
 .me-tag{position:absolute;bottom:-16px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;background:#4aa3ff;color:#fff;white-space:nowrap}
 .move-chip{position:absolute;left:12px;top:12px;z-index:5;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:99px;background:rgba(12,16,21,.88);border:1px solid var(--line);font-size:13px;font-weight:600;backdrop-filter:blur(6px)}
 .move-chip small{color:var(--mute);font-weight:500}
+.map-card .move-chip{top:auto;bottom:12px}
+.map-tools{flex-wrap:wrap;right:64px}.map-tools button.on{background:var(--teal);color:#04110d;border-color:var(--teal)}
+.map-panel{position:absolute;left:12px;right:12px;bottom:12px;z-index:6;max-height:48%;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.map-panel .rb-head b,.map-panel b{color:var(--text)}
+.map-panel .rb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.map-panel .rb-head button{font-size:16px;padding:2px 8px}
+.sb-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}.sb-row input,.sb-row select{flex:1;min-width:120px}
+.rb-from{font-size:13px;color:var(--mute)}.rb-wait{padding:10px 0;color:var(--mute)}
+.rb-modes{display:flex;gap:6px;overflow-x:auto;padding:4px 0}
+.rb-mode{display:flex;flex-direction:column;align-items:center;min-width:68px;padding:6px 6px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+.rb-mode span{font-size:18px}.rb-mode b{font-size:13px;margin-top:2px}.rb-mode small{font-size:10.5px;color:var(--mute)}
+.rb-mode.on{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal) inset;background:var(--panel)}
+.rb-sum{display:flex;flex-direction:column;gap:3px;margin:8px 0}.rb-sum small{color:var(--mute)}.rb-acts{display:flex;gap:8px;flex-wrap:wrap}
+.sb-p{font-size:13px;color:var(--mute);margin:4px 0 8px}.sb-link{width:100%;font-family:var(--mono);font-size:12px}
+.lv-row{display:flex;gap:12px;align-items:center;margin:6px 0}.lv-ic{font-size:30px}
+.lv-pin{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 6px;border-radius:99px;background:#ef4444;color:#fff;font-size:13px;box-shadow:0 0 0 6px rgba(239,68,68,.25);animation:lvpulse 1.6s infinite}
+.lv-pin span{font-size:20px}@keyframes lvpulse{50%{box-shadow:0 0 0 14px rgba(239,68,68,.08)}}
+.linkbtn{margin-left:6px;color:var(--teal);text-decoration:underline;font-size:inherit}
+.mtoast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);opacity:0;z-index:999;background:#111827;color:#fff;padding:10px 16px;border-radius:99px;transition:.25s;pointer-events:none}.mtoast.on{opacity:1;transform:translate(-50%,0)}
 .move-chip button{font-size:12px;color:var(--teal);font-weight:600}
 
 /* ===== ACCOUNT ===== */
@@ -1185,7 +1203,7 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
     <div class="near-wrap">
       <div class="card near-list">
         <div class="near-tools">
-          <div class="loc-row"><button class="btn primary sm" id="gpsBtn">📍 My location</button><input id="areaIn" placeholder="Or type any city, area or PIN code…"><button class="btn ghost sm" id="areaBtn">Search</button></div>
+          <div class="loc-row"><button class="btn primary sm" id="gpsBtn">📍 My location</button><input id="areaIn" placeholder="Doctor, hospital, clinic name, or any city / PIN…"><button class="btn ghost sm" id="areaBtn">Search</button></div>
           <div class="chips" id="chips">
             <button class="chip on" data-f="all">All</button><button class="chip" data-f="hospital">🏥 Hospital</button>
             <button class="chip" data-f="clinic">Clinic</button><button class="chip" data-f="dentist">🦷 Dentist</button><button class="chip" data-f="laboratory">🧪 Lab</button>
@@ -1197,7 +1215,12 @@ html[data-theme="light"] .phone,html[data-theme="light"] .stage{--bg:#06080b;--p
       </div>
       <div class="card map-card">
         <div id="map"></div>
-        <div class="map-tools"><button id="tiltBtn">◢ 2D / 3D</button><button id="recBtn">⌖ Recenter</button></div>
+        <div class="map-tools"><button id="tiltBtn">◢ 2D / 3D</button><button id="recBtn">⌖ Recenter</button><button id="followBtn">🧭 Follow me</button><button id="routeBtn">⏱ Route</button><button id="shareBtn">📡 Share live</button></div>
+        <div class="map-panel" id="routeBox" hidden><div class="rb-head"><b>🧭 Route &amp; travel time</b><button id="rbClose" aria-label="Close route">✕</button></div>
+          <div class="sb-row"><span class="rb-from">📍 You →</span><input id="rbTo" placeholder="Hospital, doctor, city or any place"><button class="btn primary sm" id="rbGo">Go</button></div>
+          <div class="rb-modes" id="rbModes"></div><div id="rbInfo"></div></div>
+        <div class="map-panel" id="shareBox" hidden></div>
+        <div class="map-panel" id="liveViewBox" hidden></div>
       </div>
     </div>
   </div>
@@ -1582,6 +1605,7 @@ function go(v){if(typeof v==='string'&&!v.includes('/'))setTimeout(()=>tabFx(v==
     if(location.hash!=='#'+v)history.replaceState(null,'',location.search+'#'+v);window.scrollTo(0,0);openPay(v);return}
   if(String(v).startsWith('call/')){$$('.view').forEach(e=>e.classList.toggle('active',e.id==='v-call'));$$('.tab').forEach(e=>e.classList.remove('active'));
     if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);window.scrollTo(0,0);openCall(v.slice(5));return}
+  {const lm=String(v).match(/^live\/([A-Za-z0-9_-]{8,40})$/);if(lm){go('nearby');history.replaceState(null,'',location.search+'#live/'+lm[1]);setTimeout(()=>watchLive(lm[1]),60);return}}
   if(CALL.room)leaveCall(true);
   if(v==='demo'){openChat();const cur=($('.view.active')||{}).id;if(cur){history.replaceState(null,'','#'+cur.slice(2));return}v='home'}
   if(v==='reminders'){window.__openRem=true;v='account'}
@@ -1991,7 +2015,7 @@ function useGPS(){
   setStatus('📡 Getting your GPS location…');
   if(!navigator.geolocation){return setLoc(DEFAULT.lat,DEFAULT.lon,DEFAULT.label,DEFAULT.cc)}
   navigator.geolocation.getCurrentPosition(p=>{gotFix(p);if(my===locReq)setLoc(p.coords.latitude,p.coords.longitude,'Your live location');startMoveWatch()},
-    ()=>my===locReq&&setLoc(DEFAULT.lat,DEFAULT.lon,DEFAULT.label+'. Location permission was not given. Search any city above',DEFAULT.cc),{enableHighAccuracy:true,timeout:8000});
+    ()=>my===locReq&&setLoc(DEFAULT.lat,DEFAULT.lon,DEFAULT.label+'. Location permission was not given. Search any city above',DEFAULT.cc),{enableHighAccuracy:true,timeout:12000,maximumAge:0});
 }
 async function searchArea(){
   const qv=$('#areaIn').value.trim();if(!qv)return;locReq++;setStatus('🔍 Searching for "'+qv+'"…');
@@ -2706,7 +2730,7 @@ function lcard(p,i,ctx){
       ${p.docs?`<div class="lc-ln">${ico('steth',15)}<span>${esc(p.docs)}</span></div>`:''}
       <div class="lc-acts">
         ${phones.length?`<a class="pri" href="tel:${esc(phones[0].replace(/[^\d+]/g,''))}">${ico('phone',14)}Call</a>`:''}
-        <a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>
+        ${near?`<button class="pri" data-route="${i}">${ico('nav',14)}Route &amp; time</button>`:`<a ${phones.length?'':'class="pri"'} target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}">${ico('nav',14)}Directions</a>`}
         ${p.reg?`<button class="fav ${fav?'on':''}" data-follow="${p.id}">${ico('heart',14)}${fav?'Following':'Follow'}</button>`:''}
         ${p.reg?`<button data-rev="${p.id}">★ ${p.reviews?'Reviews':'Review'}${p.photos?` · ${p.photos} photo${p.photos>1?'s':''}`:''}</button>`:''}
         ${p.reg&&p.booking?`<button class="pri" data-book="${p.id}">📅 Book visit</button>`:''}
@@ -2801,7 +2825,7 @@ function placeMe(){if(!map||!gpsLoc||!window.maplibregl)return;
     meMarker=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([gpsLoc.lon,gpsLoc.lat]).addTo(map);
     const chip=document.createElement('div');chip.className='move-chip';chip.id='moveChip';$('#map').parentElement.appendChild(chip)}
   meMarker.setLngLat([gpsLoc.lon,gpsLoc.lat]);
-  const f=$('#meFig');if(f){f.textContent={still:'🧍',walk:'🚶',run:'🏃',vehicle:'🚗'}[moveMode];f.className='me-fig '+(moveMode==='run'?'run':moveMode==='walk'?'walk':'still')+(heading!=null&&heading<180&&moveMode!=='still'?' flip':'')}
+  const f=$('#meFig');if(f){f.textContent=(MODE_INFO[moveMode]||MODE_INFO.still)[0];f.className='me-fig '+(moveMode==='run'?'run':moveMode==='walk'?'walk':'still')+(heading!=null&&heading<180&&moveMode!=='still'?' flip':'')}
   renderMoveChip()}
 function renderMoveChip(){const c=$('#moveChip');if(!c)return;const kmh=(speedEMA*3.6).toFixed(1);
   const t={still:['🧍','Standing still'],walk:['🚶','Walking'],run:['🏃','Running'],vehicle:['🚗','In a vehicle']}[moveMode];
@@ -2822,6 +2846,214 @@ function stopMoveWatch(){if(moveWatch!=null){navigator.geolocation.clearWatch(mo
 (async()=>{try{const st=await navigator.permissions.query({name:'geolocation'});if(st.state!=='granted')return;
   navigator.geolocation.getCurrentPosition(p=>{gotFix(p);fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&lat=${p.coords.latitude}&lon=${p.coords.longitude}`).then(r=>r.json()).then(j=>{
     const a=j.address||{};if(a.country_code)setCountry(a.country_code);const city=a.city||a.town||a.state_district||a.state;if(city&&!dirInit)window.__myCity=city}).catch(()=>{})},()=>{},{timeout:8000})}catch{}})();
+
+function mtoast(m){let t=$('#mtoast');if(!t){t=document.createElement('div');t.id='mtoast';t.className='mtoast';document.body.appendChild(t)}t.textContent=m;t.classList.add('on');clearTimeout(mtoast.t);mtoast.t=setTimeout(()=>t.classList.remove('on'),2600)}
+/* ================= MAP upgrades: precise GPS, follow + compass, routes with travel times, live sharing, name search ================= */
+let follow=false,compass=null,lastRot=0,routeTo=null,routeRes=null,routeMode='car',liveShare=null,liveSent=0,liveViewT=null,liveViewMk=null,liveViewData=null;
+const MODE_INFO={still:['🧍','Standing still'],walk:['🚶','Walking'],run:['🏃','Running'],cycle:['🚴','Cycling'],vehicle:['🚗','Car / bike'],train:['🚆','Train / fast vehicle'],flight:['✈️','Flying']};
+const fmtDur=m=>{m=Math.max(1,Math.round(m));return m<60?m+' min':Math.floor(m/60)+' h'+(m%60?' '+m%60+' min':'')};
+const clock=m=>new Date(Date.now()+m*60000).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+
+/* --- better movement detection: walk, run, cycle, car/bike, train, flight --- */
+updateMode=function(){const s=speedEMA;let m='still';
+  if(s>70)m='flight';else if(s>33)m='train';else if(s>6.5)m='vehicle';else if(s>2.4)m=motionStd>4.5?'run':'cycle';else if(s>0.6||motionStd>1.1)m='walk';
+  moveMode=m;renderMoveChip()};
+renderMoveChip=function(){const c=$('#moveChip');if(!c)return;const t=MODE_INFO[moveMode]||MODE_INFO.still;
+  const needPerm=typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'&&!window.__motionOn;
+  c.innerHTML=`${t[0]} ${t[1]} <small>${moveMode==='still'?'':(speedEMA*3.6).toFixed(0)+' km/h · '}GPS ±${Math.round((gpsLoc&&gpsLoc.acc)||0)} m</small>${needPerm?'<button id="motionBtn">Use motion sensor</button>':''}`;
+  const b=$('#motionBtn');if(b)b.onclick=()=>DeviceMotionEvent.requestPermission().then(r=>{if(r==='granted')startMotion()}).catch(()=>{})};
+
+/* --- after every GPS fix: accuracy circle, follow, refine "my location", route ETA, live share --- */
+const _gotFix0=gotFix;
+gotFix=function(p){_gotFix0(p);
+  const f=$('#meFig');if(f)f.textContent=(MODE_INFO[moveMode]||MODE_INFO.still)[0];
+  accCircle();
+  if(map&&!map.__fh){map.__fh=1;map.on('dragstart',()=>{if(follow)setFollow(false)})}
+  if(follow&&map){const fast=speedEMA>2&&heading!=null;map.easeTo({center:[gpsLoc.lon,gpsLoc.lat],zoom:Math.max(map.getZoom(),16.5),bearing:fast?heading:(compass??map.getBearing()),pitch:60,duration:900})}
+  if(userLoc&&/live location/.test(userLoc.label||'')){const moved=dist(userLoc,gpsLoc);
+    if(moved>1.5)setLoc(gpsLoc.lat,gpsLoc.lon,'Your live location');else if(moved>0.03){userLoc.lat=gpsLoc.lat;userLoc.lon=gpsLoc.lon;renderPlaces()}}
+  if(routeRes)routeEta();
+  if(liveShare&&Date.now()-liveSent>5000)liveSend();
+};
+function accCircle(){if(!map||!gpsLoc||!map.isStyleLoaded||!map.isStyleLoaded())return;
+  const r=Math.max(4,Math.min(2000,gpsLoc.acc||20))/1000,pts=[];
+  for(let i=0;i<=48;i++){const a=i/48*2*Math.PI;pts.push([gpsLoc.lon+r/(111.32*Math.cos(gpsLoc.lat*Math.PI/180))*Math.cos(a),gpsLoc.lat+r/110.57*Math.sin(a)])}
+  const data={type:'Feature',geometry:{type:'Polygon',coordinates:[pts]}};
+  if(map.getSource('acc'))map.getSource('acc').setData(data);
+  else{map.addSource('acc',{type:'geojson',data});map.addLayer({id:'acc',type:'fill',source:'acc',paint:{'fill-color':'#3b82f6','fill-opacity':.14}});
+    map.addLayer({id:'acc-line',type:'line',source:'acc',paint:{'line-color':'#60a5fa','line-width':1.5,'line-opacity':.7}})}}
+
+/* --- follow me + compass: the map turns as you turn your phone --- */
+function onOrient(e){let h=null;if(e.webkitCompassHeading!=null)h=e.webkitCompassHeading;else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;
+  if(h==null)return;compass=h;if(follow&&map&&!(speedEMA>2&&heading!=null)&&performance.now()-lastRot>200){lastRot=performance.now();map.rotateTo(h,{duration:200})}}
+function startCompass(){if(window.__compassOn)return;
+  const go2=()=>{window.__compassOn=true;addEventListener('ondeviceorientationabsolute' in window?'deviceorientationabsolute':'deviceorientation',onOrient)};
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function')DeviceOrientationEvent.requestPermission().then(r=>{if(r==='granted')go2()}).catch(()=>{});else go2()}
+function setFollow(on){follow=on;const b=$('#followBtn');if(b){b.classList.toggle('on',on);b.textContent=on?'🧭 Following':'🧭 Follow me'}
+  if(on){startCompass();if(!gpsLoc){useGPS();return}startMoveWatch();if(map)map.easeTo({center:[gpsLoc.lon,gpsLoc.lat],zoom:17,pitch:60,bearing:compass??0,duration:900})}
+  else if(map)map.easeTo({bearing:0,duration:600})}
+
+/* --- routes and travel times --- */
+async function osrm(kind,a,b){const host={car:'routed-car',bike:'routed-bike',foot:'routed-foot'}[kind];
+  const ac=new AbortController(),to=setTimeout(()=>ac.abort(),12000);
+  try{const r=await fetch(`https://routing.openstreetmap.de/${host}/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=full&geometries=geojson`,{signal:ac.signal});
+    const j=await r.json();if(!j.routes||!j.routes[0])return null;const x=j.routes[0];return {km:x.distance/1000,min:x.duration/60,geo:x.geometry}}
+  catch{return null}finally{clearTimeout(to)}}
+async function planRoute(to){
+  const from=gpsLoc||userLoc;if(!from){mtoast('📍 Allow your location first, or search an area.');return}
+  routeTo=to;openRouteBox();$('#rbInfo').innerHTML='<div class="rb-wait">🧭 Working out routes…</div>';$('#rbModes').innerHTML='';
+  const crow=dist(from,to);
+  const [car,cyc,foot]=await Promise.all([crow<1500?osrm('car',from,to):null,crow<80?osrm('bike',from,to):null,crow<25?osrm('foot',from,to):null]);
+  const line={type:'LineString',coordinates:[[from.lon,from.lat],[to.lon,to.lat]]};
+  const road=car||{km:crow*1.3,min:crow*1.3/40*60,geo:line,est:1};
+  const R={};
+  if(foot||crow<8)R.walk=foot?{...foot,src:'road'}:{km:crow*1.25,min:crow*1.25/4.8*60,geo:line,est:1};
+  if(cyc||crow<40)R.cycle=cyc?{...cyc,src:'road'}:{km:crow*1.25,min:crow*1.25/15*60,geo:line,est:1};
+  if(crow<800)R.bike={km:road.km,min:road.min*0.85,geo:road.geo,est:1,note:'two-wheeler, usually a bit faster than a car in traffic'};
+  R.car={...road,src:car?'road':'',note:'without live traffic: in rush hour it can take longer'};
+  if(crow>2&&crow<800)R.bus={km:road.km,min:road.km/22*60+10,geo:road.geo,est:1,note:'city/state bus incl. ~10 min wait'};
+  if(crow>40)R.train={km:crow*1.2,min:crow*1.2/(crow>500?78:crow>150?65:50)*60+30,geo:line,est:1,note:'incl. ~30 min at stations; express trains can be faster, check exact times on the rail app'};
+  if(crow>300)R.flight={km:crow,min:crow/750*60+150,geo:line,est:1,note:'incl. ~2.5 h for airport, check-in and travel to the airport'};
+  routeRes={from,to,R,crow};
+  if(!R[routeMode])routeMode=crow>300?'flight':crow>40?'train':crow<1.5?'walk':'car';
+  drawRoute();
+}
+function drawRoute(){if(!routeRes)return;const {R,to}=routeRes;
+  const MODES=[['walk','🚶','Walk'],['cycle','🚴','Cycle'],['bike','🏍️','Bike'],['car','🚗','Car / taxi'],['bus','🚌','Bus'],['train','🚆','Train'],['flight','✈️','Flight']];
+  $('#rbModes').innerHTML=MODES.filter(m=>R[m[0]]).map(([k,ic,lb])=>`<button class="rb-mode ${k===routeMode?'on':''}" data-rmode="${k}"><span>${ic}</span><b>${fmtDur(R[k].min)}</b><small>${lb}${R[k].est?' ≈':''}</small></button>`).join('');
+  const r=R[routeMode],gm={walk:'walking',cycle:'bicycling',bike:'driving',car:'driving',bus:'transit',train:'transit',flight:'transit'}[routeMode];
+  $('#rbInfo').innerHTML=`<div class="rb-sum"><b>${esc(to.name||'Destination')}</b><span>${r.km.toFixed(r.km<10?1:0)} km · ${fmtDur(r.min)} · arrive ≈ <b>${clock(r.min)}</b></span>
+    ${r.note?`<small>${esc(r.note)}</small>`:''}${r.est?'<small>≈ estimate from distance and average speeds</small>':'<small>Road route from OpenStreetMap</small>'}<span id="rbEta"></span></div>
+    <div class="rb-acts"><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&origin=${routeRes.from.lat},${routeRes.from.lon}&destination=${to.lat},${to.lon}&travelmode=${gm}">Open in Google Maps</a>
+    ${routeMode==='flight'?`<a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/travel/flights?q=${encodeURIComponent('flights to '+(to.name||to.lat+','+to.lon))}">Find flights</a>`:''}
+    <button class="btn primary sm" id="rbNav">🧭 Start (follow me)</button></div>`;
+  $('#rbNav').onclick=()=>setFollow(true);
+  if(!map||!map.isStyleLoaded())return;
+  const data={type:'Feature',geometry:r.geo},dashed=!!r.est&&(routeMode==='train'||routeMode==='flight'||r.geo.coordinates.length<3);
+  if(map.getLayer('route'))map.removeLayer('route');if(map.getSource('route'))map.getSource('route').setData(data);else map.addSource('route',{type:'geojson',data});
+  map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':routeMode==='flight'?'#f59e0b':routeMode==='train'?'#22c55e':'#8b5cf6','line-width':6,'line-opacity':.9,...(dashed?{'line-dasharray':[1.5,1.5]}:{})}});
+  const cs=r.geo.coordinates,b=cs.reduce((bb,c)=>[[Math.min(bb[0][0],c[0]),Math.min(bb[0][1],c[1])],[Math.max(bb[1][0],c[0]),Math.max(bb[1][1],c[1])]],[[180,90],[-180,-90]]);
+  if(!follow)map.fitBounds(b,{padding:{top:60,bottom:220,left:40,right:40},maxZoom:16,duration:900});
+  routeEta()}
+function routeEta(){const el=$('#rbEta');if(!el||!routeRes||!gpsLoc)return;const r=routeRes.R[routeMode];if(!r)return;
+  const cs=r.geo.coordinates;let best=0,bd=1e9;cs.forEach((c,i)=>{const d=dist(gpsLoc,{lat:c[1],lon:c[0]});if(d<bd){bd=d;best=i}});
+  let left=0;for(let i=best;i<cs.length-1;i++)left+=dist({lat:cs[i][1],lon:cs[i][0]},{lat:cs[i+1][1],lon:cs[i+1][0]});
+  if(r.est)left=Math.max(left,dist(gpsLoc,routeRes.to));
+  const avg=r.km/(r.min/60),sp=speedEMA*3.6>3?Math.min(avg*1.4,Math.max(avg*.5,speedEMA*3.6)):avg;
+  if(left<0.05){el.innerHTML='<b class="teal">🎉 You have arrived</b>';return}
+  const m=left/sp*60;el.innerHTML=`<b>Live:</b> ${left.toFixed(left<10?1:0)} km left · ${fmtDur(m)} · arrive ≈ <b>${clock(m)}</b>`}
+function openRouteBox(){const b=$('#routeBox');b.hidden=false;$('#rbTo').value=routeTo&&routeTo.name||$('#rbTo').value}
+function closeRouteBox(){$('#routeBox').hidden=true;routeRes=null;routeTo=null;if(map&&map.getLayer('route')){map.removeLayer('route')}}
+async function routeToText(){const q=$('#rbTo').value.trim();if(!q)return;$('#rbInfo').innerHTML='<div class="rb-wait">🔍 Finding "'+esc(q)+'"…</div>';
+  const hit=places.find(p=>p.name&&p.name.toLowerCase().includes(q.toLowerCase()));if(hit)return planRoute(hit);
+  try{const j=await geocode(q);if(!j.length){$('#rbInfo').innerHTML='<div class="rb-wait">😕 Place not found. Try a city, hospital or address.</div>';return}
+    planRoute({name:j[0].display_name.split(',').slice(0,2).join(','),lat:+j[0].lat,lon:+j[0].lon})}catch{$('#rbInfo').innerHTML='<div class="rb-wait">⚠️ Search failed. Check your internet.</div>'}}
+
+/* --- live location sharing: a private link that shows where you are, until you stop it --- */
+const liveKey='cl_live';
+try{const s=JSON.parse(localStorage.getItem(liveKey)||'null');if(s&&s.expires>Date.now())liveShare=s;else localStorage.removeItem(liveKey)}catch{}
+async function liveStart(minutes,sos){const p=gpsLoc||await new Promise(ok=>navigator.geolocation?navigator.geolocation.getCurrentPosition(x=>{gotFix(x);ok(gpsLoc)},()=>ok(null),{enableHighAccuracy:true,timeout:10000,maximumAge:0}):ok(null));
+  if(!p)throw new Error('Allow location access to share your live location.');
+  const name=($('#lsName')&&$('#lsName').value.trim())||(typeof MEM!=='undefined'&&MEM.me&&MEM.me.name)||(DB.me&&DB.me.name)||'';
+  const r=await fetch('/api/live/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:p.lat,lon:p.lon,acc:p.acc,speed:speedEMA,heading,mode:liveMode(),minutes,name,sos:sos?1:0})});
+  const j=await r.json();if(!r.ok)throw new Error(j.error||'Could not start sharing');
+  liveShare={...j,started:Date.now(),mode:($('#lsMode')&&$('#lsMode').value)||'auto'};localStorage.setItem(liveKey,JSON.stringify(liveShare));liveSent=Date.now();startMoveWatch();liveBeat();return liveShare}
+function liveMode(){const o=$('#lsMode'),pick=o?o.value:(liveShare&&liveShare.mode)||'auto';return pick!=='auto'?pick:moveMode}
+function liveSend(){if(!liveShare||!gpsLoc)return;if(liveShare.expires<Date.now())return liveEnd();liveSent=Date.now();
+  fetch('/api/live/update',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,body:JSON.stringify({key:liveShare.key,lat:gpsLoc.lat,lon:gpsLoc.lon,acc:gpsLoc.acc,speed:speedEMA,heading,mode:liveMode()})})
+    .then(r=>{if(r.status===410)liveEnd()}).catch(()=>{})}
+function liveBeat(){clearInterval(liveBeat.t);liveBeat.t=setInterval(()=>{if(!liveShare)return clearInterval(liveBeat.t);if(Date.now()-liveSent>25000)liveSend()},10000)}
+function liveEnd(){if(liveShare)fetch('/api/live/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:liveShare.key})}).catch(()=>{});
+  liveShare=null;localStorage.removeItem(liveKey);clearInterval(liveBeat.t);renderShareBox()}
+if(liveShare){liveBeat();startMoveWatch()}
+function shareText(s){return `📍 Follow my live location on Clinora (until ${new Date(s.expires).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}): ${s.url}`}
+function renderShareBox(){const b=$('#shareBox');if(!b)return;
+  if(!liveShare){b.innerHTML=`<div class="rb-head"><b>📡 Share live location</b><button data-sbclose>✕</button></div>
+    <p class="sb-p">Family can see where you are, how you're travelling and how fast, on a private link. It stops by itself.</p>
+    <div class="sb-row"><input id="lsName" placeholder="Your name (optional)" maxlength="40"><select id="lsTime"><option value="15">15 min</option><option value="60" selected>1 hour</option><option value="480">8 hours</option><option value="1440">24 hours</option></select></div>
+    <div class="sb-row"><label>Travelling by</label><select id="lsMode"><option value="auto">Auto-detect</option><option value="walk">🚶 Walking</option><option value="cycle">🚴 Cycle</option><option value="bike">🏍️ Bike</option><option value="car">🚗 Car</option><option value="bus">🚌 Bus</option><option value="train">🚆 Train</option><option value="flight">✈️ Flight</option></select></div>
+    <button class="btn primary" id="lsStart" style="width:100%">Start sharing</button><div class="msgline" id="lsMsg"></div>`;
+    $('#lsStart').onclick=async()=>{$('#lsMsg').textContent='Starting…';try{await liveStart(+$('#lsTime').value);renderShareBox()}catch(e){$('#lsMsg').innerHTML='<span class="red">'+esc(e.message)+'</span>'}};return}
+  const left=Math.max(0,Math.round((liveShare.expires-Date.now())/60000));
+  b.innerHTML=`<div class="rb-head"><b>📡 <span class="teal">Sharing live</span> · ${fmtDur(left)} left</b><button data-sbclose>✕</button></div>
+    <input class="sb-link notranslate" readonly value="${esc(liveShare.url)}">
+    <div class="sb-row"><a class="btn primary sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(shareText(liveShare))}">WhatsApp</a>
+    <button class="btn ghost sm" id="lsCopy">Copy link</button>${navigator.share?'<button class="btn ghost sm" id="lsShare">Share…</button>':''}<button class="btn ghost sm red" id="lsStop">Stop sharing</button></div>
+    <p class="sb-p">Tip: open the link on your other phone or laptop to watch yourself too.</p>`;
+  $('#lsCopy').onclick=()=>navigator.clipboard.writeText(liveShare.url).then(()=>mtoast('🔗 Link copied'));
+  if($('#lsShare'))$('#lsShare').onclick=()=>navigator.share({title:'My live location',text:shareText(liveShare),url:liveShare.url}).catch(()=>{});
+  $('#lsStop').onclick=()=>{if(confirm('Stop sharing your live location?'))liveEnd()}}
+/* SOS: share live location automatically and send it on WhatsApp */
+document.addEventListener('click',async e=>{const s=e.target.closest('#sosBtn');if(!s)return;e.preventDefault();
+  const w=window.open('about:blank','_blank');let link='';
+  try{const sh=liveShare||await liveStart(480,true);link='\n📡 Live location (8 h): '+sh.url}catch{}
+  const p=gpsLoc||userLoc,msg=`🚨 EMERGENCY! I need help.${p?`\n📍 My location: https://maps.google.com/?q=${p.lat.toFixed(5)},${p.lon.toFixed(5)}`:''}${link}`;
+  const url='https://wa.me/?text='+encodeURIComponent(msg);if(w)w.location=url;else location.href=url;renderShareBox()},true);
+
+/* --- watching someone else's live location (#live/<id>) --- */
+async function watchLive(id){clearTimeout(liveViewT);if(!nearInit)initNearby();
+  const box=$('#liveViewBox');box.hidden=false;
+  const tick=async()=>{let j=null,ok=false;try{const r=await fetch('/api/live/v/'+encodeURIComponent(id));ok=r.ok;j=await r.json()}catch{}
+    if(!ok){box.innerHTML=`<div class="rb-head"><b>📡 Live location</b><button data-lvclose>✕</button></div><p class="sb-p">${esc((j&&j.error)||'Could not load. Retrying…')}</p>`;if(j&&j.error)return;liveViewT=setTimeout(tick,8000);return}
+    liveViewData=j;const t=MODE_INFO[j.mode]||{bike:['🏍️','On a bike'],car:['🚗','In a car'],bus:['🚌','On a bus']}[j.mode]||MODE_INFO.still;
+    const ago=Math.max(0,Math.round((Date.now()-j.updated)/1000));
+    box.innerHTML=`<div class="rb-head"><b>📡 ${esc(j.name)}${j.sos?' <span class="red">🚨 SOS</span>':''}</b><button data-lvclose>✕</button></div>
+      <div class="lv-row"><span class="lv-ic">${t[0]}</span><div><b>${t[1]}</b>${j.speed>0.6?` · ${(j.speed*3.6).toFixed(0)} km/h`:''}<br><small>Updated ${ago<60?ago+' s':Math.round(ago/60)+' min'} ago · ±${Math.round(j.acc||0)} m · until ${new Date(j.expires).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</small></div></div>
+      <div class="sb-row"><button class="btn primary sm" id="lvRoute">🧭 Route to ${esc(j.name)}</button><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${j.lat},${j.lon}">Google Maps</a></div>`;
+    $('#lvRoute').onclick=()=>planRoute({name:j.name,lat:j.lat,lon:j.lon});
+    if(map&&window.maplibregl){const first=!liveViewMk;if(!liveViewMk){const el=document.createElement('div');el.className='lv-pin';liveViewMk=new maplibregl.Marker({element:el}).setLngLat([j.lon,j.lat]).addTo(map)}
+      liveViewMk.getElement().innerHTML=`<span>${t[0]}</span><b>${esc(j.name)}</b>`;liveViewMk.setLngLat([j.lon,j.lat]);if(first)map.flyTo({center:[j.lon,j.lat],zoom:15,duration:1200})}
+    else if(!userLoc)setLoc(j.lat,j.lon,`${j.name}'s live location`);
+    liveViewT=setTimeout(tick,5000)};
+  tick()}
+function stopWatchLive(){clearTimeout(liveViewT);liveViewT=null;if(liveViewMk){liveViewMk.remove();liveViewMk=null}const b=$('#liveViewBox');if(b)b.hidden=true;if(/^#live\//.test(location.hash))history.replaceState(null,'','#nearby')}
+
+/* --- search doctors, clinics and hospitals by NAME (Clinora + OpenStreetMap), or an area --- */
+async function nameSearch(q){const c=userLoc||gpsLoc||DEFAULT,ql=q.toLowerCase(),out=[],seen=new Set();
+  const add=p=>{const k=(p.name||'').toLowerCase()+Math.round(p.lat*1e3);if(seen.has(k))return;seen.add(k);out.push(p)};
+  regs().map(regToPlace).filter(p=>[p.name,p.spec,p.docs,p.addr].join(' ').toLowerCase().includes(ql)).forEach(add);
+  partnerPlaces().filter(p=>[p.name,p.docs,...(p.team||[]).map(d=>d.name+' '+d.dept)].join(' ').toLowerCase().includes(ql)).forEach(add);
+  places.filter(p=>!p.partner&&!p.sample&&[p.name,p.addr].join(' ').toLowerCase().includes(ql)).forEach(add);  // already on the map: instant
+  const safe=q.replace(/[^\p{L}\p{N} .'-]/gu,'').replace(/[.]/g,'\\.').trim();
+  if(safe.length>=3){const qq=`[out:json][timeout:20];(nwr["name"~"${safe}",i]["amenity"~"^(clinic|hospital|doctors|dentist|pharmacy)$"](around:30000,${c.lat},${c.lon});nwr["name"~"${safe}",i]["healthcare"](around:30000,${c.lat},${c.lon}););out center 60;`;
+    for(const ep of ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter']){const ac=new AbortController(),to=setTimeout(()=>ac.abort(),8000);
+      try{const r=await fetch(ep+'?data='+encodeURIComponent(qq),{signal:ac.signal});if(!r.ok)continue;const j=await r.json();
+        j.elements.forEach(e=>{const t=e.tags||{},la=e.lat??e.center?.lat,lo=e.lon??e.center?.lon;if(la==null||!t.name)return;let type=t.amenity||t.healthcare;if(type==='doctor')type='doctors';
+          const addr=t['addr:full']||[t['addr:housenumber'],t['addr:street'],t['addr:suburb'],t['addr:city']].filter(Boolean).join(', ');
+          add({name:t.name,type,lat:la,lon:lo,addr,phone:t.phone||t['contact:phone']||'',st:ohStatus(t.opening_hours),hoursRaw:t.opening_hours||'',tags:t,emergency:t.emergency==='yes'||type==='hospital'})});break}
+      catch{}finally{clearTimeout(to)}}}
+  if(out.length<3){const vb=`&viewbox=${c.lon-0.6},${c.lat+0.6},${c.lon+0.6},${c.lat-0.6}&bounded=1`;
+    for(const qq of [q,q+' hospital',q+' clinic']){try{const j=await nominatim(qq,vb+'&limit=20');j.filter(x=>HEALTH.test(x.type)).map(nomToPlace).forEach(add)}catch{}if(out.length>=3)break;await new Promise(r=>setTimeout(r,1000))}}
+  return out}
+searchArea=async function(forceArea){forceArea=forceArea===true;
+  const qv=$('#areaIn').value.trim();if(!qv)return;locReq++;stopWatchLive();setStatus('🔍 Searching for "'+qv+'"…');
+  try{const [geo,names]=await Promise.all([geocode(qv).catch(()=>[]),forceArea?Promise.resolve([]):nameSearch(qv)]);
+    const g=geo[0],isArea=g&&(g.__postal||/^(place|boundary)$/.test(g.category||g.class||''))&&(g.display_name||'').toLowerCase().startsWith(qv.toLowerCase().split(',')[0]);
+    if(names.length&&!(isArea&&!names.some(n=>n.name.toLowerCase().includes(qv.toLowerCase())))){
+      places=names;filter='all';$$('#chips .chip').forEach(x=>x.classList.toggle('on',x.dataset.f==='all'));
+      if(!userLoc)userLoc={lat:names[0].lat,lon:names[0].lon,label:qv};setupMap();renderPlaces();
+      setStatus(`🔎 ${names.length} doctor${names.length>1?'s':''}, clinic${names.length>1?'s':''} or hospital${names.length>1?'s':''} named “${qv}”`+(g?' · ':''));
+      if(g){const a=document.createElement('button');a.className='linkbtn';a.textContent='Show the area “'+qv+'” instead';a.onclick=()=>searchArea(true);$('#nearStatus').appendChild(a)}
+      if(map&&names.length){const b=names.reduce((bb,p)=>[[Math.min(bb[0][0],p.lon),Math.min(bb[0][1],p.lat)],[Math.max(bb[1][0],p.lon),Math.max(bb[1][1],p.lat)]],[[180,90],[-180,-90]]);
+        names.length>1?map.fitBounds(b,{padding:60,maxZoom:15,duration:900}):map.flyTo({center:[names[0].lon,names[0].lat],zoom:16})}
+      return}
+    if(!g||(!isArea&&!forceArea))return setStatus(`😕 No doctor, clinic or hospital named “${qv}” found near here, and it isn't a city or area. Check the spelling, or search a city first and then the name.`);
+    setLoc(+g.lat,+g.lon,g.display_name.split(',').slice(0,3).join(','),(g.address||{}).country_code)}
+  catch{setStatus('⚠️ Search failed (check your internet).')}};
+
+/* --- wire up the new buttons --- */
+document.addEventListener('click',e=>{
+  if(e.target.closest('#followBtn'))setFollow(!follow);
+  if(e.target.closest('#routeBtn')){openRouteBox();$('#rbTo').focus()}
+  if(e.target.closest('#rbClose'))closeRouteBox();
+  if(e.target.closest('#rbGo'))routeToText();
+  const m=e.target.closest('[data-rmode]');if(m){routeMode=m.dataset.rmode;drawRoute()}
+  const r=e.target.closest('[data-route]');if(r){e.stopPropagation();const p=places[+r.dataset.route];if(p)planRoute(p)}
+  if(e.target.closest('#shareBtn')){const b=$('#shareBox');b.hidden=!b.hidden;if(!b.hidden)renderShareBox()}
+  if(e.target.closest('[data-sbclose]'))$('#shareBox').hidden=true;
+  if(e.target.closest('[data-lvclose]'))stopWatchLive();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='rbTo')routeToText()});
 
 /* ================= DIRECTORY extras: near me, follow, message, university doctors ================= */
 document.addEventListener('click',e=>{
