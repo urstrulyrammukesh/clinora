@@ -1,0 +1,26 @@
+name: Keep the live demo awake
+
+# Render's free plan puts the server to sleep after 15 minutes without visitors; the next visitor then waits
+# ~50 seconds, and the sleeping server loses its disk. A tiny request every few minutes keeps it awake.
+# GitHub may run scheduled jobs a few minutes late, so this runs every 5 minutes to stay inside the 15-minute window.
+# Note: GitHub pauses scheduled workflows in a repository with no commits for 60 days; any push turns it back on.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the live site
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "https://clinora-cwxu.onrender.com/api/status") && [ "$code" = "200" ] && { echo "awake ($code)"; exit 0; }
+            echo "try $i: got ${code:-no answer}, retrying"; sleep 10
+          done
+          echo "::warning::The live site did not answer with 200"
