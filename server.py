@@ -46,6 +46,12 @@ def load_env_file():
 
 load_env_file()
 
+# AI model: set AI_MODEL on the host to change it without touching code (e.g. claude-sonnet-5-5 or claude-haiku-5-5
+# to spend less). Server-side refusal fallbacks are only sent for models that support them.
+MODEL = os.environ.get("AI_MODEL", "").strip() or MODEL
+_FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"}
+FALLBACK_KW = {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"} if MODEL in _FALLBACK_MODELS else {}
+
 # ---------------------------------------------------------------- payments config
 # Real payments switch on per provider when its keys are in .env (use TEST/SANDBOX keys first):
 #   Stripe   : cards, Apple Pay, Google Pay (worldwide)          STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
@@ -242,6 +248,14 @@ Safety:
 - After booking, give the patient the pay_link from the tool result so they can pay online (in-clinic visits may also pay at the clinic). For video bookings, payment is needed before joining: give both the pay_link and the call_link, and tell them to open the call link at the appointment time.
 - After an in-clinic booking, offer to open ride options (show_ride_options) so they can book a cab to the clinic. In an emergency, never suggest a cab: tell them to call the ambulance number.
 - Ask only for the details needed for a booking (name and phone). Do not ask for ID numbers, insurance numbers or payment card details.
+
+Language and answers:
+- Answer exactly what was asked, starting with the answer itself: no greeting, no filler, no repeating the question.
+- Always use clean, respectful language in every language (English, Hindi, Hinglish and any other). Never use vulgar,
+  abusive, insulting, hateful or sexual-slang words, even if the patient uses them, asks you to, or wants something
+  "repeated". Correct medical terms for body parts and sexual health are fine when the question is about health.
+- If the patient is rude or abusive, do not repeat their words or argue: reply once, calmly, that you are here to help,
+  and ask what they need help with. Someone describing abuse they suffered is not being rude: support them as above.
 
 Style:
 - Warm, calm and brief: two to four short sentences, like a good front-desk person on chat. Use a short list only for choices such as time slots.
@@ -3676,6 +3690,7 @@ WA_ON = bool(WA_TOKEN and WA_PHONE_ID and WA_VERIFY and WA_SECRET)
 WA_SEEN = {}  # message id -> time, so a message Meta re-sends is answered only once
 
 WA_SYSTEM = """You are Clinora's assistant on WhatsApp. Clinora helps people find and book real doctors.
+Answer exactly what was asked, briefly, and always in clean, respectful language: never vulgar, abusive or insulting words in any language, even if the user uses them.
 - Reply in the same language the person writes in (Hindi, Hinglish, English, Urdu, Tamil...). Keep replies short: 1 to 5 lines, WhatsApp style, a few emojis at most.
 - To find doctors use the find_doctors tool, then list up to 3 with name, specialty, fee and the booking link exactly as given. Never invent doctors or links.
 - You don't give diagnoses or prescriptions. For medicines or symptoms give simple general guidance and suggest seeing a doctor.
@@ -3727,7 +3742,7 @@ def wa_ai_reply(conn, phone, text_in):
     msgs = hist[-16:] + [{"role": "user", "content": text_in[:2000]}]
     for _ in range(3):
         r = client.beta.messages.create(model=MODEL, max_tokens=1200, system=WA_SYSTEM, tools=WA_TOOLS, messages=msgs,
-                                        output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+                                        output_config={"effort": "low"}, **FALLBACK_KW)
         content = [b.model_dump(exclude_none=True) for b in r.content]
         msgs.append({"role": "assistant", "content": content})
         uses = [b for b in content if b.get("type") == "tool_use"]
@@ -3737,6 +3752,7 @@ def wa_ai_reply(conn, phone, text_in):
                                                   "content": json.dumps(find_doctors(conn, **{k: v for k, v in (u.get("input") or {}).items() if k in ("city", "specialty")}))}
                                                  for u in uses]})
     reply = "\n".join(b.get("text", "") for b in msgs[-1]["content"] if b.get("type") == "text").strip() if msgs[-1]["role"] == "assistant" else ""
+    reply = clean_reply(reply)
     keep = [m for m in msgs if isinstance(m["content"], str)] + ([{"role": "assistant", "content": reply}] if reply else [])
     conn.execute("INSERT OR REPLACE INTO wa_threads VALUES(?,?,?)", (phone, json.dumps(keep[-16:]), now_ms()))
     return reply or wa_menu_reply(conn, text_in)
@@ -4139,7 +4155,7 @@ def med_find(d, ip):
             model=MODEL, max_tokens=500, system="You map medicine brand names (mostly Indian) to their generic salt names. If you are not sure it is a real "
             "medicine, set found=false. Never recommend switching; the note may say one short practical tip (e.g. 'ask for the same strength'). JSON only.",
             messages=[{"role": "user", "content": f"Medicine: {name}"}],
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": MED_SCHEMA}}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": MED_SCHEMA}}, **FALLBACK_KW)
         try:
             out = dict(json.loads(next(b.text for b in r.content if getattr(b, "type", "") == "text")), source="ai")
         except Exception:
@@ -4563,7 +4579,7 @@ def food_scan(d, ip):
                                       "(different sides, the label, how it is stored or cooked).\n" if frames else "")
              + "Is this safe and OK for me to eat?\n" + about}]}],
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": FOOD_SCHEMA}},
-        betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        **FALLBACK_KW)
     if response.stop_reason == "refusal":
         raise InputError("Sorry, this photo can't be checked. Try a clearer photo of the food.")
     txt = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
@@ -4620,7 +4636,7 @@ def rx_scan(d, ip):
             {"type": "text", "text": "Read this prescription and list the medicines with reminder times. Reply language: "
              + str(d.get("lang") or "English")[:40]}]}],
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": RX_SCHEMA}},
-        betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+        **FALLBACK_KW)
     if response.stop_reason == "refusal":
         raise InputError("Sorry, this photo can't be read. Try a clearer photo of the prescription.")
     txt = next((b.text for b in response.content if getattr(b, "type", "") == "text"), "")
@@ -4663,7 +4679,7 @@ def uni_doctors(conn_unused, d, ip):
         response = client.beta.messages.create(
             model=MODEL, max_tokens=16000, system=UNI_SYSTEM, messages=messages,
             tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}],
-            output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+            output_config={"effort": "low"}, **FALLBACK_KW)
         if response.stop_reason != "pause_turn":
             break
         messages = messages + [{"role": "assistant", "content": [b.model_dump(exclude_none=True) for b in response.content]}]
@@ -5140,7 +5156,7 @@ def translate_language(code):
             system=TRANSLATE_SYSTEM.replace("{name}", catalog[code]),
             messages=[{"role": "user", "content": json.dumps(items, ensure_ascii=False)}],
             output_config={"effort": "medium"},
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            **FALLBACK_KW,
         ) as stream:
             response = stream.get_final_message()
         if response.stop_reason in ("refusal", "max_tokens"):
@@ -5179,6 +5195,24 @@ CHAT_PER_HOUR = int(os.environ.get("CHAT_PER_HOUR", "60"))  # AI chat messages p
 MAX_BODY = 400_000
 
 
+# Safety net: the prompt already forbids abusive language; this masks it if a reply ever contains it anyway.
+# Only strong profanity and slurs are listed: medical words (sex, condom, breast, penis...) are never masked.
+_BAD_WORDS = ("fuck", "fucking", "fucker", "motherfucker", "shit", "bullshit", "bitch", "bastard", "asshole", "cunt",
+              "slut", "whore", "dickhead", "retard", "chutiya", "chutiye", "madarchod", "maderchod", "behenchod",
+              "bhenchod", "bhanchod", "bsdk", "bhosdike", "bhosdi", "bhosda", "gandu", "harami", "haramzada", "randi",
+              "lavde", "lawde", "lauda", "lodu", "jhaatu", "kutiya", "chinal")
+_BAD_RE = re.compile(r"(?<![a-z])(" + "|".join(sorted(_BAD_WORDS, key=len, reverse=True)) + r")(?![a-z])", re.I)
+_BAD_DEV = ("चूतिया", "चुतिया", "मादरचोद", "बहनचोद", "भेनचोद", "भोसड़ी", "भोसडी", "गांडू", "गाँडू", "हरामी", "हरामज़ादा",
+            "रंडी", "लौड़ा", "लौडा", "लवड़े", "कुतिया")
+
+
+def clean_reply(text):
+    text = _BAD_RE.sub(lambda m: "*" * len(m.group(0)), text)
+    for w in _BAD_DEV:
+        text = text.replace(w, "*" * len(w))
+    return text
+
+
 def chat_turn(messages, context):
     system = [
         {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
@@ -5191,13 +5225,13 @@ def chat_turn(messages, context):
         tools=TOOLS,
         messages=messages,
         output_config={"effort": "low"},
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
+        **FALLBACK_KW,
     )
-    return {
-        "stop_reason": response.stop_reason,
-        "content": [block.model_dump(exclude_none=True) for block in response.content],
-    }
+    content = [block.model_dump(exclude_none=True) for block in response.content]
+    for block in content:
+        if block.get("type") == "text":
+            block["text"] = clean_reply(block["text"])
+    return {"stop_reason": response.stop_reason, "content": content}
 
 
 PUBLIC_FILES = {"index.html", "i18n.js", "manifest.json", "sw.js"}
