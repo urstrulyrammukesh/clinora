@@ -5957,6 +5957,11 @@ if __name__ == "__main__":
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=backup_loop, daemon=True).start()
     print("Backups:", f"every {BACKUP_EVERY_H:g} h, keeping {BACKUP_KEEP}, in {BACKUP_DIR}" + (" + cloud copy" if S3_ON else " (this computer/disk only)"))
+    if not S3_ON:
+        _missing = [n for n, v in (("BACKUP_S3_ENDPOINT", S3_ENDPOINT), ("BACKUP_S3_BUCKET", S3_BUCKET),
+                                   ("BACKUP_S3_KEY_ID", S3_KEY_ID), ("BACKUP_S3_SECRET", S3_SECRET)) if not v]
+        if len(_missing) < 4:  # some cloud settings are there: say which ones are missing (names only, never values)
+            print("[backup] cloud copy is off: missing or empty " + ", ".join(_missing), flush=True)
     if S3_ON and BACKUP_ON_SHUTDOWN:
         import signal
 
