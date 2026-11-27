@@ -1483,7 +1483,7 @@ async function api(path,body={}){
   if(!r){dbBanner(true);throw new Error('Could not reach the server. Is it running?')}
   const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
   if(r.status===401)loadDB();
-  if(!r.ok||j.error)throw new Error(j.error||'Server error');
+  if(!r.ok||j.error){const er=new Error(j.error||'Server error');er.info=j;throw er}
   applyDB(j.data);return j;
 }
 function dbBanner(show){let el=document.getElementById('dbBanner');
@@ -1840,8 +1840,55 @@ function authForm(mode){
     <p>For clinic staff and doctors. Patients don't need an account: they book through 💬 Ask AI.</p>
     <label>EMAIL</label><input id="aEmail" type="email" required autocomplete="username">
     <label>PASSWORD</label><input id="aPw" type="password" required autocomplete="current-password">
+    <div id="a2faWrap" style="display:none"><label for="a2fa">🛡️ AUTHENTICATOR CODE</label>
+      <input id="a2fa" inputmode="numeric" autocomplete="one-time-code" maxlength="11" placeholder="6-digit code (or a recovery code)"></div>
     <button class="btn primary" type="submit">Log in</button><div class="msgline" id="aMsg"></div>
     <p class="note">Doctor without a login? Ask your clinic admin to create one for you.</p></form>`;
+}
+/* Two-factor login (TOTP) for clinic staff: turn on with a QR code, keep 10 recovery codes, turn off. */
+async function tfaPanel(){
+  let box=$('#tfaBox');if(box){box.remove();return}
+  box=document.createElement('div');box.id='tfaBox';box.className='card';box.style.cssText='margin:10px 0;padding:16px';
+  $('#acctBar').after(box);
+  const msg=t=>{const m=$('#tfaMsg');if(m)m.innerHTML=t};
+  const bad=e=>msg('<span class="red">'+esc(e.message)+'</span>');
+  let st;try{st=(await api('/api/auth/2fa/status')).created}catch(e){box.innerHTML='<p class="red">'+esc(e.message)+'</p>';return}
+  const showCodes=codes=>{box.innerHTML=`<h4>🛡️ Save your recovery codes</h4>
+      <p>If you lose your phone, each code lets you log in <b>once</b>. Keep them somewhere safe (not on the same phone). They won't be shown again.</p>
+      <pre class="notranslate" style="font-size:15px;line-height:1.7;columns:2;background:var(--panel2);padding:12px;border-radius:10px">${codes.map(esc).join('\n')}</pre>
+      <button class="btn ghost sm" type="button" id="tfaDl">⬇ Download as a file</button> <button class="btn primary sm" type="button" id="tfaDone">I saved them</button>`;
+    $('#tfaDl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['Clinora recovery codes for '+DB.me.email+'\nEach code works once.\n\n'+codes.join('\n')+'\n'],{type:'text/plain'}));a.download='clinora-recovery-codes.txt';a.click()};
+    $('#tfaDone').onclick=()=>{box.remove();acctFor=null;loadDB()}};
+  if(!st.on){
+    box.innerHTML=`<h4>🛡️ Two-factor login</h4>
+      <p>Protect your clinic account: after your password, Clinora also asks for a 6-digit code from an app on your phone (Google Authenticator, Microsoft Authenticator, Authy…). A stolen password alone is then not enough.</p>
+      <form class="pwform on" id="tfaStart"><input type="password" id="tfaPw" placeholder="Your password" required autocomplete="current-password">
+      <button class="btn primary sm" type="submit">Turn on</button></form><div class="msgline" id="tfaMsg"></div>`;
+    $('#tfaStart').onsubmit=async e=>{e.preventDefault();msg('Please wait…');
+      try{const s=(await api('/api/auth/2fa/setup',{password:$('#tfaPw').value})).created;
+        box.innerHTML=`<h4>🛡️ Scan this with your authenticator app</h4>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+            <div style="width:200px;background:#fff;border-radius:12px;padding:6px" class="notranslate">${s.qr_svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" ')}</div>
+            <div style="flex:1;min-width:220px"><p>1. Open the app → <b>Add account</b> → <b>Scan a QR code</b>.</p>
+              <p>Can't scan? Type this key instead:<br><code class="notranslate" style="font-size:15px;user-select:all">${esc(s.secret)}</code></p>
+              <p>2. Type the 6-digit code the app shows:</p>
+              <form class="pwform on" id="tfaConfirm"><input id="tfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" required>
+              <button class="btn primary sm" type="submit">Confirm</button></form><div class="msgline" id="tfaMsg"></div></div></div>`;
+        $('#tfaCode').focus();
+        $('#tfaConfirm').onsubmit=async e=>{e.preventDefault();msg('Checking…');
+          try{showCodes((await api('/api/auth/2fa/enable',{code:$('#tfaCode').value})).created.recovery)}catch(err){bad(err)}}}
+      catch(err){bad(err)}};
+    return}
+  box.innerHTML=`<h4>🛡️ Two-factor login is <span class="teal">on</span></h4>
+    <p>${st.recovery_left} of 10 recovery codes left.${st.recovery_left<4?' <b class="red">Make new ones soon.</b>':''}</p>
+    <form class="pwform on" id="tfaForm"><input type="password" id="tfaPw" placeholder="Your password" required autocomplete="current-password">
+      <input id="tfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="11" placeholder="Code (to turn off)">
+      <button class="btn ghost sm" type="button" id="tfaNew">New recovery codes</button><button class="btn ghost sm" type="submit">Turn off</button></form>
+    <div class="msgline" id="tfaMsg"></div>`;
+  $('#tfaNew').onclick=async()=>{if(!$('#tfaPw').value){msg('<span class="red">Enter your password first</span>');return}
+    try{showCodes((await api('/api/auth/2fa/recovery',{password:$('#tfaPw').value})).created.recovery)}catch(err){bad(err)}};
+  $('#tfaForm').onsubmit=async e=>{e.preventDefault();if(!confirm('Turn off two-factor login? Your account will be protected by the password only.'))return;
+    try{await api('/api/auth/2fa/disable',{password:$('#tfaPw').value,code:$('#tfaCode').value});box.remove();acctFor=null;loadDB()}catch(err){bad(err)}};
 }
 function renderAuth(){
   const me=DB.me;$('#authBox').style.display=me?'none':'block';$('#dashApp').style.display=me?'block':'none';
@@ -1850,18 +1897,20 @@ function renderAuth(){
     $('#authForm').onsubmit=async e=>{e.preventDefault();const msg=$('#aMsg');msg.textContent='Please wait…';
       try{if(mode==='setup'){if($('#aPw').value!==$('#aPw2').value)throw new Error('The two passwords are different');
           await api('/api/auth/setup',{name:$('#aName').value,email:$('#aEmail').value,password:$('#aPw').value,code:($('#aCode')||{}).value||''})}
-        else await api('/api/auth/login',{email:$('#aEmail').value,password:$('#aPw').value});
-        authMode=''}catch(err){msg.innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
+        else await api('/api/auth/login',{email:$('#aEmail').value,password:$('#aPw').value,code:($('#a2fa')||{}).value||''});
+        authMode=''}catch(err){msg.innerHTML='<span class="red">'+esc(err.message)+'</span>';
+          if(err.info&&err.info.need_2fa&&$('#a2faWrap')){$('#a2faWrap').style.display='';$('#a2fa').value='';$('#a2fa').focus()}}};
     return}
   authMode='';
   const ds=$('#demoSec');if(ds)ds.style.display=DB.production?'none':'';
   if(acctFor!==me.id){acctFor=me.id;
     $('#acctBar').innerHTML=`<div class="who"><div class="pav">${esc(initials(me.name)||'?')}</div><div><b>${esc(me.name)}</b><small>${esc(roleLabel(me))} · ${esc(me.email)}</small></div></div>
-      <button class="btn ghost sm" id="pwBtn">🔑 Change password</button><button class="btn ghost sm" id="logoutBtn">Log out</button>
+      <button class="btn ghost sm" id="pwBtn">🔑 Change password</button><button class="btn ghost sm" id="tfaBtn">🛡️ Two-factor: ${me.two_factor?'<b class="teal">On</b>':'Off'}</button><button class="btn ghost sm" id="logoutBtn">Log out</button>
       <form class="pwform" id="pwForm"><input type="password" id="pwCur" placeholder="Current password" required autocomplete="current-password">
         <input type="password" id="pwNew" placeholder="New password (10+ characters)" minlength="10" required autocomplete="new-password">
         <button class="btn primary sm" type="submit">Save</button><span class="msgline" id="pwMsg"></span></form>`;
     $('#pwBtn').onclick=()=>$('#pwForm').classList.toggle('on');
+    $('#tfaBtn').onclick=()=>tfaPanel();
     $('#logoutBtn').onclick=()=>api('/api/auth/logout').catch(()=>{}).finally(()=>{acctFor=null;loadDB()});
     $('#pwForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/auth/password',{current:$('#pwCur').value,new:$('#pwNew').value});
       $('#pwMsg').innerHTML='<span class="teal">✅ Password changed</span>';e.target.reset()}catch(err){$('#pwMsg').innerHTML='<span class="red">'+esc(err.message)+'</span>'}};
@@ -1875,7 +1924,7 @@ function renderAuth(){
 }
 function renderTeam(admin){
   const sec=$('#teamSec');sec.style.display=admin?'block':'none';if(!admin)return;
-  const list=`<div id="teamList">${(DB.users||[]).map(u=>`<div class="uitem"><div><b>${esc(u.name)}</b><small>${esc(roleLabel(u))} · ${esc(u.email)}</small></div>${u.id===DB.me.id?'<small>you</small>':`<button type="button" data-udel="${u.id}">Remove</button>`}</div>`).join('')}</div>`;
+  const list=`<div id="teamList">${(DB.users||[]).map(u=>`<div class="uitem"><div><b>${esc(u.name)}</b><small>${esc(roleLabel(u))} · ${esc(u.email)}${u.two_factor?' · <span class="teal">🛡️ 2FA</span>':''}</small></div>${u.id===DB.me.id?'<small>you</small>':`<span>${u.two_factor?`<button type="button" data-u2fa="${u.id}" title="For staff who lost their phone and recovery codes">Reset 2FA</button> `:''}<button type="button" data-udel="${u.id}">Remove</button></span>`}</div>`).join('')}</div>`;
   if(!$('#teamForm')){sec.innerHTML=`<h4>👥 TEAM LOGINS</h4>${list}
     <form id="teamForm"><b style="font-size:13px;margin-top:6px">Add a login</b>
       <input id="tName" placeholder="Full name" required><input id="tEmail" type="email" placeholder="Email" required autocomplete="off">
@@ -1892,6 +1941,7 @@ function renderTeam(admin){
 document.addEventListener('click',e=>{const m=e.target.closest('[data-cash]');if(m&&confirm('Mark booking #'+m.dataset.cash+' as paid in cash?'))api('/api/pay/mark_cash',{id:m.dataset.cash}).catch(err=>alert(err.message));
   const r=e.target.closest('[data-refund]');if(r&&confirm('Refund booking #'+r.dataset.refund+'? Card payments are refunded through Stripe; cash and demo payments are only marked as refunded.'))api('/api/pay/refund',{id:r.dataset.refund}).then(j=>alert(j.created.note)).catch(err=>alert(err.message))});
 document.addEventListener('click',e=>{const c=e.target.closest('[data-copy]');if(c){navigator.clipboard.writeText(c.dataset.copy).then(()=>{c.textContent='✓ Copied'},()=>prompt('Copy this link:',c.dataset.copy))}});
+document.addEventListener('click',e=>{const u=e.target.closest('[data-u2fa]');if(u&&confirm('Turn off two-factor login for this person? They will be logged out and can turn it on again.'))api('/api/users/2fa-reset',{id:+u.dataset.u2fa}).catch(err=>alert(err.message))});
 document.addEventListener('click',e=>{const u=e.target.closest('[data-udel]');if(u&&confirm('Remove this login? They will be logged out.'))api('/api/users/delete',{id:+u.dataset.udel}).catch(err=>alert(err.message))});
 function renderDash(){
   renderAuth();if(!DB.me)return;
@@ -2855,7 +2905,7 @@ async function pickPhoto(file){if(!file)return;const msg=$('#phMsg');if(msg)msg.
 let MEM={me:null,favs:[],threads:[],listing:null},openThread=null,acctMode='signup',signKind='patient',threadTimer=null;
 async function mapi(path,body={}){const r=await fetch('/api/m/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>null);
   if(!r)throw new Error('Could not reach the server. Is it running?');const j=await r.json().catch(()=>({error:'Unexpected server reply'}));
-  if(!r.ok||j.error)throw new Error(j.error||'Server error');
+  if(!r.ok||j.error){const er=new Error(j.error||'Server error');er.info=j;throw er}
   if('me' in j)MEM=Object.assign({favs:[],threads:[],listing:null},j);if(j.listings){DB.listings=j.listings;refreshViews()}updateAcctBtn();
   if('notif_unread' in j&&window.setBell)setBell(j.notif_unread);if('me' in j&&window.bellRefresh)bellRefresh();
   if(window.renderAppHome)renderAppHome();

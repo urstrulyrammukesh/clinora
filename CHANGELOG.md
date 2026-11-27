@@ -2,6 +2,15 @@
 
 All notable changes to Clinora. Dates are when the work landed on `main`.
 
+## [1.2.0] – 2026-11-27
+
+### Security
+- **Two-factor login for clinic staff** (issue #6): authenticator apps (Google/Microsoft Authenticator, Authy…) via QR code, 10 one-time recovery codes, codes can't be reused, 6 wrong codes → 15-minute lock. The secret is stored encrypted (AES-256-GCM) and recovery codes only as hashes. Admins can reset 2FA for staff who lost their phone.
+- QR codes are made by Clinora itself (no outside service), checked against the python-qrcode library and a real QR scanner
+
+### Also
+- Visitor statistics panel translated into all 8 built-in languages (issue #4)
+
 ## [1.1.0] – 2026-11-27
 
 Security audit release. Report: [docs/security-audit.md](docs/security-audit.md) · threat model: [docs/threat-model.md](docs/threat-model.md)
